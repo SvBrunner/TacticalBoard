@@ -1,59 +1,88 @@
 import { KonvaEventObject } from 'konva/lib/Node';
-import {  Stage, Layer } from 'react-konva';
-import { Text } from 'react-native';
+import { Stage, Layer } from 'react-konva';
 import BoardComponent from './components/BoardComponent';
-import React, { useState } from 'react';
-import ShapeX from './components/shapes/ShapeX';
-import ShapeCircle from './components/shapes/ShapeCircle';
+import React, { useEffect, useState } from 'react';
+import { X, Circle } from './components/shapes';
+import Button from 'react-bootstrap/Button';
+import { v4 as uuidv4 } from 'uuid';
+import DrawingMenu, {CurrentShape} from './components/DrawingMenu';
 
 
 
+interface Shape {
+  key: string;
+  shape: any;
+  x: number;
+  y: number;
+}
 
+const SHAPES = [X, Circle];
 
-const INITIAL_STATE = [BoardComponent({ x: 0, y: 0, scale: 1, shapeFunc : ShapeX})];
 const Board = () => {
-  const [scale, setScale] = useState(1);
+  const [currentShape, setCurrentShape] = useState<number>(0);
+  const [shapes, setShapes] = useState<Shape[]>([]);
 
-  window.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-  });
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
 
-  const [components, setComponents] = React.useState<JSX.Element[]>(INITIAL_STATE);
+    window.addEventListener('contextmenu', handleContextMenu);
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setScale(Number(event.target.value));
-    components.forEach((component) => {component.props.scale = 3});
+    return () => {
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, []);
+
+  const selectShape = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+    setCurrentShape(Number(e.currentTarget.value));
   };
 
-  const addX = (e: any) => {
-    setComponents([...components, BoardComponent({ x: 0, y: 0, scale: scale, shapeFunc : ShapeX})]);
-  };
-  const addCircle = (e: any) => {
-    setComponents([...components, BoardComponent({ x: 0, y: 0, scale: scale, shapeFunc : ShapeCircle})]);
-  }
-  ;
+  const handleOnClick = (e: KonvaEventObject<MouseEvent>) => {
+    if (e.evt.button !== 0) 
+      return;
+    const x = e.evt.offsetX;
+    const y = e.evt.offsetY;
 
+    addShape(CurrentShape(), x, y);
+  };
+
+  const addShape = (shape: any, x: number, y: number) => {
+    if (currentShape === -1) 
+      return;
+    setShapes([...shapes, { key: uuidv4(), shape, x, y }]);
+  };
+
+  const removeShape = (key: string) => {
+    setShapes(shapes.filter((shape) => shape.key !== key));
+  };
+
+  const clearBoard = () => {
+    setShapes([]);
+  };
 
   return (
     <div>
-      <Stage  width={window.innerWidth} height={window.innerHeight - 200}>
-        <Layer >
-          {components}
-          
+      <Stage onClick={handleOnClick} width={window.innerWidth} height={window.innerHeight - 200}>
+        <Layer>
+          {shapes.map(({ key, shape, x, y }) => (
+            <BoardComponent 
+              key={key} 
+              componentKey={key} 
+              x={x} 
+              y={y} 
+              renderShape={shape} 
+              onDelete={removeShape} />
+          ))}
         </Layer>
       </Stage>
-      <input type="range" min="0.01" max="10" step={0.01} value={scale} onChange={handleChange} />
-      <Text>{scale}</Text>
-      <button onClick={addX}>Add</button>
-      <button onClick={addCircle}>Add Circle</button>
+      <DrawingMenu />
+      <Button className={currentShape == -1 ? 'active' : ''} onClick={selectShape} value={-1}>None</Button>
+      <Button className={currentShape == 0 ? 'active' : ''} onClick={selectShape} value={0}>X</Button>
+      <Button className={currentShape == 1 ? 'active' : ''} onClick={selectShape} value={1}>Circle</Button>
+      <Button onClick={clearBoard}>Clear</Button>
     </div>
-
   );
-
-
-
 };
 
-
 export default Board;
-

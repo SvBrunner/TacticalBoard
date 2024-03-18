@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
 import Board from './Board';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 export default function App() {
   return (
