@@ -1,6 +1,6 @@
 <script lang="ts">
 import {getContext } from 'svelte';
-import { delShapeById, changeColorById, changeShapeById } from '../Components';
+import { deleteComponentById, changeComponentColorById,changeComponentShapeById } from '../Components';
 
     // pos is cursor position when right click occur
     let pos = { x: 0, y: 0 }
@@ -90,20 +90,20 @@ import { delShapeById, changeColorById, changeShapeById } from '../Components';
 
     function deleteComponent(){
         console.log("Deleting component with id: " + BoardComponentId);
-        delShapeById(BoardComponentId);
+        deleteComponentById(BoardComponentId);
         onPageClick(null);
     }
 
     function changeColor(e :any){
         let color = e.target.id;
         console.log("Changing color of component with id: " + BoardComponentId);
-        changeColorById(BoardComponentId, color);
+        changeComponentColorById(BoardComponentId, color);
     }
 
     function changeShape(e : any){
         console.log("Changing shape of component with id: " + BoardComponentId);
         console.log(e.target);
-        changeShapeById(BoardComponentId, e.target.id)
+        changeComponentShapeById(BoardComponentId, e.target.id)
     }
 
     function getContextMenuDimension(node : any){

@@ -1,8 +1,16 @@
 
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 import { v4 as uuidv4 } from "uuid";
 
-export { delShapeById, changeColorById, changeShapeById, moveShapeById, addShape };
+export {
+    deleteComponentById,
+    changeComponentColorById,
+    changeComponentShapeById,
+    moveComponentById,
+    addComponent,
+    serializeComponents,
+    loadComponentsFromJsonString
+};
 
 interface Component {
     x: number;
@@ -13,14 +21,14 @@ interface Component {
 }
 
 
-export const  components = writable( [] as Component[]);
+export const components = writable([] as Component[]);
 
 
-function delShapeById(id: string) {
+function deleteComponentById(id: string) {
     components.update((currentComponents: Component[]) => currentComponents.filter(component => component.id !== id));
 }
 
-function changeColorById(id: string, color: string) {
+function changeComponentColorById(id: string, color: string) {
     components.update((currentComponents: Component[]) => currentComponents.map((component) => {
         if (component.id == id) {
             component.color = color;
@@ -29,10 +37,8 @@ function changeColorById(id: string, color: string) {
     }));
 }
 
-function changeShapeById(id: string, shape: string) {
-
-
-   components.update((currentComponents: Component[]) => currentComponents.map((component) => {
+function changeComponentShapeById(id: string, shape: string) {
+    components.update((currentComponents: Component[]) => currentComponents.map((component) => {
         if (component.id == id) {
             component.shape = shape;
         }
@@ -40,8 +46,7 @@ function changeShapeById(id: string, shape: string) {
     }));
 }
 
-function moveShapeById(x: number, y: number, id: string) {
-
+function moveComponentById(x: number, y: number, id: string) {
     components.update((currentComponents: Component[]) => currentComponents.map((component) => {
         if (component.id == id) {
             component.x = x;
@@ -51,7 +56,7 @@ function moveShapeById(x: number, y: number, id: string) {
     }));
 }
 
-function addShape(x: number, y: number, color: string, shape: string) {
+function addComponent(x: number, y: number, color: string, shape: string) {
 
     components.update(currentComponents => [
         ...currentComponents,
@@ -59,3 +64,12 @@ function addShape(x: number, y: number, color: string, shape: string) {
     ]);
 
 }
+
+function serializeComponents() {
+    return JSON.stringify(get(components));
+}
+
+function loadComponentsFromJsonString(serializedComponents: string) {
+    components.set(JSON.parse(serializedComponents));
+}
+

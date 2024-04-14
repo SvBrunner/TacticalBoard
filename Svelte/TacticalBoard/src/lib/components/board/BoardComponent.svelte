@@ -2,7 +2,7 @@
   
     import { Shape } from 'svelte-konva';
     import {getContext } from 'svelte';
-    import {moveShapeById} from './Components';
+    import {moveComponentById} from './Components';
     import {drawX, drawCircle, drawSquare} from './Shapes';
 
 
@@ -26,7 +26,7 @@
     function handleOnDragEnd(e : any){
         let x = e.detail.target.attrs.x;
         let y = e.detail.target.attrs.y;
-        moveShapeById(x,y,id);
+        moveComponentById(x,y,id);
     }
   
 
