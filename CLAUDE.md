@@ -20,6 +20,7 @@ Don't make functional/business-logic assumptions about how the app should behave
 
 - Never commit unless the user explicitly asks for that commit, in that moment. Finishing a change is not implicit permission to commit it.
 - Commit messages follow Conventional Commits (`feat:`, `fix:`, `refactor:`, `chore:`, `test:`, `docs:`, ...).
+- Do not add `Co-Authored-By` or any other Claude/AI attribution line to commits or PR descriptions.
 
 ## Layout notes not in README
 

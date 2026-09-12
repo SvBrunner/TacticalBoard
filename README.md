@@ -46,3 +46,7 @@ Without Nix, install `pnpm` and Node.js yourself, then run the same commands fro
 - Sveltestrap (Bootstrap) for UI chrome
 
 pnpm is the only supported package manager — the lockfile and `pnpm-workspace.yaml` in `frontend/` are the source of truth.
+
+## Note
+
+This project is built in collaboration with AI.
