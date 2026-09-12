@@ -1,6 +1,7 @@
 {
 	"name": "tacticalboard",
 	"version": "0.0.1",
+	"//typescript": "pinned below 7.x in devDependencies: @sveltejs/kit and svelte-check don't declare peer support for TypeScript 7 yet",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
