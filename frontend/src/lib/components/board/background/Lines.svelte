@@ -63,25 +63,21 @@
 
 
 <Shape
-    config={{
-        x: x,
-        y: y,
-        fill: color,
-        stroke: color,
-        draggable: false,
-        sceneFunc: drawShape,
-        
-    }}
+    x={x}
+    y={y}
+    fill={color}
+    stroke={color}
+    draggable={false}
+    sceneFunc={drawShape}
 />
 
 <Line
-    config={{
-        x: x,
-        y: height ,
-        points:[0 , 0, 0, height * -1],
-        stroke: color,
-        strokeWidth: strokeWidth,
-    }}/>
+    x={x}
+    y={height}
+    points={[0, 0, 0, height * -1]}
+    stroke={color}
+    strokeWidth={strokeWidth}
+/>
 
 
 
@@ -92,10 +88,10 @@
 <BullyPoint x={x} y={y + height/2 - 80} color={color} strokeWidth={strokeWidth} radius={20} />
 <BullyPoint x={x} y={y - height/2 + 80} color={color} strokeWidth={strokeWidth} radius={20} />
 
-<!--Left-->
-<BullyPoint x={x - width / 2 + 80} y={y + height/2 - 80} color={color} strokeWidth={strokeWidth} radius={20} />
-<BullyPoint x={x - width / 2 + 80} y={y - height/2 + 80} color={color} strokeWidth={strokeWidth} radius={20} />
+<!--Left (offsets match the confirmed board-design mockup: ~8.3% of width in from the side, ~20.6% of height in from top/bottom)-->
+<BullyPoint x={x - width / 2 + width * 0.0829} y={y + height/2 - height * 0.2056} color={color} strokeWidth={strokeWidth} radius={20} />
+<BullyPoint x={x - width / 2 + width * 0.0829} y={y - height/2 + height * 0.2056} color={color} strokeWidth={strokeWidth} radius={20} />
 
 <!--Right-->
-<BullyPoint x={x + width / 2 - 80} y={y + height/2 - 80} color={color} strokeWidth={strokeWidth} radius={20} />
-<BullyPoint x={x + width / 2 - 80} y={y - height/2 + 80} color={color} strokeWidth={strokeWidth} radius={20} />
+<BullyPoint x={x + width / 2 - width * 0.0829} y={y + height/2 - height * 0.2056} color={color} strokeWidth={strokeWidth} radius={20} />
+<BullyPoint x={x + width / 2 - width * 0.0829} y={y - height/2 + height * 0.2056} color={color} strokeWidth={strokeWidth} radius={20} />

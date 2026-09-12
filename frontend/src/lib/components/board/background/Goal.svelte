@@ -1,77 +1,40 @@
 <script lang="ts">
-  
-    import { Shape } from 'svelte-konva';
-    export let x = 0;
-    export let y = 0;
- 
-    export let mirrored = false;
-    let color = "black";
-    let scaleX = 1;
-    if(mirrored){
-        scaleX = -1;
-    }
-    let goalDepth = 32;
-    let goalWidth = 80;
-    let goalThickness = 5;
+	import { Shape } from "svelte-konva";
+	export let x = 0;
+	export let y = 0;
+	export let width = 0;
+	export let height = 0;
+	export let mirrored = false;
 
+	let scaleX = mirrored ? -1 : 1;
 
+	// Proportions derived from the confirmed board-design mockup geometry:
+	// an open bracket (back wall + two side walls), unfilled, opening
+	// toward the field. Origin is the mouth; the back wall sits behind it
+	// (toward the boundary), which the caller reaches by passing x/y at
+	// the mouth position.
+	let goalDepth = width * 0.02;
+	let goalHalfWidth = (height * 0.167) / 2;
+	let strokeWidth = Math.max(2, width * 0.0015);
 
-    let points = [
-        {x: 0, y: 0},
-        {x: goalDepth, y : 0},
-        {x: goalDepth, y : goalThickness},
-        {x: goalThickness, y : goalThickness},
-        {x: goalThickness, y : goalWidth - goalThickness},
-        {x: goalDepth, y : goalWidth - goalThickness},
-        {x: goalDepth, y : goalWidth},
-        {x: 0, y : goalWidth}];
-
-
-    let xStart = x - goalDepth;
-    let yStart = y - goalWidth / 2;
-
-    if(mirrored){
-        xStart = x + goalDepth;
-    }
-
-    function drawGoal(context : any, shape : any){
-        context.beginPath();
-
-        context.moveTo(0, 0);
-        points.forEach((point : any) => {
-            context.lineTo(point.x , point.y );
-        });
-        context.closePath();
-        
-        context.fillStrokeShape(shape);
-    }
-    
+	function drawGoal(context: any, shape: any) {
+		context.beginPath();
+		context.moveTo(0, -goalHalfWidth);
+		context.lineTo(-goalDepth, -goalHalfWidth);
+		context.lineTo(-goalDepth, goalHalfWidth);
+		context.lineTo(0, goalHalfWidth);
+		// Deliberately not closed: the mouth stays open toward the field.
+		context.fillStrokeShape(shape);
+	}
 </script>
 
 <Shape
-      config={{
-        x: xStart,
-        y: yStart,
-        fill: color,
-        draggable: false,
-        scale: { x: scaleX, y: 1 },
-        sceneFunc: drawGoal,
-        stroke: "black",
-      }}
-      
-    />
-    <!--
-<Rect 
-      config={{
-        x: x -100,
-        y: y - 40,
-        width: 64,
-        height: 80,
-        fill: "transparent",
-        stroke: "black",
-        strokeWidth: 1,
-        draggable: false,
-        rotation: rotation
-      }}
+	x={x}
+	y={y}
+	stroke="black"
+	strokeWidth={strokeWidth}
+	scaleX={scaleX}
+	scaleY={1}
+	draggable={false}
+	sceneFunc={drawGoal}
 />
-    -->

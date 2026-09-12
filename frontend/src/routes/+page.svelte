@@ -1,20 +1,16 @@
 <script lang="ts">
 	import { Stage, Layer, Rect } from "svelte-konva";
 	import BoardComponent from "$lib/components/board/BoardComponent.svelte";
-	import { Container } from "@sveltestrap/sveltestrap";
-	import FloorballFullField from "$lib/components/board//background/FloorballFullField.svelte";
-	import { onMount } from "svelte";
-	import CustomContextMenu from "$lib/components/board/contextmenus/CustomContextMenu.svelte";
+	import FloorballFullField from "$lib/components/board/background/FloorballFullField.svelte";
 	import ContextMenuBoardComponent from "$lib/components/board/contextmenus/ContextMenuBoardComponent.svelte";
-	import { components } from "$lib/components/board/Components";
-	import {
-		deleteComponentById,
-		addComponent,
-		serializeComponents,
-		loadComponentsFromJsonString,
-	} from "$lib/components/board/Components";
+	import TopBar from "$lib/components/board/TopBar.svelte";
+	import Sidebar from "$lib/components/board/Sidebar.svelte";
+	import { board, type ElementType } from "$lib/components/board/Board";
+	import { theme } from "$lib/theme";
+	import { notifications } from "$lib/debug/Notifications";
+	import NotificationStack from "$lib/debug/NotificationStack.svelte";
+	import { onMount } from "svelte";
 
-	let contextMenu: CustomContextMenu;
 	let contextMenuBoardComponent: ContextMenuBoardComponent;
 	let sceneWidth: number = 2000;
 	let sceneHeight: number = 1000;
@@ -23,155 +19,113 @@
 	let containerWidth = sceneWidth;
 	let containerHeight = sceneHeight;
 
-	let serializedData: string = "";
+	let activeTool: "Move" | ElementType = "Player";
+	let selectedColor = "oklch(62% 0.16 230)";
+	const nonPlayerColor = "oklch(45% 0.01 260)";
+	const elements = board.elements;
 
 	function fitStageIntoParentContainer() {
-		var container = document.getElementById("stage-parent");
-
+		const container = document.getElementById("stage-parent");
 		if (container == null) {
 			return;
 		}
 
-		var cs = getComputedStyle(container!);
-		var paddingX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-		var borderX =
-			parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+		const cs = getComputedStyle(container);
+		const paddingX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+		const borderX = parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
 
-		var parentContainerWidth = container!.offsetWidth - paddingX - borderX;
-		var scale = parentContainerWidth / sceneWidth;
+		const parentContainerWidth = container.offsetWidth - paddingX - borderX;
+		const scale = parentContainerWidth / sceneWidth;
 
 		containerWidth = parentContainerWidth;
 		containerHeight = parentContainerWidth * (sceneHeight / sceneWidth);
 		baseScale = { x: scale, y: scale };
+
+		notifications.notify(
+			`Stage sized to ${Math.round(containerWidth)}×${Math.round(containerHeight)} (scale ${scale.toFixed(3)})`,
+		);
 	}
 
-	function handleStageOnTouchStart(e: any) {
-		e.preventDefault();
+	function handleStageOnClick(e: any) {
+		const target = e.target;
+		const evt = e.evt;
+		// getRelativePointerPosition (not getPointerPosition) accounts for the
+		// Stage's own scale, giving coordinates in the same units as sceneWidth/Height.
+		const pos = target.getStage().getRelativePointerPosition();
+		const x = pos.x;
+		const y = pos.y;
 
-		console.log(e);
-		let x = e.detail.evt.touches[0].screenX;
-		let y = e.detail.evt.touches[0].screenY;
-		onClick(e.detail.target ,x,y , 0, e.detail.evt);
+		if (target.attrs.name === "Component") {
+			if (evt.shiftKey) {
+				notifications.notify(`Deleted ${target.attrs.elementType} ${target.attrs.id}`);
+				board.removeElement(target.attrs.id);
+			}
+			return;
+		}
+
+		if (activeTool === "Move") {
+			notifications.notify(`Click ignored (tool is Move) at (${Math.round(x)}, ${Math.round(y)})`);
+			return;
+		}
+
+		const color = activeTool === "Player" ? selectedColor : nonPlayerColor;
+		board.addElement(x, y, color, activeTool);
+		notifications.notify(`Added ${activeTool} at (${Math.round(x)}, ${Math.round(y)})`);
 	}
 
-	function onClick(target: any, x :number, y : number, btn: number, evt : any) {
-		
-		console.log("Button: " + btn);
-
-		x = x / baseScale.x;
-		y = y / baseScale.y;
-		
-
-		switch (btn) {
-			case 0:
-				if (target.attrs.name == "Component") {
-					if (evt.shiftKey) {
-						deleteComponentById(target.attrs.id);
-					}
-				} else {
-					addComponent(x, y, "red", "O");
-				}
-				break;
-			case 1:
-				if (target.attrs.name == "Component") {
-					contextMenuBoardComponent.showRightClickContextMenu(
-						evt,
-						target.attrs.id,
-					);
-				} else {
-					contextMenu.showRightClickContextMenu(evt);
-				}
-				break;
-			case 2:
-				break;
-
-			default:
-				break;
+	function handleStageOnContextMenu(e: any) {
+		e.evt.preventDefault();
+		const target = e.target;
+		if (target.attrs.name === "Component") {
+			notifications.notify(`Opened marker menu for ${target.attrs.elementType} ${target.attrs.id}`);
+			contextMenuBoardComponent.showRightClickContextMenu(
+				e.evt,
+				target.attrs.id,
+				target.attrs.elementType,
+				target.attrs.fill,
+			);
 		}
 	}
-	function handleStageOnClick(e: any) {
-		e.preventDefault();
 
-		let x = e.detail.evt.layerX;
-		let y = e.detail.evt.layerY;
-		onClick(e.detail.target ,x ,y , e.detail.evt.button, e.detail.evt);
-		/*
-		let x = e.detail.evt.layerX / baseScale.x;
-		let y = e.detail.evt.layerY / baseScale.y;
-		let target = e.detail.target;
-		let evt = e.detail.evt;
-
-		switch (e.detail.evt.button) {
-			//Left Click
-			case 0:
-				console.log("Left Click");
-				if (target.attrs.name == "Component") {
-					if (e.detail.evt.shiftKey) {
-						deleteComponentById(target.attrs.id);
-					}
-				} else {
-					addComponent(x, y, "red", "O");
-				}
-				break;
-			//Middle Click
-			case 1:
-				console.log("Middle Click");
-				break;
-			//Right Click
-			case 2:
-				console.log("Right Click");
-				if (target.attrs.name == "Component") {
-					contextMenuBoardComponent.showRightClickContextMenu(
-						evt,
-						target.attrs.id,
-					);
-				} else {
-					contextMenu.showRightClickContextMenu(evt);
-				}
-
-				break;
-			default:
-				console.log("Unknown button");
-				console.log(e.detail.evt.button);
-				break;
-		}*/
-	}
-
-	function hideContextMenus(e: any) {
-		contextMenu.onPageClick(e);
-		contextMenuBoardComponent.onPageClick(e);
+	function hideContextMenu() {
+		contextMenuBoardComponent.onPageClick(null);
 	}
 
 	function downloadCurrentBoard(filename: string, text: string) {
 		const element = document.createElement("a");
-		element.setAttribute(
-			"href",
-			"data:text/json;charset=utf-8," + encodeURIComponent(text),
-		);
+		element.setAttribute("href", "data:text/json;charset=utf-8," + encodeURIComponent(text));
 		element.setAttribute("download", filename);
-
 		element.style.display = "none";
 		document.body.appendChild(element);
-
 		element.click();
-
 		document.body.removeChild(element);
 	}
 
-	function loadBoard(e: any) {
-		const file = e.target!.files[0];
+	function handleExport() {
+		const json = board.serialize();
+		downloadCurrentBoard("board.json", json);
+		notifications.notify(`Exported ${JSON.parse(json).length} element(s) to board.json`);
+	}
+
+	function handleLoadFile(file: File) {
+		notifications.notify(`Loading ${file.name}…`);
 		const reader = new FileReader();
-		reader.onload = async (e) => {
-			const text = e.target!.result as string;
-			loadComponentsFromJsonString(text);
+		reader.onload = (e) => {
+			try {
+				const text = e.target!.result as string;
+				board.loadFromJson(text);
+				notifications.notify(`Loaded ${JSON.parse(text).length} element(s) from ${file.name}`);
+			} catch (err) {
+				notifications.notify(`Failed to load ${file.name}: ${(err as Error).message}`, "error");
+			}
 		};
+		reader.onerror = () => notifications.notify(`Failed to read ${file.name}`, "error");
 		reader.readAsText(file);
 	}
 
-	onMount(async () => {
+	onMount(() => {
 		fitStageIntoParentContainer();
 		window.addEventListener("resize", fitStageIntoParentContainer);
-		window.addEventListener("contextmenu", (e) => e.preventDefault());
 	});
 </script>
 
@@ -180,50 +134,85 @@
 	<meta name="description" content="This is the board" />
 </svelte:head>
 
-<Container id="stage-parent" fluid>
-	<Stage
-		on:click={handleStageOnClick}
-		on:pointerdown={hideContextMenus}
-		on:touchstart={handleStageOnTouchStart}
-		id="stage"
-		config={{
-			width: containerWidth,
-			height: containerHeight,
-			scale: baseScale,
-		}}
-	>
-		<Layer>
-			<Rect
-				config={{
-					width: sceneWidth,
-					height: sceneHeight,
-					fill: "white",
-				}}
-			/>
-		</Layer>
-		<FloorballFullField width={sceneWidth} height={sceneHeight} />
+<div class="tb-root {$theme}">
+	<TopBar title="Powerplay vs. 2-3-1" onExport={handleExport} onLoadFile={handleLoadFile} />
 
-		<Layer>
-			{#each $components as component (component.id)}
-				<BoardComponent
-					x={component.x}
-					y={component.y}
-					color={component.color}
-					shapeToDraw={component.shape}
-					id={component.id}
-				/>
-			{/each}
-		</Layer>
-	</Stage>
-</Container>
-<CustomContextMenu bind:this={contextMenu} />
+	<div class="body">
+		<Sidebar bind:activeTool bind:selectedColor />
+
+		<div class="canvas-area">
+			<div id="stage-parent" class="field-card">
+				<Stage
+					onclick={handleStageOnClick}
+					oncontextmenu={handleStageOnContextMenu}
+					onpointerdown={hideContextMenu}
+					id="stage"
+					width={containerWidth}
+					height={containerHeight}
+					scale={baseScale}
+				>
+					<Layer>
+						<Rect width={sceneWidth} height={sceneHeight} fill="white" />
+					</Layer>
+					<FloorballFullField width={sceneWidth} height={sceneHeight} />
+
+					<Layer>
+						{#each $elements as element (element.id)}
+							<BoardComponent
+								x={element.x}
+								y={element.y}
+								color={element.color}
+								type={element.type}
+								id={element.id}
+							/>
+						{/each}
+					</Layer>
+				</Stage>
+			</div>
+		</div>
+	</div>
+</div>
+
 <ContextMenuBoardComponent bind:this={contextMenuBoardComponent} />
+<NotificationStack />
 
-<button
-	on:click={() => {
-		serializedData = serializeComponents();
-		downloadCurrentBoard("board.json", serializedData);
-	}}>Download</button
->
+<style>
+	.tb-root {
+		width: 100%;
+		height: 100vh;
+		background: var(--bg-app);
+		color: var(--text);
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
 
-<input type="file" accept=".json" on:change={loadBoard} />
+	.body {
+		flex-grow: 1;
+		display: flex;
+		overflow: hidden;
+	}
+
+	.canvas-area {
+		flex-grow: 1;
+		position: relative;
+		background-color: var(--bg-canvas);
+		background-image: radial-gradient(var(--dot) 1.5px, transparent 1.5px);
+		background-size: 22px 22px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 40px;
+	}
+
+	.field-card {
+		width: 100%;
+		max-width: 1400px;
+		aspect-ratio: 2 / 1;
+		background: var(--field-surface);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow);
+		border: 1px solid var(--border);
+		overflow: hidden;
+	}
+</style>

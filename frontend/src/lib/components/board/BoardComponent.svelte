@@ -1,64 +1,40 @@
 <script lang="ts">
-  
-    import { Shape } from 'svelte-konva';
-    import {getContext } from 'svelte';
-    import {moveComponentById} from './Components';
-    import {drawX, drawCircle, drawSquare} from './Shapes';
+	import { Shape } from "svelte-konva";
+	import { board, type ElementType } from "./Board";
+	import { drawPlayer, drawBall, drawRectangle, drawTriangle, drawCircle } from "./Shapes";
 
+	export let x = 0;
+	export let y = 0;
+	export let color = "blue";
+	export let type: ElementType = "Player";
+	export let id: string;
 
-    export let x = 0;
-    export let y = 0;
-    export let color = "blue";
-    export let shapeToDraw = "X";
-    export let id : string;
+	const drawFns: Record<ElementType, (context: any, shape: any) => void> = {
+		Player: drawPlayer,
+		Ball: drawBall,
+		Rectangle: drawRectangle,
+		Triangle: drawTriangle,
+		Circle: drawCircle,
+	};
 
-    const parentMoveComponent : Function = getContext('moveComponent');
-    
-    function handleOnClick(e : any){
-        e.preventDefault();
-
-    
-    }
-    function handleOnDragStart(){
-        console.log("Drag started");
-    }
-
-    function handleOnDragEnd(e : any){
-        let x = e.detail.target.attrs.x;
-        let y = e.detail.target.attrs.y;
-        moveComponentById(x,y,id);
-    }
-  
-
- 
+	function handleOnDragEnd(e: any) {
+		const newX = e.target.attrs.x;
+		const newY = e.target.attrs.y;
+		board.moveElement(id, newX, newY);
+	}
 </script>
-<Shape
-      config={{
-        name:"Component",
-        x: x,
-        y: y,
-        id: id,
-        fill: color,
-        draggable: true,
-        sceneFunc: function (context: any, shape: any) {
-                    switch(shapeToDraw){
-                        case "X":
-                            drawX(context, shape);
-                            break;
-                        case "Circle":
-                            drawCircle(context, shape);
-                            break;
-                        case "Square":
-                            drawSquare(context, shape);
-                            break;
-                        default :
-                            drawX(context, shape);
-                }    
-            }
-      }}
-      on:pointerclick={handleOnClick}
-  
-      on:dragstart={handleOnDragStart}
-      on:dragend={handleOnDragEnd}
-    />
 
+<Shape
+	name="Component"
+	x={x}
+	y={y}
+	id={id}
+	fill={color}
+	elementType={type}
+	draggable={true}
+	sceneFunc={function (context: any, shape: any) {
+		const draw = drawFns[type] ?? drawPlayer;
+		draw(context, shape);
+	}}
+	ondragend={handleOnDragEnd}
+/>
