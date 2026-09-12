@@ -40,7 +40,7 @@
         id: id,
         fill: color,
         draggable: true,
-        sceneFunc: function (context, shape) {
+        sceneFunc: function (context: any, shape: any) {
                     switch(shapeToDraw){
                         case "X":
                             drawX(context, shape);

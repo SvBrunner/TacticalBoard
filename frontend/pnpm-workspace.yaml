@@ -1,4 +1,2 @@
 allowBuilds:
-  canvas: set this to true or false
-  esbuild: set this to true or false
-  svelte-preprocess: set this to true or false
+  canvas: true
