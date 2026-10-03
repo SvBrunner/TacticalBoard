@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { PointElement } from "$lib/model/elements/PointElement";
 import { Frame } from "$lib/model/Frame";
 import { FixedClock } from "$lib/model/Clock";
@@ -10,13 +10,14 @@ import {
 	SituationImportError,
 } from "$lib/model/serialization/SituationImportErrors";
 import { SituationSerializer } from "$lib/model/serialization/SituationSerializer";
-import { BrowserFileDownloader, SituationFileTransfer, type FileDownloader } from "./SituationFileTransfer";
+import type { FileDownloader } from "$lib/files/FileDownloader";
+import { SituationFileTransfer } from "./SituationFileTransfer";
 
 class FakeDownloader implements FileDownloader {
-	readonly downloads: { filename: string; content: string; mimeType: string }[] = [];
+	readonly downloads: { filename: string; content: Blob }[] = [];
 
-	download(filename: string, content: string, mimeType: string): void {
-		this.downloads.push({ filename, content, mimeType });
+	download(filename: string, content: Blob): void {
+		this.downloads.push({ filename, content });
 	}
 }
 
@@ -58,20 +59,18 @@ describe("SituationFileTransfer", () => {
 	});
 
 	describe("export", () => {
-		it("downloads the serialized situation under the slug filename", () => {
+		it("downloads the serialized situation as a JSON file under the slug filename", async () => {
 			const downloader = new FakeDownloader();
 			const original = situation();
 
 			const filename = transfer(downloader).export(original);
 
 			expect(filename).toBe("powerplay-vs-2-3-1.situation.json");
-			expect(downloader.downloads).toEqual([
-				{
-					filename,
-					content: new SituationSerializer().serialize(original),
-					mimeType: "application/json",
-				},
-			]);
+			expect(downloader.downloads).toHaveLength(1);
+			const [download] = downloader.downloads;
+			expect(download.filename).toBe(filename);
+			expect(download.content.type).toBe("application/json");
+			expect(await download.content.text()).toBe(new SituationSerializer().serialize(original));
 		});
 	});
 
@@ -124,26 +123,5 @@ describe("SituationFileTransfer", () => {
 
 			await expect(transfer().import(file)).rejects.toBeInstanceOf(SituationImportError);
 		});
-	});
-});
-
-describe("BrowserFileDownloader", () => {
-	it("clicks a temporary download link with the encoded content and removes it again", () => {
-		let clicked: HTMLAnchorElement | undefined;
-		const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
-			clicked = this;
-			expect(document.body.contains(this)).toBe(true);
-		});
-
-		new BrowserFileDownloader(document).download("a.situation.json", '{"a": "ä"}', "application/json");
-
-		expect(click).toHaveBeenCalledOnce();
-		expect(clicked?.getAttribute("download")).toBe("a.situation.json");
-		expect(clicked?.getAttribute("href")).toBe(
-			`data:application/json;charset=utf-8,${encodeURIComponent('{"a": "ä"}')}`,
-		);
-		expect(document.body.contains(clicked!)).toBe(false);
-
-		click.mockRestore();
 	});
 });

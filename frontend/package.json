@@ -28,6 +28,7 @@
 	"type": "module",
 	"dependencies": {
 		"canvas": "^3.2.3",
+		"gifenc": "^1.0.3",
 		"konva": "^10.5.0",
 		"svelte-konva": "^1.0.1",
 		"uuid": "^14.0.2"

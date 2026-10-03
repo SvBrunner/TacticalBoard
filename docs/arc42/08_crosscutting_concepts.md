@@ -175,13 +175,13 @@ Implementation: `frontend/src/lib/board/` (`BoardViewport`, `BoardInteractionCon
 - Mapping (stage CSS px relative to the stage container ↔ scene): `stage = (x₀, y₀) + R(θ)·scale·scene`, with `R(90°)·(x, y) = (−y, x)`. `BoardViewport.sceneToStage`/`stageToScene` implement it; taps are converted with `stageToScene`, popover anchors with `sceneToStage` (round elements, so the anchor rect stays axis-aligned). Konva's own transform for dragging uses the same stage props; tests check that both agree.
 - **Clamping:** placing and dragging clamp to the visible rect — the whole field for full-field situations, the visible half for half-field ones — so new and moved elements are always visible.
 
-Implementation: `frontend/src/lib/model/FieldDimensions.ts`, `frontend/src/lib/board/BoardViewport.ts`, `frontend/src/lib/components/board/BoardCanvas.svelte`.
+Implementation: `frontend/src/lib/model/FieldDimensions.ts`, `frontend/src/lib/board/BoardViewport.ts`, `frontend/src/lib/components/board/BoardCanvas.svelte` (interaction) on top of `BoardScene.svelte` (the drawing, shared with the GIF export, see 8.12).
 
 ## 8.7 Unsaved changes
 
 Until there is server-side storage, "saved" means **exported**.
 
-- `SituationEditor` keeps a simple dirty flag (`hasUnsavedChanges` store, `isDirty()`): it becomes true with any edit that changes the situation (undo and redo included) and false when a situation is created or loaded/imported, or when it is exported (`markSaved()`). It is deliberately a flag, not a comparison: undoing back to the starting state still counts as unsaved.
+- `SituationEditor` keeps a simple dirty flag (`hasUnsavedChanges` store, `isDirty()`): it becomes true with any edit that changes the situation (undo and redo included) and false when a situation is created or loaded/imported, or when it is exported as JSON (`markSaved()`). Exporting an animated GIF does **not** count as saving (8.12). It is deliberately a flag, not a comparison: undoing back to the starting state still counts as unsaved.
 - Starting a new situation (start page or editor), importing a file, or going back to the start page with the editor's badge while dirty asks **"Discard changes?"** (Discard / Cancel, reusable `ConfirmDialog`). Confirm proceeds, Cancel (or Escape) keeps the current situation. For an import the question comes after the file was read successfully.
 - While dirty, a `beforeunload` handler (`UnsavedChangesGuard`) makes the browser show its own warning when the page is left or reloaded. Other in-app navigation (e.g. the browser's Back button from the editor to the start page) keeps the situation in memory and is not affected.
 
@@ -271,13 +271,13 @@ The frames of a situation can be played as a **slideshow** in the editor.
 | Previous / Next | Show the neighbouring frame for its full duration, staying playing or paused; nothing happens before the first or after the last frame (also with Loop on). A tap on a frame in the strip shows that frame the same way. |
 | Settings | Frame duration and Loop are **app settings**, not part of the situation file; they are remembered in the browser (`localStorage`, key `tacticalboard.playbackSettings`). If the browser storage is unavailable or holds invalid data, the defaults are used. Changes apply right away, also during playback (a new duration from the next frame on). |
 
-**While playing or paused** the editor is read-only: the board shows the frame without selection, handles or popover and reports no taps, drags or arrow gestures; the tool panel, Undo/Redo (buttons and shortcuts), Delete/Backspace, adding/deleting/reordering frames and the details fields are disabled. Frame descriptions are **not** shown (the frame description field is hidden). Starting playback first ends the edit session, drops an arrow being drawn, clears the selection and closes the popover. New, Load and the badge stay available: when the situation is replaced (new, imported, closed) playback stops. Export works during playback and doesn't stop it.
+**While playing or paused** the editor is read-only: the board shows the frame without selection, handles or popover and reports no taps, drags or arrow gestures; the tool panel, Undo/Redo (buttons and shortcuts), Delete/Backspace, adding/deleting/reordering frames and the details fields are disabled. Frame descriptions are **not** shown (the frame description field is hidden). Starting playback first ends the edit session, drops an arrow being drawn, clears the selection and closes the popover. New, Load and the badge stay available: when the situation is replaced (new, imported, closed) playback stops. The JSON export works during playback and doesn't stop it; opening the GIF export stops playback first (8.12).
 
 **Controls** (`PlaybackControls`, a region named "Playback" between the board and the frame strip): Play/Pause, Previous frame, Next frame, Stop (all ≥ 44 px), the status "Frame n / N" (the frame on the board), a "Frame duration" select and a Loop toggle button (`aria-pressed`). Below 640 px width (container query) the buttons are icon-only and the status is "n / N"; the texts stay the accessible names. The frame strip marks the frame being shown (`aria-current="step"`).
 
 **Keyboard** (`PlaybackShortcuts`): Space = Play/Pause (also starts playback); ← / → = previous / next frame and Escape = Stop, **only during playback** — outside playback ← / → do nothing (switching frames by keyboard is not part of the MVP) and Escape keeps its board meaning (8.5). Ignored while typing in a text field or select, during IME composition, with Ctrl/Cmd/Alt held, while an element is dragged, and inside modal dialogs. Space on a focused button or link is left to the browser, which activates that control (so it never triggers twice). Swipe gestures and a fullscreen/presentation mode are planned for later.
 
-**Building blocks** (`frontend/src/lib/playback/`, pure and reusable for the GIF export of step 9):
+**Building blocks** (`frontend/src/lib/playback/`, pure; `PlaybackTimeline` is shared with the GIF export, 8.12):
 
 - `PlaybackTimeline`: frames + settings → entries `{ frameId, index, startMs, durationMs }`, `totalMs`, `frameAt(ms)` (a frame covers `[startMs, startMs + durationMs)`; before the start the first frame, from the end on the last one).
 - `PlaybackSettings` (immutable value) and `PlaybackSettingsStore` (Svelte store, persisted through a `KeyValueStorage`; `WebKeyValueStorage` wraps `localStorage` and swallows every storage error).
@@ -285,3 +285,38 @@ The frames of a situation can be played as a **slideshow** in the editor.
 - `PlaybackShortcuts`: the keyboard mapping above.
 
 `frontend/src/lib/editor/PlaybackWorkflow.ts` connects the player to the editor (leave editing before starting, stop when the situation changes); the editor page shows `playing ? the slideshow's frame : the active frame` and passes the read-only state to `BoardCanvas` (`readonly`), `ToolPanel` (`disabled`), `FrameStrip` (`playing`) and `SituationDetails` (`disabled`).
+
+## 8.12 Animation export
+
+The frames of a situation can be exported as an **animated GIF** — the slideshow of 8.11 as a file to send around.
+
+**Rules** (product decisions):
+
+| | |
+|---|---|
+| Format | GIF only (no video). |
+| Content | **All** frames, in order, as they look on the board: field, arrows, point elements, labels. No title, descriptions, frame numbers or watermark are burned in. Elements in the hidden half of a half-field situation are not visible (like on the board). |
+| Look | Always the **light** field look (white surface, black lines), also when the app is in the dark theme. |
+| Orientation | Full field landscape; half field portrait with its goal at the bottom (like the board; the floorball half is square). |
+| Resolution | Selectable preset, given by the long side: **Small 600 px, Medium 1200 px (default), Large 1800 px**; the other side follows the shown field (full floorball field 1200 × 600 at Medium, half field 1200 × 1200). |
+| Timing | Every frame is shown for the playback **frame duration** (8.11, shown read-only in the dialog — it *is* the playback setting); hard cuts. The GIF **loops forever**. |
+| File | `<slug of the title>.gif`, with the same slug rule as the JSON export (8.3); `situation.gif` when the title has no usable characters. |
+| Share | Where the browser can share files (`navigator.canShare({ files })`, typically phones), the dialog additionally offers **Share** (native share sheet). Closing the share sheet is not an error. |
+| Saving | Exporting a GIF does **not** count as saved: the unsaved-changes flag (8.7) is untouched. |
+
+**UI:** the header's **Export** button is a disclosure button (`aria-expanded`) with two choices below it, "Situation file (JSON)" and "Animated GIF" (≥ 44 px each; Escape, a press outside or moving focus away closes them). "Animated GIF" opens the modal **Export animated GIF** dialog (native `<dialog>`, `modalDialog` action): Resolution radios (with the pixel size for this situation), Frames and Frame duration as a description list, **Create GIF**. While the GIF is created: a `<progress>` bar ("frame n of N") and **Cancel**; the resolution is locked. Then: **Download** (focused), **Share** where supported, Close. Failures are shown as an alert with "Try again". Escape/Close cancels a running export. Opening the dialog stops a running slideshow, ends the edit session and closes the popover; the export uses the situation as it is at that moment.
+
+**Building blocks** (`frontend/src/lib/export/`):
+
+- `BoardScene.svelte` (`lib/components/board/`): the board's drawing — Konva stage laid out by a `StageFit`, field, arrows group, point elements group with labels, an overlay snippet — with optional `SceneInteraction`. `BoardCanvas` adds interaction and handles on top; the export uses it without interaction. So the GIF is drawn by exactly the same code as the board.
+- `FrameRasterizer` (`FrameRendererFactory`): mounts `BoardScene` with Svelte's `mount()` into a hidden, `inert` container outside the viewport, laid out by `BoardViewport.fit` for exactly the export size; per frame: set the elements, `await tick()`, `stage.toCanvas({ pixelRatio: 1 })` (Konva renders each layer separately, so composite operations stay inside their layer as on screen), drawn onto an opaque white ground → RGBA pixels. `dispose()` unmounts and removes the container.
+- `ExportResolution`: the presets and `sizeFor(contentSize)` (whole pixels, long side = preset).
+- `AnimationEncoder` (interface: `addFrame(rgba, durationMs)`, `finish(): Blob`, `mimeType`, `fileExtension`) with `GifAnimationEncoder`: one GIF frame per slide, delay = frame duration, NETSCAPE loop count 0 (forever); a 256-color palette quantized **per frame** (RGB565, local color tables) — frames are hard cuts, so per-frame palettes keep each frame's colors exact without dithering.
+- `SlideshowExporter`: `PlaybackTimeline` (same timing as playback) → rasterizer → encoder; `onProgress(done, total)` (0 … N), cancellation through an `AbortSignal` (rejects with an `AbortError`), yields to the UI (a macrotask) after every frame so progress paints and Cancel stays responsive; the rasterizer is always disposed.
+- `AnimationExport` (runes state behind the dialog): phases `idle | rendering | ready | failed`, resolution choice, file naming, Download (`BrowserFileDownloader`) and Share (`WebFileShare`).
+- `lib/files/`: `BrowserFileDownloader` (any `Blob`, through an object URL revoked 40 s after the click; also used by the JSON export), `FileNameSlug` (the shared slug rule), `WebFileShare` (feature-detected Web Share API with files).
+
+**Dependency:** [gifenc](https://github.com/mattdesl/gifenc) (MIT, ~9 kB, no dependencies) encodes the GIF. It is loaded with a dynamic `import()` only when a GIF is created, so it is a separate chunk and the editor bundle doesn't grow. It ships no TypeScript types; the used API is declared in `frontend/src/lib/export/gifenc.d.ts`.
+
+**Performance:** rendering and encoding run on the main thread, one frame at a time (in headless Chromium about 0.1–0.3 s for 3 frames, depending on the resolution); see [known limitations](../known-limitations.md).
+

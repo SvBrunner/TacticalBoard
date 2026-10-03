@@ -141,8 +141,10 @@ describe("svelte-konva components use device-agnostic pointer events", () => {
 describe("the stage container opts out of browser touch gestures", () => {
 	const content = readFileSync(join(process.cwd(), "src/lib/components/board/BoardCanvas.svelte"), "utf-8");
 
-	it("wraps the Stage in the stage container", () => {
-		expect(content).toMatch(/class="stage-container"[\s\S]*<Stage\b/);
+	it("wraps the scene (whose root is the Stage) in the stage container", () => {
+		expect(content).toMatch(/class="stage-container"[\s\S]*<BoardScene\b/);
+		const scene = readFileSync(join(process.cwd(), "src/lib/components/board/BoardScene.svelte"), "utf-8");
+		expect(scene.slice(scene.indexOf("</script>"))).toMatch(/^<\/script>\s*<Stage\b/);
 	});
 
 	it("sets touch-action: none, no text selection and no iOS callout on it", () => {

@@ -6,6 +6,7 @@
 	import ElementEditPopover from "$lib/components/board/popover/ElementEditPopover.svelte";
 	import TopBar from "$lib/components/board/TopBar.svelte";
 	import ToolPanel from "$lib/components/board/ToolPanel.svelte";
+	import ExportAnimationDialog from "$lib/components/dialogs/ExportAnimationDialog.svelte";
 	import SituationDialogs from "$lib/components/dialogs/SituationDialogs.svelte";
 	import SituationDetails from "$lib/components/details/SituationDetails.svelte";
 	import FrameDescriptionEditor from "$lib/components/frames/FrameDescriptionEditor.svelte";
@@ -35,6 +36,12 @@
 	import { PlaybackShortcuts } from "$lib/playback/PlaybackShortcuts";
 	import { PlaybackTimeline } from "$lib/playback/PlaybackTimeline";
 	import { SlideshowPlayer } from "$lib/playback/SlideshowPlayer";
+	import { AnimationExport } from "$lib/export/AnimationExport.svelte";
+	import { FrameRasterizer } from "$lib/export/FrameRasterizer.svelte";
+	import { GifAnimationEncoder } from "$lib/export/GifAnimationEncoder";
+	import { SlideshowExporter } from "$lib/export/SlideshowExporter";
+	import { BrowserFileDownloader } from "$lib/files/FileDownloader";
+	import { WebFileShare } from "$lib/files/FileShare";
 
 	const elements = situationEditor.elements;
 	const situation = situationEditor.situation;
@@ -127,7 +134,28 @@
 	);
 	const shownFrameNumber = $derived($situation.indexOfFrame(shownFrame.id) + 1);
 
+	// GIF export: the frames as the slideshow shows them, drawn off screen like the board.
+	const animationExport = new AnimationExport({
+		exporter: new SlideshowExporter({
+			renderer: (exportViewport, size) => new FrameRasterizer(exportViewport, size),
+			encoder: () => GifAnimationEncoder.create(),
+		}),
+		downloader: new BrowserFileDownloader(),
+		share: new WebFileShare(),
+		log: notifications,
+	});
+	let exportAnimationOpen = $state(false);
+
 	let dialogs: SituationDialogs;
+
+	/** Opens the GIF export for the situation as it is now; a running slideshow stops first. */
+	function handleExportAnimation() {
+		playback.stop();
+		situationEditor.endGesture();
+		popover.close();
+		animationExport.begin({ situation: situationEditor.current(), settings: playbackSettingsStore.current() });
+		exportAnimationOpen = true;
+	}
 
 	function handleKeydown(event: KeyboardEvent) {
 		// While a modal dialog is open, its keys belong to it.
@@ -206,6 +234,7 @@
 	});
 
 	onDestroy(() => {
+		animationExport.close();
 		playback.destroy();
 		selection.destroy();
 	});
@@ -222,7 +251,8 @@
 		title={$situation.displayTitle}
 		onHome={handleHome}
 		onNew={() => dialogs.startNew()}
-		onExport={() => workflow.exportCurrent()}
+		onExportJson={() => workflow.exportCurrent()}
+		onExportAnimation={handleExportAnimation}
 		onLoadFile={(file) => dialogs.importFile(file)}
 		canUndo={$history.canUndo && !playing}
 		canRedo={$history.canRedo && !playing}
@@ -309,6 +339,8 @@
 </div>
 
 <SituationDialogs bind:this={dialogs} {workflow} {prompt} onOpened={handleOpened} />
+
+<ExportAnimationDialog open={exportAnimationOpen} flow={animationExport} onClose={() => (exportAnimationOpen = false)} />
 
 <style>
 	.editor {

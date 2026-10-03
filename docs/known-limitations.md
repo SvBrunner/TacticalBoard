@@ -37,3 +37,11 @@ On phones the edit popover is a bottom sheet. On a landscape phone (and partly o
 
 On a small board (e.g. a half field on a landscape phone, about 220 CSS px) the 44 CSS px hit circles of an arrow's handles overlap on short segments. Where they do, the start, end and bend handles win over the "+" (add bend) handles, so a bend can then only be added on a longer segment, or after turning the phone or using a larger screen.
 
+## GIF export: sharing and performance
+
+**Share** in the GIF export dialog appears only where the browser can share files (`navigator.canShare({ files })`): typically Safari and Chrome on phones and tablets, some desktop browsers (e.g. Safari on macOS, Chrome on Windows) too, but not Firefox on the desktop. Elsewhere only **Download** is offered. The decision is pure feature detection, not "is this a phone".
+
+The GIF is rendered and encoded in the browser's main thread, one frame at a time. Between frames the page stays responsive (progress, Cancel), but a single frame blocks it briefly — longer at the Large resolution and on slow phones. Memory grows with frames × resolution (each Large frame is 1800 px wide). Situations with many frames at Large therefore take noticeably longer and produce large files; nothing caps the frame count.
+
+GIF stores frame delays in hundredths of a second and at most 256 colors per frame; antialiased edges are slightly quantized.
+

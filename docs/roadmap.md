@@ -2,7 +2,7 @@
 
 Phases in delivery order. Detailed requirements live in [arc42 chapter 1](arc42/01_introduction_and_goals.md); this file tracks what is done and what is next.
 
-Phase 1 is ordered; later phases are not prioritized internally yet.
+Phase 1 is ordered and complete; later phases are not prioritized internally yet.
 
 ## Phase 1 — MVP: board editor (frontend only, floorball)
 
@@ -28,7 +28,7 @@ Next, in this order:
 6. [x] **Frames UI**: add frame (copy of the previous one), switch, delete, reorder; description per frame; situation details panel.
 7. [x] **Pass/run/shot arrows**: straight, bendable via any number of bend points.
 8. [x] **Slideshow playback** of frames in the editor.
-9. [ ] **GIF/video export** (frames as slideshow), reusing the playback logic.
+9. [x] **GIF export** (frames as slideshow), reusing the playback timing and the board drawing.
 
 ## Phase 2 — Backend, users, and teams
 

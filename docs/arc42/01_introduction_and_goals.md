@@ -28,7 +28,7 @@ Delivery order: the board editor is the MVP and ships first, with local JSON exp
 - Export a situation as JSON, and import it again. Importing always creates a new situation (new situation ID, `createdAt`/`updatedAt` set to the import time; frame and element IDs are kept) and replaces the editor content.
 - The app opens on a start page offering "New situation" and "Import"; both lead into the editor. (Listing saved situations and teams there follows with storage in Phase 2.)
 - Unsaved changes (in the MVP: not exported since the last edit) are protected: starting a new situation, importing, or going back to the start page (the badge in the editor header) asks "Discard changes?" first, and leaving or reloading the page triggers the browser's warning.
-- Export a situation as an animated GIF/video (frames as a slideshow).
+- Export a situation as an animated GIF (frames as a slideshow, looping), at a selectable resolution, with the playback frame duration; on phones also shareable through the native share sheet.
 - Fully usable by touch on phones and tablets, not only on desktop.
 
 *Server-side storage (after MVP)*

@@ -13,6 +13,7 @@ import type { PointElement } from "$lib/model/elements/PointElement";
 import EditorPage from "./+page.svelte";
 import { goto } from "$app/navigation";
 import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { parseGif } from "$lib/testing/GifStructure";
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
 
@@ -414,16 +415,105 @@ describe("editor page", () => {
 		});
 	});
 
-	it("Export downloads the situation and clears the unsaved-changes flag", async () => {
-		const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+	it("Export > Situation file (JSON) downloads the situation and clears the unsaved-changes flag", async () => {
+		let downloaded: HTMLAnchorElement | undefined;
+		const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+			downloaded = this;
+		});
 		situationEditor.addElement(1, 1, "red", "Player");
 		render(EditorPage);
 
-		await fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
+		await fireEvent.click(screen.getByRole("button", { name: "Export" }));
+		await fireEvent.click(screen.getByRole("button", { name: "Situation file (JSON)" }));
 
 		expect(click).toHaveBeenCalledOnce();
+		expect(downloaded?.getAttribute("download")).toBe("breakout.situation.json");
 		expect(situationEditor.isDirty()).toBe(false);
 		click.mockRestore();
+	});
+
+	describe("Export > Animated GIF", () => {
+		const exportDialog = () => screen.getByRole("dialog", { name: "Export animated GIF" }) as HTMLDialogElement;
+
+		async function openGifExport() {
+			await fireEvent.click(screen.getByRole("button", { name: "Export" }));
+			await fireEvent.click(screen.getByRole("button", { name: "Animated GIF" }));
+			await tick();
+		}
+
+		it("opens the export dialog for the current situation with the playback frame duration", async () => {
+			localStorage.setItem("tacticalboard.playbackSettings", JSON.stringify({ frameDurationMs: 5000, loop: false }));
+			situationEditor.addFrame();
+			render(EditorPage);
+
+			await openGifExport();
+
+			expect(exportDialog()).toHaveAttribute("open");
+			const facts = [...exportDialog().querySelectorAll("dd")].map((dd) => dd.textContent?.replace(/\s+/g, " ").trim());
+			expect(facts).toEqual(["2", "5 s (playback setting)"]);
+			localStorage.clear();
+		});
+
+		it("creates and downloads <slug>.gif with every frame, without counting as saved", async () => {
+			let downloaded: HTMLAnchorElement | undefined;
+			const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+				downloaded = this;
+			});
+			const blobs: Blob[] = [];
+			vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+				blobs.push(blob as Blob);
+				return "blob:gif";
+			});
+			vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+			situationEditor.addElement(500, 250, "red", "Player");
+			situationEditor.addFrame();
+			situationEditor.addFrame();
+			expect(situationEditor.isDirty()).toBe(true);
+			render(EditorPage);
+			await openGifExport();
+			await fireEvent.click(within(exportDialog()).getByRole("radio", { name: /Small/ }));
+
+			await fireEvent.click(within(exportDialog()).getByRole("button", { name: "Create GIF" }));
+			const download = await within(exportDialog()).findByRole("button", { name: "Download" }, { timeout: 5000 });
+			await fireEvent.click(download);
+
+			expect(click).toHaveBeenCalledOnce();
+			expect(downloaded?.getAttribute("download")).toBe("breakout.gif");
+			expect(blobs[0].type).toBe("image/gif");
+			const bytes = new Uint8Array(await blobs[0].arrayBuffer());
+			const gif = parseGif(bytes);
+			expect([gif.width, gif.height]).toEqual([600, 300]);
+			expect(gif.images).toHaveLength(3);
+			expect(gif.loopCount).toBe(0);
+			expect(situationEditor.isDirty()).toBe(true);
+			expect(document.querySelector("[data-export-scene]")).toBeNull(); // the off-screen scene is gone
+			click.mockRestore();
+		});
+
+		it("closing the dialog leaves the situation unchanged", async () => {
+			situationEditor.addElement(500, 250, "red", "Player");
+			const before = situationEditor.current();
+			render(EditorPage);
+			await openGifExport();
+
+			const dialog = exportDialog();
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+			await tick();
+
+			expect(dialog.open).toBe(false);
+			expect(situationEditor.current()).toBe(before);
+			expect(situationEditor.isDirty()).toBe(true);
+		});
+
+		it("keyboard shortcuts don't reach the board while the export dialog has focus", async () => {
+			situationEditor.addElement(500, 250, "red", "Player");
+			render(EditorPage);
+			await openGifExport();
+
+			await fireEvent.keyDown(within(exportDialog()).getByRole("button", { name: "Create GIF" }), { key: "z", ctrlKey: true });
+
+			expect(get(situationEditor.elements)).toHaveLength(1);
+		});
 	});
 
 	describe("badge: back to the start page", () => {

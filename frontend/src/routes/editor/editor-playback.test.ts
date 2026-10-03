@@ -425,15 +425,30 @@ describe("editor page: slideshow playback", () => {
 			expect(status()).toBe("Frame 1 / 1");
 		});
 
-		it("exporting during playback doesn't stop it", async () => {
+		it("exporting the JSON file during playback doesn't stop it", async () => {
 			const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 			await showBoard();
 			await fireEvent.click(control("Play"));
 
-			await fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
+			await fireEvent.click(screen.getByRole("button", { name: "Export" }));
+			await fireEvent.click(screen.getByRole("button", { name: "Situation file (JSON)" }));
 
+			expect(click).toHaveBeenCalledOnce();
 			expect(control("Stop")).toBeEnabled();
 			click.mockRestore();
+		});
+
+		it("opening the GIF export stops playback", async () => {
+			await showBoard();
+			await fireEvent.click(control("Play"));
+
+			await fireEvent.click(screen.getByRole("button", { name: "Export" }));
+			await fireEvent.click(screen.getByRole("button", { name: "Animated GIF" }));
+			await tick();
+
+			expect(screen.getByRole("dialog", { name: "Export animated GIF" })).toHaveAttribute("open");
+			expect(control("Stop")).toBeDisabled();
+			expect(control("Play")).toBeEnabled();
 		});
 	});
 

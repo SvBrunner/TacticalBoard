@@ -7,9 +7,10 @@ is visible: the whole field (landscape, unrotated) or the half field
 raw Konva pointer/drag events into board gestures (in scene units) for the
 controller.
 
-Elements are drawn in one layer, in three groups from bottom to top:
-arrows (always below), point elements, and the overlay (the preview of an
-arrow being drawn and the handles of the selected arrow).
+The drawing itself is `BoardScene` (shared with the GIF export); this
+component adds the interaction and the overlay on top of the elements
+(the preview of an arrow being drawn and the handles of the selected
+arrow).
 
 While an arrow tool is active (`arrowTool`), elements are not draggable and
 presses are fed to the controller's arrow gestures (`pointerDown` from
@@ -26,7 +27,7 @@ open popover at the selected element's new on-screen position.
 -->
 <script lang="ts">
 	import { untrack } from "svelte";
-	import { Stage, Layer, Rect, Group } from "svelte-konva";
+	import { Group } from "svelte-konva";
 	import type { Point } from "$lib/model/Point";
 	import type { KonvaEventObject, Node } from "konva/lib/Node";
 	import { observeSize, type Size } from "$lib/actions/observeSize";
@@ -41,10 +42,9 @@ open popover at the selected element's new on-screen position.
 	import { PointElement } from "$lib/model/elements/PointElement";
 	import ArrowDraftPreview from "./ArrowDraftPreview.svelte";
 	import ArrowHandleShape from "./ArrowHandleShape.svelte";
-	import ArrowShape from "./ArrowShape.svelte";
-	import BoardComponent from "./BoardComponent.svelte";
+	import BoardScene from "./BoardScene.svelte";
 	import { elementCatalog } from "./ElementCatalog";
-	import FloorballFullField from "./background/FloorballFullField.svelte";
+	import type { SceneInteraction } from "./SceneInteraction";
 	import { ARROW_HANDLE_NODE_NAME, ARROW_NODE_NAME, ELEMENT_NODE_NAME, visualRadius } from "./Shapes";
 
 	/** The gestures the canvas reports. */
@@ -129,6 +129,30 @@ open popover at the selected element's new on-screen position.
 	});
 	/** Width of an arrow's hit region: at least 44 CSS px. */
 	const arrowHitWidth = $derived(fit.scale > 0 ? (2 * BoardViewport.MIN_TOUCH_RADIUS_PX) / fit.scale : 0);
+
+	/** How the scene's elements react: everything off while read-only. */
+	const interaction: SceneInteraction = {
+		get listening() {
+			return !readonly;
+		},
+		get draggable() {
+			return draggable;
+		},
+		get selectedId() {
+			return readonly ? null : selectedId;
+		},
+		get arrowHitWidth() {
+			return arrowHitWidth;
+		},
+		hitRadius: (type) => viewport.hitRadius(visualRadius(type), fit.scale),
+		arrowGeometry: (arrow) => arrowGeometryOf(arrow),
+		pointDragStart: (id) => controller.dragStart(id),
+		pointDragMove: (position) => controller.dragMove(position),
+		pointDragEnd: (id, position) => controller.dragEnd(id, position),
+		arrowDragStart: (arrow) => startArrowDrag(arrow.id),
+		arrowDragMove: (arrow, delta) => moveArrow(arrow, delta),
+		arrowDragEnd: (arrow, delta) => endArrowDrag(arrow, delta),
+	};
 
 	function elementIdOf(target: Node): string | null {
 		const name = target.name();
@@ -300,93 +324,47 @@ open popover at the selected element's new on-screen position.
 <section class="field-area" aria-label="Field" use:observeSize={(next) => (size = next)}>
 	{#if fit.width > 0}
 		<div bind:this={stageContainer} class="stage-container" style:width="{fit.width}px" style:height="{fit.height}px">
-			<Stage
-				width={fit.width}
-				height={fit.height}
-				scaleX={fit.scale}
-				scaleY={fit.scale}
-				rotation={fit.rotation}
-				x={fit.x}
-				y={fit.y}
-				onpointerclick={handlePointerClick}
-				onpointerdblclick={handlePointerDblClick}
-				onpointerdown={handlePointerDown}
-				oncontextmenu={handleContextMenu}
+			<BoardScene
+				{elements}
+				{viewport}
+				{fit}
+				{interaction}
+				stageEvents={{
+					onpointerclick: handlePointerClick,
+					onpointerdblclick: handlePointerDblClick,
+					onpointerdown: handlePointerDown,
+					oncontextmenu: handleContextMenu,
+				}}
 			>
-				<Layer listening={false}>
-					<Rect width={viewport.field.width} height={viewport.field.height} fill="white" />
-				</Layer>
-				<FloorballFullField width={viewport.field.width} height={viewport.field.height} />
-
-				<Layer listening={!readonly}>
-					<Group name="arrows">
-						{#each elements as element (element.id)}
-							{#if element instanceof ArrowElement}
-								<ArrowShape
-									id={element.id}
-									type={element.type}
-									color={element.color}
-									geometry={arrowGeometryOf(element)}
-									hitWidth={arrowHitWidth}
-									{draggable}
-									onDragStart={startArrowDrag}
-									onDragMove={(_id, delta) => moveArrow(element, delta)}
-									onDragEnd={(_id, delta) => endArrowDrag(element, delta)}
-								/>
-							{/if}
+				{#snippet overlay()}
+					{#if arrowDraft && drawing && arrowTool}
+						<ArrowDraftPreview draft={arrowDraft} type={arrowTool} color={elementCatalog.arrowColor} scale={fit.scale} />
+					{/if}
+					{#if selectedArrow}
+						{@const arrow = selectedArrow}
+						<!-- Two groups: Konva appends new nodes at the end, so a group (not the order
+						     of creation) keeps the "add bend" handles below the point handles. -->
+						{#each [handles.filter((handle) => !handle.isPoint), handles.filter((handle) => handle.isPoint)] as group, groupIndex (groupIndex)}
+							<Group name={groupIndex === 0 ? "insert-handles" : "point-handles"}>
+								{#each group as handle (handle.key)}
+									{@const position = handle.positionOn(arrow.geometry)}
+									<ArrowHandleShape
+										arrowId={arrow.id}
+										{handle}
+										x={position.x}
+										y={position.y}
+										scale={fit.scale}
+										active={handle.kind === "bend" && handle.index === selectedBend}
+										onDragStart={(dragged) => startHandleDrag(arrow, dragged)}
+										onDragMove={(dragged, point) => moveHandle(arrow, dragged, point)}
+										onDragEnd={(dragged, point) => endHandleDrag(arrow, dragged, point)}
+									/>
+								{/each}
+							</Group>
 						{/each}
-					</Group>
-					<Group name="points">
-						{#each elements as element (element.id)}
-							{#if element instanceof PointElement}
-								<BoardComponent
-									id={element.id}
-									x={element.x}
-									y={element.y}
-									color={element.color}
-									type={element.type}
-									hitRadius={viewport.hitRadius(visualRadius(element.type), fit.scale)}
-									selected={!readonly && element.id === selectedId}
-									{draggable}
-									label={element.showsLabel ? element.label : ""}
-									labelRotation={0 - fit.rotation}
-									onDragStart={(id) => controller.dragStart(id)}
-									onDragMove={(_id, position) => controller.dragMove(position)}
-									onDragEnd={(id, position) => controller.dragEnd(id, position)}
-								/>
-							{/if}
-						{/each}
-					</Group>
-					<Group name="overlay">
-						{#if arrowDraft && drawing && arrowTool}
-							<ArrowDraftPreview draft={arrowDraft} type={arrowTool} color={elementCatalog.arrowColor} scale={fit.scale} />
-						{/if}
-						{#if selectedArrow}
-							{@const arrow = selectedArrow}
-							<!-- Two groups: Konva appends new nodes at the end, so a group (not the order
-							     of creation) keeps the "add bend" handles below the point handles. -->
-							{#each [handles.filter((handle) => !handle.isPoint), handles.filter((handle) => handle.isPoint)] as group, groupIndex (groupIndex)}
-								<Group name={groupIndex === 0 ? "insert-handles" : "point-handles"}>
-									{#each group as handle (handle.key)}
-										{@const position = handle.positionOn(arrow.geometry)}
-										<ArrowHandleShape
-											arrowId={arrow.id}
-											{handle}
-											x={position.x}
-											y={position.y}
-											scale={fit.scale}
-											active={handle.kind === "bend" && handle.index === selectedBend}
-											onDragStart={(dragged) => startHandleDrag(arrow, dragged)}
-											onDragMove={(dragged, point) => moveHandle(arrow, dragged, point)}
-											onDragEnd={(dragged, point) => endHandleDrag(arrow, dragged, point)}
-										/>
-									{/each}
-								</Group>
-							{/each}
-						{/if}
-					</Group>
-				</Layer>
-			</Stage>
+					{/if}
+				{/snippet}
+			</BoardScene>
 		</div>
 	{/if}
 </section>

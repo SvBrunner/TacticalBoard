@@ -1,5 +1,8 @@
 import type { PointElementType } from "$lib/model/elements/ElementType";
 
+/** The field's surface color: always the light look, also in the dark theme and in exports. */
+export const FIELD_SURFACE_COLOR = "white";
+
 /** Konva node name identifying point elements (as opposed to the field) in hit tests. */
 export const ELEMENT_NODE_NAME = "Component";
 

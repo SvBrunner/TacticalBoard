@@ -1,8 +1,12 @@
 <!--
 @component
 The editor header: the app badge (a link back to the start page), situation
-title, undo/redo, new/load/export and theme toggle. On phones the buttons
-become icon-only; their text stays as accessible name.
+title, undo/redo, new/load, the export choice and theme toggle. On phones
+the buttons become icon-only; their text stays as accessible name.
+
+Export is a disclosure button with two choices below it: "Situation file
+(JSON)" and "Animated GIF". The choices close again after a choice, with
+Escape (focus back on Export), or when focus or a press goes elsewhere.
 -->
 <script lang="ts">
 	import { theme, toggleTheme } from "$lib/theme";
@@ -14,7 +18,10 @@ become icon-only; their text stays as accessible name.
 		onHome: () => void;
 		/** Start a new situation (the owner checks for unsaved changes). */
 		onNew: () => void;
-		onExport: () => void;
+		/** Export the situation as a JSON file. */
+		onExportJson: () => void;
+		/** Export the frames as an animated GIF (opens the export dialog). */
+		onExportAnimation: () => void;
 		onLoadFile: (file: File) => void;
 		canUndo: boolean;
 		canRedo: boolean;
@@ -22,9 +29,50 @@ become icon-only; their text stays as accessible name.
 		onRedo: () => void;
 	}
 
-	let { title, onHome, onNew, onExport, onLoadFile, canUndo, canRedo, onUndo, onRedo }: Props = $props();
+	let { title, onHome, onNew, onExportJson, onExportAnimation, onLoadFile, canUndo, canRedo, onUndo, onRedo }: Props =
+		$props();
 
+	const uid = $props.id();
 	let fileInput: HTMLInputElement;
+	let exportMenu: HTMLElement;
+	let exportToggle: HTMLButtonElement;
+	let exportOpen = $state(false);
+
+	function toggleExportMenu() {
+		exportOpen = !exportOpen;
+	}
+
+	function chooseExport(run: () => void) {
+		exportOpen = false;
+		exportToggle.focus();
+		run();
+	}
+
+	function handleExportKeydown(event: KeyboardEvent) {
+		if (event.key === "Escape" && exportOpen) {
+			event.preventDefault();
+			event.stopPropagation();
+			exportOpen = false;
+			exportToggle.focus();
+		}
+	}
+
+	function handleExportFocusOut(event: FocusEvent) {
+		const next = event.relatedTarget;
+		if (next instanceof Node && exportMenu.contains(next)) {
+			return;
+		}
+		// Focus left the menu (or went nowhere, e.g. a click on the page).
+		if (next !== null) {
+			exportOpen = false;
+		}
+	}
+
+	function handleWindowPointerDown(event: PointerEvent) {
+		if (exportOpen && !(event.target instanceof Node && exportMenu.contains(event.target))) {
+			exportOpen = false;
+		}
+	}
 
 	function handleToggleTheme() {
 		toggleTheme();
@@ -64,6 +112,8 @@ become icon-only; their text stays as accessible name.
 		input.value = "";
 	}
 </script>
+
+<svelte:window onpointerdown={handleWindowPointerDown} />
 
 <header class="topbar">
 	<a class="badge" href="/" aria-label="Start page" title="Start page" onclick={handleHome}>
@@ -109,13 +159,35 @@ become icon-only; their text stays as accessible name.
 		</button>
 		<input bind:this={fileInput} type="file" accept=".json" class="hidden-input" onchange={handleFileChange} />
 
-		<button type="button" class="btn primary" title="Export JSON" onclick={onExport}>
-			<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-				<path d="M12 3v12M7 10l5 5 5-5" />
-				<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-			</svg>
-			<span class="label">Export JSON</span>
-		</button>
+		<div class="export-menu" bind:this={exportMenu} onfocusout={handleExportFocusOut}>
+			<button
+				bind:this={exportToggle}
+				type="button"
+				class="btn primary"
+				title="Export"
+				aria-expanded={exportOpen}
+				aria-controls="{uid}-export-options"
+				onclick={toggleExportMenu}
+				onkeydown={handleExportKeydown}
+			>
+				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+					<path d="M12 3v12M7 10l5 5 5-5" />
+					<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+				</svg>
+				<span class="label">Export</span>
+				<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+					<path d="M6 9l6 6 6-6" />
+				</svg>
+			</button>
+			<ul id="{uid}-export-options" class="export-options" aria-label="Export as" hidden={!exportOpen}>
+				<li>
+					<button type="button" class="export-option" onclick={() => chooseExport(onExportJson)} onkeydown={handleExportKeydown}>Situation file (JSON)</button>
+				</li>
+				<li>
+					<button type="button" class="export-option" onclick={() => chooseExport(onExportAnimation)} onkeydown={handleExportKeydown}>Animated GIF</button>
+				</li>
+			</ul>
+		</div>
 
 		<div class="divider" aria-hidden="true"></div>
 
@@ -245,6 +317,54 @@ become icon-only; their text stays as accessible name.
 		display: none;
 	}
 
+	.export-menu {
+		position: relative;
+	}
+
+	.btn.primary[aria-expanded="true"] .chevron {
+		transform: rotate(180deg);
+	}
+
+	.export-options {
+		position: absolute;
+		top: calc(100% + 6px);
+		right: 0;
+		z-index: 3;
+		min-width: 220px;
+		margin: 0;
+		padding: 6px;
+		list-style: none;
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow);
+	}
+
+	.export-option {
+		width: 100%;
+		min-height: var(--touch-target);
+		padding: 0 12px;
+		border: none;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text);
+		font: inherit;
+		font-size: 14px;
+		text-align: left;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+
+	.export-option:hover,
+	.export-option:focus-visible {
+		background: var(--bg-app);
+	}
+
+	.export-option:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+
 	@media (max-width: 1023px) {
 		.topbar,
 		.actions {
@@ -281,6 +401,10 @@ become icon-only; their text stays as accessible name.
 		}
 
 		.divider {
+			display: none;
+		}
+
+		.chevron {
 			display: none;
 		}
 

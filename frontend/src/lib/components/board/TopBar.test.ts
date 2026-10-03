@@ -9,7 +9,8 @@ function props(overrides: Record<string, unknown> = {}) {
 		title: "Board",
 		onHome: vi.fn(),
 		onNew: vi.fn(),
-		onExport: vi.fn(),
+		onExportJson: vi.fn(),
+		onExportAnimation: vi.fn(),
 		onLoadFile: vi.fn(),
 		canUndo: false,
 		canRedo: false,
@@ -41,7 +42,7 @@ describe("TopBar", () => {
 		it("gives every button an accessible name (also when shown icon-only on phones)", () => {
 			render(TopBar, { props: props() });
 
-			for (const name of ["Undo", "Redo", "New", "Load", "Export JSON", "Toggle theme"]) {
+			for (const name of ["Undo", "Redo", "New", "Load", "Export", "Toggle theme"]) {
 				expect(screen.getByRole("button", { name })).toBeInTheDocument();
 			}
 		});
@@ -66,14 +67,16 @@ describe("TopBar", () => {
 	it("clicking New calls onNew only", async () => {
 		const onNew = vi.fn();
 		const onLoadFile = vi.fn();
-		const onExport = vi.fn();
-		render(TopBar, { props: props({ onNew, onLoadFile, onExport }) });
+		const onExportJson = vi.fn();
+		const onExportAnimation = vi.fn();
+		render(TopBar, { props: props({ onNew, onLoadFile, onExportJson, onExportAnimation }) });
 
 		await fireEvent.click(screen.getByRole("button", { name: "New" }));
 
 		expect(onNew).toHaveBeenCalledOnce();
 		expect(onLoadFile).not.toHaveBeenCalled();
-		expect(onExport).not.toHaveBeenCalled();
+		expect(onExportJson).not.toHaveBeenCalled();
+		expect(onExportAnimation).not.toHaveBeenCalled();
 	});
 
 	it("the New button explains itself as 'New situation'", () => {
@@ -104,13 +107,122 @@ describe("TopBar", () => {
 		expect(onLoadFile).toHaveBeenCalledWith(file);
 	});
 
-	it("clicking Export calls onExport", async () => {
-		const onExport = vi.fn();
-		render(TopBar, { props: props({ onExport }) });
+	describe("export choice", () => {
+		const toggle = () => screen.getByRole("button", { name: "Export" });
+		const choices = () => document.querySelector<HTMLUListElement>("ul[aria-label=\"Export as\"]")!;
 
-		await fireEvent.click(screen.getByRole("button", { name: /export/i }));
+		it("is a disclosure button controlling a hidden list of choices", () => {
+			render(TopBar, { props: props() });
 
-		expect(onExport).toHaveBeenCalledOnce();
+			expect(toggle()).toHaveAttribute("aria-expanded", "false");
+			expect(toggle()).toHaveAttribute("aria-controls", choices().id);
+			expect(choices().tagName).toBe("UL");
+			expect(choices()).not.toBeVisible();
+		});
+
+		it("clicking Export shows the two choices without exporting yet", async () => {
+			const onExportJson = vi.fn();
+			const onExportAnimation = vi.fn();
+			render(TopBar, { props: props({ onExportJson, onExportAnimation }) });
+
+			await fireEvent.click(toggle());
+
+			expect(toggle()).toHaveAttribute("aria-expanded", "true");
+			expect(screen.getByRole("list", { name: "Export as" })).toBe(choices());
+			expect(within(choices()).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual([
+				"Situation file (JSON)",
+				"Animated GIF",
+			]);
+			expect(within(choices()).getAllByRole("listitem")).toHaveLength(2);
+			expect(onExportJson).not.toHaveBeenCalled();
+			expect(onExportAnimation).not.toHaveBeenCalled();
+		});
+
+		it("clicking Export again hides the choices", async () => {
+			render(TopBar, { props: props() });
+
+			await fireEvent.click(toggle());
+			await fireEvent.click(toggle());
+
+			expect(toggle()).toHaveAttribute("aria-expanded", "false");
+			expect(choices()).not.toBeVisible();
+		});
+
+		it("'Situation file (JSON)' calls onExportJson only, then closes the choices and focuses Export", async () => {
+			const onExportJson = vi.fn();
+			const onExportAnimation = vi.fn();
+			render(TopBar, { props: props({ onExportJson, onExportAnimation }) });
+			await fireEvent.click(toggle());
+
+			await fireEvent.click(screen.getByRole("button", { name: "Situation file (JSON)" }));
+
+			expect(onExportJson).toHaveBeenCalledOnce();
+			expect(onExportAnimation).not.toHaveBeenCalled();
+			expect(toggle()).toHaveAttribute("aria-expanded", "false");
+			expect(document.activeElement).toBe(toggle());
+		});
+
+		it("'Animated GIF' calls onExportAnimation only", async () => {
+			const onExportJson = vi.fn();
+			const onExportAnimation = vi.fn();
+			render(TopBar, { props: props({ onExportJson, onExportAnimation }) });
+			await fireEvent.click(toggle());
+
+			await fireEvent.click(screen.getByRole("button", { name: "Animated GIF" }));
+
+			expect(onExportAnimation).toHaveBeenCalledOnce();
+			expect(onExportJson).not.toHaveBeenCalled();
+			expect(toggle()).toHaveAttribute("aria-expanded", "false");
+		});
+
+		it("Escape closes the choices and returns focus to Export, without reaching the page", async () => {
+			const pageKeydown = vi.fn();
+			window.addEventListener("keydown", pageKeydown);
+			render(TopBar, { props: props() });
+			await fireEvent.click(toggle());
+			const json = screen.getByRole("button", { name: "Situation file (JSON)" });
+			json.focus();
+
+			await fireEvent.keyDown(json, { key: "Escape" });
+
+			expect(toggle()).toHaveAttribute("aria-expanded", "false");
+			expect(document.activeElement).toBe(toggle());
+			expect(pageKeydown).not.toHaveBeenCalled();
+			window.removeEventListener("keydown", pageKeydown);
+		});
+
+		it("a press outside closes the choices; a press inside doesn't", async () => {
+			render(TopBar, { props: props() });
+			await fireEvent.click(toggle());
+
+			await fireEvent.pointerDown(screen.getByRole("button", { name: "Animated GIF" }));
+			expect(toggle()).toHaveAttribute("aria-expanded", "true");
+
+			await fireEvent.pointerDown(document.body);
+			expect(toggle()).toHaveAttribute("aria-expanded", "false");
+		});
+
+		it("moving focus out of the menu closes the choices; moving within doesn't", async () => {
+			render(TopBar, { props: props() });
+			await fireEvent.click(toggle());
+			const json = screen.getByRole("button", { name: "Situation file (JSON)" });
+			const gif = screen.getByRole("button", { name: "Animated GIF" });
+
+			await fireEvent.focusOut(json, { relatedTarget: gif });
+			expect(toggle()).toHaveAttribute("aria-expanded", "true");
+
+			await fireEvent.focusOut(gif, { relatedTarget: screen.getByRole("button", { name: "Toggle theme" }) });
+			expect(toggle()).toHaveAttribute("aria-expanded", "false");
+		});
+
+		it("choices are buttons with type=button", async () => {
+			render(TopBar, { props: props() });
+			await fireEvent.click(toggle());
+
+			for (const button of within(choices()).getAllByRole("button")) {
+				expect(button).toHaveAttribute("type", "button");
+			}
+		});
 	});
 
 	it("clicking the theme toggle flips the shared theme store", async () => {

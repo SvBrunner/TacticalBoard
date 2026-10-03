@@ -2,9 +2,9 @@
 
 A tactics board for drawing and saving game situations across different sports — both standard set-piece situations and freely, intuitively drawn new ones. Every situation is stored as JSON.
 
-Currently implemented: a floorball board where you place, move, and color player markers on a canvas, then save/load a board as JSON.
+Currently implemented (the Phase 1 MVP, frontend only, floorball): create a situation on a full or half field; place, move, and color players (with position labels), balls, and markers; draw pass, run, and shot arrows that can be bent; undo/redo; multiple frames with descriptions, played back as a slideshow; export/import as JSON and export as an animated GIF. Works by touch on phones and tablets, in a light and a dark theme.
 
-Planned: multi-frame situations and more editor features, then a backend with users and teams (per-team roles Admin, Editor, Reader) where a team organizes its saved situations into folders, and later more sports. See [docs/roadmap.md](docs/roadmap.md).
+Planned: a backend with users and teams (per-team roles Admin, Editor, Reader) where a team organizes its saved situations into folders, and later more sports. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Structure
 
