@@ -1,0 +1,193 @@
+import { describe, it, expect } from "vitest";
+import { FixedClock } from "./Clock";
+import { PointElement } from "./elements/PointElement";
+import { Frame } from "./Frame";
+import { SequentialIdGenerator } from "./ids/IdGenerator";
+import { DEFAULT_SITUATION_TITLE, Situation, type SituationProps } from "./Situation";
+
+function props(overrides: Partial<SituationProps> = {}): SituationProps {
+	return {
+		id: "s",
+		title: "Title",
+		description: "Description",
+		sport: "floorball",
+		fieldType: "full",
+		frames: [new Frame("f1", "", []), new Frame("f2", "", [])],
+		createdAt: "2026-01-01T00:00:00.000Z",
+		updatedAt: "2026-01-02T00:00:00.000Z",
+		...overrides,
+	};
+}
+
+describe("Situation", () => {
+	describe("create", () => {
+		it("creates a situation with one empty frame, default title, and both timestamps set to now", () => {
+			const situation = Situation.create(
+				{ sport: "floorball", fieldType: "half" },
+				new SequentialIdGenerator(),
+				new FixedClock("2026-04-01T08:00:00.000Z"),
+			);
+
+			expect(situation.id).toBe("id-1");
+			expect(situation.title).toBe(DEFAULT_SITUATION_TITLE);
+			expect(situation.description).toBe("");
+			expect(situation.sport).toBe("floorball");
+			expect(situation.fieldType).toBe("half");
+			expect(situation.frames).toHaveLength(1);
+			expect(situation.frames[0]).toMatchObject({ id: "id-2", description: "", elements: [] });
+			expect(situation.createdAt).toBe("2026-04-01T08:00:00.000Z");
+			expect(situation.updatedAt).toBe("2026-04-01T08:00:00.000Z");
+		});
+
+		it("uses the given title and description", () => {
+			const situation = Situation.create(
+				{ sport: "floorball", fieldType: "full", title: "Powerplay", description: "Some *text*" },
+				new SequentialIdGenerator(),
+				new FixedClock(),
+			);
+
+			expect(situation.title).toBe("Powerplay");
+			expect(situation.description).toBe("Some *text*");
+		});
+
+		it("allows an empty title", () => {
+			const situation = Situation.create(
+				{ sport: "floorball", fieldType: "full", title: "" },
+				new SequentialIdGenerator(),
+				new FixedClock(),
+			);
+
+			expect(situation.title).toBe("");
+		});
+	});
+
+	it("the default title is 'Untitled Situation'", () => {
+		expect(DEFAULT_SITUATION_TITLE).toBe("Untitled Situation");
+	});
+
+	it("throws when constructed without frames", () => {
+		expect(() => new Situation(props({ frames: [] }))).toThrow(/at least one frame/);
+	});
+
+	it("copies the frames array so later changes to the input do not leak in", () => {
+		const frames = [new Frame("f1", "", [])];
+		const situation = new Situation(props({ frames }));
+		frames.push(new Frame("f2", "", []));
+
+		expect(situation.frames).toHaveLength(1);
+	});
+
+	describe("displayTitle", () => {
+		it("is the title when set", () => {
+			expect(new Situation(props({ title: "Breakout" })).displayTitle).toBe("Breakout");
+		});
+
+		it.each([[""], ["   "]])("is the default title when the title is %j", (title) => {
+			expect(new Situation(props({ title })).displayTitle).toBe(DEFAULT_SITUATION_TITLE);
+		});
+	});
+
+	describe("setters", () => {
+		const situation = new Situation(props());
+
+		it("withTitle keeps the id and everything else", () => {
+			const result = situation.withTitle("New");
+
+			expect(result).not.toBe(situation);
+			expect(result).toMatchObject({ ...props(), title: "New", frames: situation.frames });
+			expect(situation.title).toBe("Title");
+		});
+
+		it("withDescription keeps the id and everything else", () => {
+			const result = situation.withDescription("New *description*");
+
+			expect(result).toMatchObject({ id: "s", title: "Title", description: "New *description*" });
+			expect(situation.description).toBe("Description");
+		});
+
+		it("withUpdatedAt only changes updatedAt", () => {
+			const result = situation.withUpdatedAt("2026-09-09T09:09:09.000Z");
+
+			expect(result).toMatchObject({
+				id: "s",
+				createdAt: "2026-01-01T00:00:00.000Z",
+				updatedAt: "2026-09-09T09:09:09.000Z",
+			});
+		});
+
+		it("withId changes only the id", () => {
+			const result = situation.withId("other");
+
+			expect(result.id).toBe("other");
+			expect(result.frames).toEqual(situation.frames);
+			expect(result.title).toBe("Title");
+		});
+
+		it("has no setters for sport or field type", () => {
+			const prototype = Situation.prototype as unknown as Record<string, unknown>;
+
+			expect(prototype.withSport).toBeUndefined();
+			expect(prototype.withFieldType).toBeUndefined();
+		});
+	});
+
+	describe("frame access", () => {
+		const situation = new Situation(props());
+
+		it("frameAt returns the frame at the index", () => {
+			expect(situation.frameAt(1)?.id).toBe("f2");
+		});
+
+		it("frameAt returns undefined outside the range", () => {
+			expect(situation.frameAt(2)).toBeUndefined();
+			expect(situation.frameAt(-1)).toBeUndefined();
+		});
+
+		it("findFrame finds a frame by id", () => {
+			expect(situation.findFrame("f2")).toBe(situation.frames[1]);
+		});
+
+		it("findFrame returns undefined for an unknown id", () => {
+			expect(situation.findFrame("missing")).toBeUndefined();
+		});
+	});
+
+	describe("updateFrame", () => {
+		const element = new PointElement("e", 0, 0, "red", "Player");
+
+		it("replaces only the matching frame", () => {
+			const situation = new Situation(props());
+
+			const result = situation.updateFrame("f2", (frame) => frame.addElement(element));
+
+			expect(result.id).toBe("s");
+			expect(result.frames[0]).toBe(situation.frames[0]);
+			expect(result.frames[1].elements).toEqual([element]);
+			expect(situation.frames[1].elements).toEqual([]);
+		});
+
+		it("does not touch updatedAt (the editor does that)", () => {
+			const situation = new Situation(props());
+
+			expect(situation.updateFrame("f1", (frame) => frame.withDescription("x")).updatedAt).toBe(situation.updatedAt);
+		});
+
+		it("returns the same situation for an unknown frame id", () => {
+			const situation = new Situation(props());
+
+			expect(situation.updateFrame("missing", (frame) => frame.withDescription("x"))).toBe(situation);
+		});
+
+		it("returns the same situation when the frame is unchanged", () => {
+			const situation = new Situation(props());
+
+			expect(situation.updateFrame("f1", (frame) => frame.removeElement("missing"))).toBe(situation);
+		});
+
+		it("throws when the update changes the frame id", () => {
+			const situation = new Situation(props());
+
+			expect(() => situation.updateFrame("f1", () => new Frame("other", "", []))).toThrow();
+		});
+	});
+});

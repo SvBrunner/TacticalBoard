@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ElementType, SidebarElementType } from "./Board";
+	import type { ElementType, SidebarElementType } from "$lib/model/elements/ElementType";
 	import { notifications } from "$lib/debug/Notifications";
 
 	export let activeTool: "Move" | ElementType;

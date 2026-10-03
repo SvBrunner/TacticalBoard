@@ -9,9 +9,11 @@ Delivery order: the board editor is the MVP and ships first, with local JSON exp
 *Situations (MVP)*
 - A situation is the single core unit. A "standard situation" (e.g. a free hit recorded once and recalled later) is not a separate concept; technically it is an ordinary situation.
 - Only floorball is supported for now. The data model stays sport-agnostic so other sports can be added later.
-- A situation has a title and a description.
+- A situation has a title and a description. The title is optional: new situations get the default title "Untitled Situation", and a blank title is shown as that default. (Incrementing default titles — "Untitled Situation 2", … — follows in Phase 2.)
+- Situation and frame descriptions are Markdown source text.
+- A situation records when it was created and last updated (`createdAt`/`updatedAt`); both are part of the exported file. Every edit refreshes `updatedAt`.
 - A situation uses either the full field or half the field. This is chosen when the situation is created and applies to all its frames.
-- A situation consists of one or more ordered **frames**. A new frame starts as a copy of the previous one; elements keep their identity (same ID) across frames.
+- A situation consists of one or more ordered **frames**. A new frame starts as a copy of the previous one, including its description; elements keep their identity (same ID) across frames.
 - Each frame has its own description text.
 - Frames can be played back as a slideshow (one after another, no interpolated movement) in the editor.
 
@@ -21,7 +23,7 @@ Delivery order: the board editor is the MVP and ships first, with local JSON exp
 - Every element can be colored freely. There is no built-in team/side concept.
 - Pass, run, and shot arrows: placed as straight arrows (start + end) and can afterwards be bent into a curve via a control point. The three types differ in line style.
 - Undo/redo.
-- Export a situation as JSON, and import it again.
+- Export a situation as JSON, and import it again. Importing always creates a new situation (new situation ID; frame and element IDs are kept) and replaces the editor content.
 - Export a situation as an animated GIF/video (frames as a slideshow).
 - Fully usable by touch on phones and tablets, not only on desktop.
 

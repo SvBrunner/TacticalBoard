@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { board, type ElementType, type SidebarElementType } from "../Board";
+	import { situationEditor } from "$lib/editor/SituationEditor";
+	import type { ElementType, SidebarElementType } from "$lib/model/elements/ElementType";
 	import { notifications } from "$lib/debug/Notifications";
 
 	let pos = { x: 0, y: 0 };
@@ -43,19 +44,19 @@
 		if (t.disabled) return;
 		const type = t.type as ElementType;
 		targetType = type;
-		board.changeType(targetId, type);
+		situationEditor.changeType(targetId, type);
 		notifications.notify(`Changed ${targetId} type to ${type}`);
 	}
 
 	function pickColor(color: string) {
 		targetColor = color;
-		board.changeColor(targetId, color);
+		situationEditor.changeColor(targetId, color);
 		notifications.notify(`Changed ${targetId} color`);
 	}
 
 	function remove() {
 		notifications.notify(`Deleted ${targetType} ${targetId}`);
-		board.removeElement(targetId);
+		situationEditor.removeElement(targetId);
 		onPageClick(null);
 	}
 </script>

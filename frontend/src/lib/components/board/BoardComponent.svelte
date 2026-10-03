@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Shape } from "svelte-konva";
-	import { board, type ElementType } from "./Board";
+	import { situationEditor } from "$lib/editor/SituationEditor";
+	import type { ElementType } from "$lib/model/elements/ElementType";
 	import { drawPlayer, drawBall, drawRectangle, drawTriangle, drawCircle } from "./Shapes";
 
 	export let x = 0;
@@ -20,7 +21,7 @@
 	function handleOnDragEnd(e: any) {
 		const newX = e.target.attrs.x;
 		const newY = e.target.attrs.y;
-		board.moveElement(id, newX, newY);
+		situationEditor.moveElement(id, newX, newY);
 	}
 </script>
 

@@ -5,7 +5,10 @@
 	import ContextMenuBoardComponent from "$lib/components/board/contextmenus/ContextMenuBoardComponent.svelte";
 	import TopBar from "$lib/components/board/TopBar.svelte";
 	import Sidebar from "$lib/components/board/Sidebar.svelte";
-	import { board, type ElementType } from "$lib/components/board/Board";
+	import { situationEditor } from "$lib/editor/SituationEditor";
+	import { SituationFileTransfer } from "$lib/editor/SituationFileTransfer";
+	import type { ElementType } from "$lib/model/elements/ElementType";
+	import { PointElement } from "$lib/model/elements/PointElement";
 	import { theme } from "$lib/theme";
 	import { notifications } from "$lib/debug/Notifications";
 	import NotificationStack from "$lib/debug/NotificationStack.svelte";
@@ -22,7 +25,9 @@
 	let activeTool: "Move" | ElementType = "Player";
 	let selectedColor = "oklch(62% 0.16 230)";
 	const nonPlayerColor = "oklch(45% 0.01 260)";
-	const elements = board.elements;
+	const elements = situationEditor.elements;
+	const situation = situationEditor.situation;
+	const fileTransfer = new SituationFileTransfer();
 
 	function fitStageIntoParentContainer() {
 		const container = document.getElementById("stage-parent");
@@ -58,7 +63,7 @@
 		if (target.attrs.name === "Component") {
 			if (evt.shiftKey) {
 				notifications.notify(`Deleted ${target.attrs.elementType} ${target.attrs.id}`);
-				board.removeElement(target.attrs.id);
+				situationEditor.removeElement(target.attrs.id);
 			}
 			return;
 		}
@@ -69,7 +74,7 @@
 		}
 
 		const color = activeTool === "Player" ? selectedColor : nonPlayerColor;
-		board.addElement(x, y, color, activeTool);
+		situationEditor.addElement(x, y, color, activeTool);
 		notifications.notify(`Added ${activeTool} at (${Math.round(x)}, ${Math.round(y)})`);
 	}
 
@@ -91,36 +96,20 @@
 		contextMenuBoardComponent.onPageClick(null);
 	}
 
-	function downloadCurrentBoard(filename: string, text: string) {
-		const element = document.createElement("a");
-		element.setAttribute("href", "data:text/json;charset=utf-8," + encodeURIComponent(text));
-		element.setAttribute("download", filename);
-		element.style.display = "none";
-		document.body.appendChild(element);
-		element.click();
-		document.body.removeChild(element);
-	}
-
 	function handleExport() {
-		const json = board.serialize();
-		downloadCurrentBoard("board.json", json);
-		notifications.notify(`Exported ${JSON.parse(json).length} element(s) to board.json`);
+		const filename = fileTransfer.export(situationEditor.current());
+		notifications.notify(`Exported ${$situation.frames.length} frame(s) to ${filename}`);
 	}
 
-	function handleLoadFile(file: File) {
+	async function handleLoadFile(file: File) {
 		notifications.notify(`Loading ${file.name}…`);
-		const reader = new FileReader();
-		reader.onload = (e) => {
-			try {
-				const text = e.target!.result as string;
-				board.loadFromJson(text);
-				notifications.notify(`Loaded ${JSON.parse(text).length} element(s) from ${file.name}`);
-			} catch (err) {
-				notifications.notify(`Failed to load ${file.name}: ${(err as Error).message}`, "error");
-			}
-		};
-		reader.onerror = () => notifications.notify(`Failed to read ${file.name}`, "error");
-		reader.readAsText(file);
+		try {
+			const imported = await fileTransfer.import(file);
+			situationEditor.load(imported);
+			notifications.notify(`Loaded "${imported.displayTitle}" from ${file.name}`);
+		} catch (err) {
+			notifications.notify(`Failed to load ${file.name}: ${(err as Error).message}`, "error");
+		}
 	}
 
 	onMount(() => {
@@ -135,7 +124,7 @@
 </svelte:head>
 
 <div class="tb-root {$theme}">
-	<TopBar title="Powerplay vs. 2-3-1" onExport={handleExport} onLoadFile={handleLoadFile} />
+	<TopBar title={$situation.displayTitle} onExport={handleExport} onLoadFile={handleLoadFile} />
 
 	<div class="body">
 		<Sidebar bind:activeTool bind:selectedColor />
@@ -158,13 +147,15 @@
 
 					<Layer>
 						{#each $elements as element (element.id)}
-							<BoardComponent
-								x={element.x}
-								y={element.y}
-								color={element.color}
-								type={element.type}
-								id={element.id}
-							/>
+							{#if element instanceof PointElement}
+								<BoardComponent
+									x={element.x}
+									y={element.y}
+									color={element.color}
+									type={element.type}
+									id={element.id}
+								/>
+							{/if}
 						{/each}
 					</Layer>
 				</Stage>

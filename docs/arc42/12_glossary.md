@@ -5,6 +5,7 @@
 | Board | The drawable canvas showing one frame of a situation: players, ball, markers, and arrows. |
 | Situation | The core saveable unit: a game scenario made of one or more frames, with title and description. A standard situation (e.g. a recorded free hit) is just a situation. Exportable/storable as JSON. |
 | Frame | One step of a situation. A new frame starts as a copy of the previous one; elements keep their identity across frames. |
+| Element | An item on a frame: a player, the ball, a marker, or (later) an arrow. Has a stable ID that stays the same across the frames of a situation, so the same player in two frames is the same element. |
 | Marker | A generic shape (rectangle, triangle, circle) with no fixed meaning. |
 | Team code | Unique, system-generated 6-character identifier of a team (A–Z, 0–9), used to find it. |
 | Team | A group of users who share access to boards and folders, with per-member roles. |

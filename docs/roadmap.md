@@ -17,7 +17,7 @@ Done:
 
 Next, in this order:
 
-1. [ ] **Situation data model**: situation → frames → elements with stable IDs; title, situation and frame descriptions, field type (full/half). Versioned JSON format; switch export/import to it.
+1. [x] **Situation data model**: situation → frames → elements with stable IDs; title, situation and frame descriptions, field type (full/half). Versioned JSON format; switch export/import to it.
    *Everything else builds on this; changing it later touches every feature and already-exported files.*
 2. [ ] **Undo/redo** as commands on the model.
    *Every later feature then goes through commands from the start instead of being retrofitted.*
@@ -42,6 +42,7 @@ Architecture decisions: .NET, PostgreSQL, self-hosted OIDC IdP, containers (see 
 - [ ] Leaving a team (the last Admin has to delete the team instead)
 - [ ] Member and role management (Admin, Editor, Reader — see [ch. 8](arc42/08_crosscutting_concepts.md))
 - [ ] Team situations in flat folders
+- [ ] Default titles are incremented (Untitled Situation 2, …)
 
 ## Later
 
