@@ -5,6 +5,8 @@ import { PointElement } from "$lib/model/elements/PointElement";
 import { FieldDimensions } from "$lib/model/FieldDimensions";
 import { Frame } from "$lib/model/Frame";
 import FrameThumbnail from "./FrameThumbnail.svelte";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { ArrowGeometry } from "$lib/model/elements/ArrowGeometry";
 
 const fullViewport = new BoardViewport(FieldDimensions.FLOORBALL, "full");
 const halfViewport = new BoardViewport(FieldDimensions.FLOORBALL, "half");
@@ -98,5 +100,44 @@ describe("FrameThumbnail", () => {
 		expect(mark("p")).toHaveAttribute("cx", "100");
 		await rerender({ frame: frame.removeElement("p") });
 		expect(svg.querySelector('[data-element-id="p"]')).toBeNull();
+	});
+
+	describe("arrows", () => {
+		const shot = new ArrowElement("s", "Shot", "blue", ArrowGeometry.straight({ x: 1200, y: 500 }, { x: 1800, y: 500 }));
+		const pass = new ArrowElement("a", "Pass", "black", new ArrowGeometry({ x: 1100, y: 300 }, { x: 1700, y: 300 }, [{ x: 1400, y: 100 }]));
+		const withArrows = new Frame("f", "", [new PointElement("p", 1900, 500, "red", "Player"), shot, pass]);
+
+		it("draws every arrow below the point elements with its line and head in its color", () => {
+			const { svg } = renderThumbnail({ frame: withArrows });
+
+			const arrows = Array.from(svg.querySelectorAll(".arrows [data-element-id]"));
+			expect(arrows.map((node) => node.getAttribute("data-element-id"))).toEqual(["s", "a"]);
+			expect(svg.querySelector(".arrows")!.compareDocumentPosition(svg.querySelector(".elements")!)).toBe(
+				Node.DOCUMENT_POSITION_FOLLOWING,
+			);
+			const line = arrows[0].querySelector("path")!;
+			expect(line).toHaveAttribute("stroke", "blue");
+			expect(line).toHaveAttribute("fill", "none");
+			expect(arrows[0].querySelector("polygon")).toHaveAttribute("fill", "blue");
+		});
+
+		it("dashes passes and draws shots thicker", () => {
+			const { svg } = renderThumbnail({ frame: withArrows });
+			const line = (id: string) => svg.querySelector(`[data-element-id="${id}"] path`)!;
+
+			expect(line("a")).toHaveAttribute("stroke-dasharray");
+			expect(line("s")).not.toHaveAttribute("stroke-dasharray");
+			expect(Number(line("s").getAttribute("stroke-width"))).toBeGreaterThan(Number(line("a").getAttribute("stroke-width")));
+		});
+
+		it("updates when an arrow changes", async () => {
+			const { rerender, svg } = renderThumbnail({ frame: withArrows });
+
+			await rerender({ frame: withArrows.updateElement("s", (element) => (element as ArrowElement).withColor("green")) });
+			expect(svg.querySelector('[data-element-id="s"] path')).toHaveAttribute("stroke", "green");
+
+			await rerender({ frame: withArrows.removeElement("s") });
+			expect(svg.querySelector('[data-element-id="s"]')).toBeNull();
+		});
 	});
 });

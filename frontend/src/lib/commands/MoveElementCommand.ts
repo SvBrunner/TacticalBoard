@@ -3,7 +3,7 @@ import { PointElement } from "$lib/model/elements/PointElement";
 import type { PointElementType } from "$lib/model/elements/ElementType";
 import type { Frame } from "$lib/model/Frame";
 import type { FrameCommand } from "./FrameCommand";
-import { samePoint, type Point } from "./Point";
+import { samePoint, type Point } from "$lib/model/Point";
 
 /**
  * Moves a point element. A later move of the same element merges into this

@@ -1,0 +1,37 @@
+{
+  "format": "tacticalboard.situation",
+  "formatVersion": 3,
+  "situation": {
+    "id": "situation-3",
+    "title": "Breakout with a give-and-go",
+    "description": "Pass, run into space, **shot**.",
+    "sport": "floorball",
+    "fieldType": "full",
+    "createdAt": "2026-10-01T10:00:00.000Z",
+    "updatedAt": "2026-10-02T12:30:00.000Z",
+    "frames": [
+      {
+        "id": "frame-1",
+        "description": "Pass and run.",
+        "elements": [
+          { "id": "pass-1", "type": "Pass", "color": "oklch(15% 0 0)", "start": { "x": 1200, "y": 300 }, "end": { "x": 1400, "y": 500 }, "bends": [] },
+          { "id": "run-1", "type": "Run", "color": "oklch(62% 0.16 230)", "start": { "x": 1200, "y": 320 }, "end": { "x": 1600, "y": 300 }, "bends": [{ "x": 1300, "y": 200 }, { "x": 1450, "y": 220 }] },
+          { "id": "player-1", "type": "Player", "color": "oklch(62% 0.16 230)", "x": 1200, "y": 300, "label": "C" },
+          { "id": "player-2", "type": "Player", "color": "oklch(64% 0.16 32)", "x": 1400, "y": 500, "label": "LV" },
+          { "id": "ball-1", "type": "Ball", "color": "oklch(45% 0.01 260)", "x": 1210, "y": 320, "label": "" }
+        ]
+      },
+      {
+        "id": "frame-2",
+        "description": "Return pass and shot.",
+        "elements": [
+          { "id": "pass-1", "type": "Pass", "color": "oklch(15% 0 0)", "start": { "x": 1400, "y": 500 }, "end": { "x": 1600, "y": 300 }, "bends": [{ "x": 1550, "y": 450 }] },
+          { "id": "shot-1", "type": "Shot", "color": "oklch(64% 0.16 32)", "start": { "x": 1600, "y": 300 }, "end": { "x": 1880, "y": 500 }, "bends": [] },
+          { "id": "player-1", "type": "Player", "color": "oklch(62% 0.16 230)", "x": 1600, "y": 300, "label": "C" },
+          { "id": "player-2", "type": "Player", "color": "oklch(64% 0.16 32)", "x": 1400, "y": 500, "label": "LV" },
+          { "id": "ball-1", "type": "Ball", "color": "oklch(45% 0.01 260)", "x": 1400, "y": 510, "label": "" }
+        ]
+      }
+    ]
+  }
+}

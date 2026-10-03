@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { get } from "svelte/store";
 import { FixedClock } from "$lib/model/Clock";
 import { PointElement } from "$lib/model/elements/PointElement";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { ArrowGeometry } from "$lib/model/elements/ArrowGeometry";
 import { Frame } from "$lib/model/Frame";
 import { SequentialIdGenerator } from "$lib/model/ids/IdGenerator";
 import { DEFAULT_SITUATION_TITLE, Situation } from "$lib/model/Situation";
@@ -516,6 +518,29 @@ describe("SituationEditor", () => {
 
 		it("becomes true after createNew", () => {
 			editor.createNew({ title: "x", fieldType: "full" });
+
+			expect(editor.isSituationOpen()).toBe(true);
+		});
+	});
+
+	describe("close", () => {
+		it("drops the situation, its unsaved changes and its histories", () => {
+			editor.createNew({ title: "Closing", fieldType: "half" });
+			editor.addElement(1, 1, "red", "Player");
+
+			editor.close();
+
+			expect(editor.isSituationOpen()).toBe(false);
+			expect(editor.isDirty()).toBe(false);
+			expect(get(editor.hasUnsavedChanges)).toBe(false);
+			expect(editor.current()).toMatchObject({ title: DEFAULT_SITUATION_TITLE, fieldType: "full" });
+			expect(get(editor.elements)).toEqual([]);
+			expect(get(editor.history)).toEqual(EMPTY_HISTORY_STATUS);
+		});
+
+		it("a situation can be created again afterwards", () => {
+			editor.close();
+			editor.createNew({ title: "Again", fieldType: "full" });
 
 			expect(editor.isSituationOpen()).toBe(true);
 		});
@@ -1194,5 +1219,185 @@ describe("SituationEditor", () => {
 
 	it("exports a shared singleton instance", () => {
 		expect(situationEditor).toBeInstanceOf(SituationEditor);
+	});
+
+	describe("arrows", () => {
+		const A = { x: 100, y: 100 };
+		const B = { x: 500, y: 100 };
+
+		function arrow(id: string): ArrowElement {
+			return get(editor.elements).find((element) => element.id === id) as ArrowElement;
+		}
+
+		function history(): HistoryStatus {
+			return get(editor.history);
+		}
+
+		it("addArrow adds a straight arrow on top and returns its id; one undo step", () => {
+			editor.addElement(0, 0, "red", "Player");
+			clock.set("2026-01-01T10:00:00.000Z");
+
+			const id = editor.addArrow(A, B, "black", "Pass");
+
+			const elements = get(editor.elements);
+			expect(elements.at(-1)).toBeInstanceOf(ArrowElement);
+			expect(elements.at(-1)).toMatchObject({ id, type: "Pass", color: "black", start: A, end: B, bends: [] });
+			expect(history().undoLabel).toBe("Add Pass");
+			expect(editor.current().updatedAt).toBe("2026-01-01T10:00:00.000Z");
+			expect(editor.isDirty()).toBe(true);
+
+			editor.undo();
+			expect(get(editor.elements)).toHaveLength(1);
+		});
+
+		it("reshapeArrow merges a gesture into one undo step", () => {
+			const id = editor.addArrow(A, B, "black", "Run");
+			editor.endGesture();
+			const first = ArrowGeometry.straight(A, B).withBendInserted(0, { x: 300, y: 200 });
+
+			editor.reshapeArrow(id, first);
+			editor.reshapeArrow(id, first.withBendMoved(0, { x: 300, y: 250 }));
+			editor.endGesture();
+
+			expect(arrow(id).bends).toEqual([{ x: 300, y: 250 }]);
+			expect(history().undoLabel).toBe("Reshape Run");
+			editor.undo();
+			expect(arrow(id).bends).toEqual([]);
+			expect(history().undoLabel).toBe("Add Run");
+		});
+
+		it("moveArrow moves the whole arrow and keeps its shape", () => {
+			const id = editor.addArrow(A, B, "black", "Pass");
+			editor.addBend(id, 0, { x: 300, y: 300 });
+
+			editor.moveArrow(id, 10, -20);
+
+			expect(arrow(id).geometry.points).toEqual([
+				{ x: 110, y: 80 },
+				{ x: 310, y: 280 },
+				{ x: 510, y: 80 },
+			]);
+			expect(history().undoLabel).toBe("Move Pass");
+		});
+
+		it("addBend, removeBend and straightenArrow are undo steps of their own", () => {
+			const id = editor.addArrow(A, B, "black", "Shot");
+			editor.reshapeArrow(id, ArrowGeometry.straight(A, { x: 600, y: 100 }));
+
+			editor.addBend(id, 0, { x: 200, y: 200 });
+			editor.addBend(id, 1, { x: 400, y: 200 });
+			editor.removeBend(id, 0);
+			editor.straightenArrow(id);
+
+			expect(arrow(id).bends).toEqual([]);
+			expect(history().undoLabel).toBe("Straighten Shot");
+			editor.undo();
+			expect(arrow(id).bends).toEqual([{ x: 400, y: 200 }]);
+			expect(history().undoLabel).toBe("Remove bend from Shot");
+			editor.undo();
+			expect(arrow(id).bends).toEqual([{ x: 200, y: 200 }, { x: 400, y: 200 }]);
+			editor.undo();
+			expect(arrow(id).bends).toEqual([{ x: 200, y: 200 }]);
+			expect(history().undoLabel).toBe("Add bend to Shot");
+			editor.undo();
+			expect(arrow(id).bends).toEqual([]);
+			expect(arrow(id).end).toEqual({ x: 600, y: 100 });
+		});
+
+		it("a following drag doesn't merge into a discrete step", () => {
+			const id = editor.addArrow(A, B, "black", "Pass");
+			editor.addBend(id, 0, { x: 200, y: 200 });
+
+			editor.reshapeArrow(id, arrow(id).geometry.withBendMoved(0, { x: 250, y: 250 }));
+
+			editor.undo();
+			expect(arrow(id).bends).toEqual([{ x: 200, y: 200 }]);
+		});
+
+		it("straightening a straight arrow and removing an unknown bend record nothing", () => {
+			const id = editor.addArrow(A, B, "black", "Pass");
+			clock.set("2026-06-01T00:00:00.000Z");
+
+			editor.straightenArrow(id);
+			editor.removeBend(id, 0);
+			editor.removeBend(id, -1);
+
+			expect(history().undoLabel).toBe("Add Pass");
+			expect(editor.current().updatedAt).toBe(START);
+		});
+
+		it("arrow methods ignore unknown ids and point elements", () => {
+			const player = editor.addElement(0, 0, "red", "Player");
+			const before = editor.current();
+
+			for (const id of ["missing", player]) {
+				editor.reshapeArrow(id, ArrowGeometry.straight(A, B));
+				editor.moveArrow(id, 1, 1);
+				editor.addBend(id, 0, A);
+				editor.removeBend(id, 0);
+				editor.straightenArrow(id);
+			}
+
+			expect(editor.current()).toBe(before);
+		});
+
+		it("point-only methods ignore arrows", () => {
+			const id = editor.addArrow(A, B, "black", "Pass");
+			const before = editor.current();
+
+			editor.moveElement(id, 1, 1);
+			editor.changeLabel(id, "C");
+
+			expect(editor.current()).toBe(before);
+		});
+
+		it("changeColor recolors an arrow", () => {
+			const id = editor.addArrow(A, B, "black", "Pass");
+
+			editor.changeColor(id, "red");
+
+			expect(arrow(id).color).toBe("red");
+		});
+
+		it("changeType changes types within a family only", () => {
+			const id = editor.addArrow(A, B, "black", "Pass");
+			const player = editor.addElement(0, 0, "red", "Player");
+
+			editor.changeType(id, "Shot");
+			editor.changeType(id, "Circle");
+			editor.changeType(player, "Run");
+			editor.changeType(player, "Triangle");
+
+			expect(arrow(id).type).toBe("Shot");
+			expect(get(editor.elements).find((element) => element.id === player)?.type).toBe("Triangle");
+			expect(history().undoLabel).toBe("Change Player to Triangle");
+			editor.undo();
+			expect(history().undoLabel).toBe("Change Pass to Shot");
+		});
+
+		it("arrow edits are undone per frame; a new frame copies the arrows", () => {
+			const id = editor.addArrow(A, B, "black", "Pass");
+			const copy = editor.addFrame();
+			editor.addBend(id, 0, { x: 300, y: 300 });
+
+			expect(arrow(id).bends).toHaveLength(1);
+			editor.selectFrame(get(editor.situation).frames[0].id);
+			expect(arrow(id).bends).toHaveLength(0);
+			expect(get(editor.history).canUndo).toBe(true);
+			editor.selectFrame(copy);
+			editor.undo();
+			expect(arrow(id).bends).toHaveLength(0);
+			expect(get(editor.history).canUndo).toBe(false);
+		});
+
+		it("arrows survive an export/import round trip", () => {
+			const id = editor.addArrow(A, B, "black", "Run");
+			editor.addBend(id, 0, { x: 300, y: 300 });
+			const serializer = new SituationSerializer();
+
+			const restored = serializer.deserialize(serializer.serialize(editor.current()));
+
+			expect(restored.frames[0].findElement(id)).toEqual(arrow(id));
+		});
 	});
 });

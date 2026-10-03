@@ -1,4 +1,5 @@
 import { MigrationV1ToV2 } from "./MigrationV1ToV2";
+import { MigrationV2ToV3 } from "./MigrationV2ToV3";
 import { CURRENT_FORMAT_VERSION, SITUATION_FILE_FORMAT } from "./SituationFileDto";
 import {
 	InvalidSituationFileError,
@@ -19,7 +20,7 @@ export interface Migration {
 }
 
 /** One migration per format version step, up to `CURRENT_FORMAT_VERSION`. */
-export const SITUATION_FILE_MIGRATIONS: readonly Migration[] = [new MigrationV1ToV2()];
+export const SITUATION_FILE_MIGRATIONS: readonly Migration[] = [new MigrationV1ToV2(), new MigrationV2ToV3()];
 
 /**
  * Recognizes a situation file and upgrades it step by step to the current

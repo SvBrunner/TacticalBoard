@@ -42,12 +42,12 @@ Example shape:
 
 Situations are exported and imported as JSON files named `<slug-of-title>.situation.json` (`situation.json` if the title yields no usable characters), pretty-printed with a 2-space indent.
 
-**Format version 2** (current):
+**Format version 3** (current):
 
 ```json
 {
   "format": "tacticalboard.situation",
-  "formatVersion": 2,
+  "formatVersion": 3,
   "situation": {
     "id": "…",
     "title": "Powerplay vs. 2-3-1",
@@ -61,6 +61,7 @@ Situations are exported and imported as JSON files named `<slug-of-title>.situat
         "id": "…",
         "description": "Markdown source",
         "elements": [
+          { "id": "…", "type": "Pass", "color": "oklch(15% 0 0)", "start": { "x": 1200, "y": 300 }, "end": { "x": 1600, "y": 500 }, "bends": [{ "x": 1450, "y": 300 }] },
           { "id": "…", "type": "Player", "color": "oklch(62% 0.16 230)", "x": 1200, "y": 300, "label": "C" }
         ]
       }
@@ -74,9 +75,10 @@ Situations are exported and imported as JSON files named `<slug-of-title>.situat
 - `title` may be empty (the UI then shows "Untitled Situation"). Descriptions are Markdown source.
 - `createdAt`/`updatedAt` are ISO 8601 timestamps.
 - There is at least one frame. Frame IDs are unique within the situation; element IDs are unique within a frame, and the same element ID in different frames denotes the same element.
-- Element `type`: `Player`, `Ball`, `Rectangle`, `Triangle`, `Circle`. There are no rules on how many of each a frame may contain.
-- **Coordinates** (`x`, `y`) are always in full-field scene units of the sport (floorball: 2000 × 1000, origin top-left), also for half-field situations. A half-field situation uses the right half, `x ∈ [1000, 2000]` (see 8.6).
-- Element `label`: the **position label**, `""` (no label) or 1–2 characters, each a letter or a digit (e.g. `C`, `LV`, `10`). Stored per element **per frame**, like the color; duplicates within a frame are allowed. Every element type carries it, but only players show it: changing a player to another type hides the label, changing it back shows it again. The UI upper-cases typed letters; the importer also accepts lower case and keeps it as is.
+- Element `type`: the **point elements** `Player`, `Ball`, `Rectangle`, `Triangle`, `Circle` (with `x`, `y`, `label`) and the **arrows** `Pass`, `Run`, `Shot` (with `start`, `end`, `bends`; no `x`/`y`/`label`). The validator checks the properties of the element's kind; extra properties (also `x`/`y`/`label` on an arrow) are ignored. There are no rules on how many of each a frame may contain. The order of `elements` is the z-order (bottom first); arrows are nevertheless always drawn below point elements.
+- **Coordinates** (`x`, `y`, and every point of an arrow) are always in full-field scene units of the sport (floorball: 2000 × 1000, origin top-left), also for half-field situations. A half-field situation uses the right half, `x ∈ [1000, 2000]` (see 8.6).
+- Arrow `start`, `end`: `{ "x": …, "y": … }` with finite numbers. `bends`: the **bend points** the curve passes through, in order from start to end; `[]` for a straight arrow; any number. Start and end may coincide (the app itself never creates such an arrow, see 8.10).
+- Element `label` (point elements only): the **position label**, `""` (no label) or 1–2 characters, each a letter or a digit (e.g. `C`, `LV`, `10`). Stored per element **per frame**, like the color; duplicates within a frame are allowed. Every element type carries it, but only players show it: changing a player to another type hides the label, changing it back shows it again. The UI upper-cases typed letters; the importer also accepts lower case and keeps it as is.
 - Unknown extra properties are ignored on import.
 
 **Format history:**
@@ -85,6 +87,7 @@ Situations are exported and imported as JSON files named `<slug-of-title>.situat
 |---|---|---|
 | 1 | Initial situation format | – |
 | 2 | Elements get `label` | `MigrationV1ToV2`: every element gets `"label": ""` (a `label` property in a v1 file was an ignored extra property and is replaced) |
+| 3 | Arrow elements `Pass`, `Run`, `Shot` with `start`, `end`, `bends` | `MigrationV2ToV3`: none needed — v2 files contain no arrows (the types were unknown) and point elements are unchanged; the content passes through, only `formatVersion` changes |
 
 **Versioning and migration policy:** every change to the file format bumps `formatVersion` and comes with a migration from the previous version, so files exported by older app versions keep importing. Import runs parse → migrate (chained, one version step at a time) → validate → map to the domain model. Files with a newer version than the app supports are rejected with a request to update the app. The validator reports all problems at once, with paths such as `situation.frames[0].elements[2].x: expected finite number`.
 
@@ -92,24 +95,25 @@ Situations are exported and imported as JSON files named `<slug-of-title>.situat
 
 **Import creates a new situation:** the imported situation gets a fresh situation ID, and `createdAt` and `updatedAt` are both set to the import time; frame and element IDs are kept. It replaces the content of the editor (after "Discard changes?" if there are unsaved changes, see 8.7). A file that fails to import changes nothing and is not followed by that question.
 
-Implementation: `frontend/src/lib/model/serialization/` (`SituationSerializer` facade, `SituationFileMigrator` with one `Migration` per version step, e.g. `MigrationV1ToV2`, `SituationFileValidator`, `SituationMapper`); label rules and the predefined positions per sport in `frontend/src/lib/model/positions/PositionCatalog.ts`. Test fixtures for every format version live in `__fixtures__/`, so older files keep being tested.
+Implementation: `frontend/src/lib/model/serialization/` (`SituationSerializer` facade, `SituationFileMigrator` with one `Migration` per version step: `MigrationV1ToV2`, `MigrationV2ToV3`; `SituationFileValidator`, `SituationMapper`); label rules and the predefined positions per sport in `frontend/src/lib/model/positions/PositionCatalog.ts`. Test fixtures for every format version live in `__fixtures__/`, so older files keep being tested.
 
 ## 8.4 Editing via commands (undo/redo)
 
-Every change to a **frame's content** (its elements and its description) goes **`SituationEditor` → command → the active frame's `CommandHistory`**. UI components never construct commands or change the model themselves; they call the editor's public methods (`addElement`, `moveElement`, `changeFrameDescription`, `undo`, `redo`, …).
+Every change to a **frame's content** (its elements and its description) goes **`SituationEditor` → command → the active frame's `CommandHistory`**. UI components never construct commands or change the model themselves; they call the editor's public methods (`addElement`, `moveElement`, `addArrow`, `reshapeArrow`, `moveArrow`, `addBend`, `removeBend`, `straightenArrow`, `changeFrameDescription`, `undo`, `redo`, …).
 
 **Situation-level changes** take a second, non-undoable path (`SituationEditor.updateSituation`): adding, deleting, and reordering frames (`addFrame`, `deleteFrame`, `moveFrame`) and the situation's title and description (`changeTitle`, `changeDescription`). Like commands, they refresh `updatedAt` and mark the situation as unsaved (8.7), but they are not recorded in any history; inside the text fields the browser's own undo works while typing. See 8.9 for the frame operations.
 
-- **Commands** work on the immutable model: `execute(frame)` / `undo(frame)` return a new frame and address elements by id, never by reference or index. A command records what it needs to revert itself (e.g. the removed element and its z-order index, a move's start position). Commands that would change nothing (same position/color/type, unknown id) are not recorded. Several commands can be grouped into one undo step with `CompositeCommand`.
+- **Commands** work on the immutable model: `execute(frame)` / `undo(frame)` return a new frame and address elements by id, never by reference or index. A command records what it needs to revert itself (e.g. the removed element and its z-order index, a move's start position). Commands that would change nothing (same position/color/type/shape, unknown id) are not recorded. A type change is only possible within the element's family (point types among each other, arrow types among each other); `ChangeElementTypeCommand` refuses anything else. All arrow shape changes — dragging its start, end or a bend, adding/removing bends, straightening, moving the whole arrow — are one command type, `ReshapeArrowCommand` (old and new `ArrowGeometry`). Several commands can be grouped into one undo step with `CompositeCommand`.
 - **One history per frame**, keyed by frame id: undo/redo always act on the active frame's history. Switching frames is not an undo step. A new frame starts with an empty history; a deleted frame's history is dropped.
 - **Limit:** 200 steps per frame; the oldest steps are dropped. Histories live in memory only and do not survive a page reload.
 - **Loading/importing or creating a situation is not undoable** and clears all histories.
-- **Edit sessions:** until the history is sealed (`SituationEditor.endGesture()`, called at the end of a drag, when a text field loses focus or Enter is pressed in it, and when the popover closes), a new command may merge into the previous one (`Command.mergeWith`). So consecutive moves of one element during a gesture, or all keystrokes of one text-field focus (e.g. the free-text position label or the frame description), become a single undo step. Picking a position chip is one step of its own. Undo, redo, and switching frames also seal.
+- **Edit sessions:** until the history is sealed (`SituationEditor.endGesture()`, called at the end of a drag, when a text field loses focus or Enter is pressed in it, and when the popover closes), a new command may merge into the previous one (`Command.mergeWith`). So consecutive moves of one element during a gesture, all reshapes of one arrow during a handle or body drag, or all keystrokes of one text-field focus (e.g. the free-text position label or the frame description), become a single undo step. Picking a position chip is one step of its own; so are adding a bend, removing a bend and straightening (the editor seals before and after them). Undo, redo, and switching frames also seal.
 - **Undoable vs. not undoable:**
 
   | Undoable (in the active frame's history) | Not undoable |
   |---|---|
   | Place, move, delete an element; change its type, color, position label | Add, delete, reorder frames |
+  | Draw an arrow; move it; drag its start, end or a bend; add or remove a bend; straighten it | Arrow drawing in progress (start point, preview) |
   | Change the frame description (one step per focus of the field) | Change the situation's title or description |
   | | Switch frames, selection, tool changes; create/load/import a situation |
 
@@ -123,26 +127,28 @@ Implementation: `frontend/src/lib/history/` (generic: `Command`, `CommandHistory
 
 The board editor is fully usable by touch on phones (portrait and landscape) and tablets, and with mouse and keyboard on desktop. Touch, mouse, and pen share one interaction model; there is no separate "mobile mode".
 
-**Gestures** (all devices):
+**Gestures** (all devices; drawing and editing arrows: see 8.10):
 
 | Gesture | Effect |
 |---|---|
-| Tap/click on an element | Selects it **and** opens the edit popover (type; for players also color and position label; Delete). Same with any tool active: a tap on an element never places a new element on top of it. |
-| Tap/click on the empty field, placement tool active | Places an element there (Player in the selected player color, everything else neutral). The tool stays active; the new element is **not** selected. Clears the selection. |
+| Tap/click on an element | Selects it **and** opens the edit popover (type within its family, color, for players the position label, for arrows the bend actions; Delete). Same with any tool active: a tap on an element never places a new element on top of it (with an arrow tool only while no arrow start point is pending, see 8.10). |
+| Tap/click on the empty field, point placement tool active | Places an element there (Player in the selected player color, everything else neutral). The tool stays active; the new element is **not** selected. Clears the selection. |
 | Tap/click on the empty field, Move tool | Clears the selection and closes the popover. |
-| Drag an element | Moves it; one drag = one undo step. The popover closes while dragging, the selection stays. Elements can't be dragged out of the visible area (the field, or the visible half — see 8.6). |
+| Drag an element | Moves it (an arrow as a whole, keeping its shape); one drag = one undo step. The popover closes while dragging, the selection stays. Elements can't be dragged out of the visible area (the field, or the visible half — see 8.6). Not with an arrow tool active: a press then starts an arrow (8.10). |
 | Right-click / long-press on an element | Same as a tap. |
 | Delete button in the popover | Deletes the element. |
 | Close button in the popover | Closes the popover **and** clears the selection (like Escape). |
-| Desktop only: Shift+click, Delete/Backspace, Escape | Shift+click deletes the clicked element; Delete/Backspace deletes the selected element; Escape clears the selection and closes the popover. Ignored while typing in a text field (e.g. the position label field), so Delete/Backspace there edits the text and never deletes the element. |
+| Desktop only: Shift+click, Delete/Backspace, Escape | Shift+click deletes the clicked element; Delete/Backspace deletes the selected element; Escape drops an arrow being drawn, clears the selection and closes the popover. Ignored while typing in a text field (e.g. the position label field), so Delete/Backspace there edits the text and never deletes the element. |
 
 A press only turns into a drag after the pointer has moved 6 CSS px (Konva `dragDistance`), so finger jitter doesn't move elements. Taps use Konva's `pointerclick`, which fires for mouse, touch, and pen alike and not after a drag.
 
-**Popover lifetime:** the popover stays open when the tool changes and when the device is rotated or the window resized. Whenever the stage geometry changes (refit, window resize), `BoardCanvas` asks `BoardInteractionController.relocatePopover` to re-anchor it at the selected element's new on-screen position, so it never floats at a stale place. It closes on a tap on the empty field, Escape, Close, undo/redo, the start of a drag, and deleting the element.
+**Popover lifetime:** the popover stays open when the tool changes and when the device is rotated or the window resized. Whenever the stage geometry changes (refit, window resize), `BoardCanvas` asks `BoardInteractionController.relocatePopover` to re-anchor it at the selected element's new on-screen position, so it never floats at a stale place. It closes on a tap on the empty field, Escape, Close, undo/redo, the start of a drag (also of an arrow handle), deleting the element, and "Edit shape" (arrows; keeps the selection, see 8.10).
+
+**Popover placement** (`PopoverPlacement`, larger screens): below the anchor (the element's on-screen bounds, for an arrow the bounds of its curve), horizontally centered; above it when there is no room below; to its right or left, vertically centered, when it fits neither below nor above (typical for a large arrow) — so it doesn't cover the element. Only when it fits nowhere it may overlap the element. On phones it is a bottom sheet instead.
 
 **Position labels on the board:** a player's label is drawn centered on it in black or white, whichever contrasts more with the fill (`LabelContrast`, WCAG luminance; oklch, hex and rgb fills understood, others fall back to black). The text node does not listen to pointer events, so taps and drags hit the player beneath; it follows the player while dragged and is counter-rotated against the stage, so it stays upright on the rotated half field.
 
-**Hit-area rule:** elements are drawn in scene units and scale with the field, so they look the same (proportional) on every device. Their invisible hit area is a solid circle of radius `max(visual radius, 22 CSS px / scale)`, i.e. at least 44 CSS px across on screen. Where hit areas of nearby elements overlap, the topmost element wins; a tap inside an element's enlarged hit area selects it rather than placing a new element.
+**Hit-area rule:** elements are drawn in scene units and scale with the field, so they look the same (proportional) on every device. Their invisible hit area is a solid circle of radius `max(visual radius, 22 CSS px / scale)`, i.e. at least 44 CSS px across on screen. An arrow's hit area is its curve stroked 44 CSS px wide; the handles of the selected arrow have hit circles of 44 CSS px. Where hit areas of nearby elements overlap, the topmost element wins; a tap inside an element's enlarged hit area selects it rather than placing a new element.
 
 **Field fitting:** the visible part of the field is scaled uniformly as large as fits and centered, re-fitted whenever its container changes size. The full field (2000 × 1000 scene units) is scaled by `min(available width / 2000, available height / 1000)` and never rotated — on a portrait phone it stays horizontal and becomes small. The half field is shown in portrait (see 8.6).
 
@@ -150,7 +156,7 @@ A press only turns into a drag after the pointer has moved 6 CSS px (Konva `drag
 
 **Layout:** desktop (≥ 1024 px) has a side tool panel on the left and the details panel (8.9) on the right; tablets (600–1023 px) keep the side tool panel with tighter spacing and, in portrait (≥ 500 px tall), show the details panel below the board so the field keeps the width; portrait phones (≤ 599 px wide) get a compact header with icon-only buttons and the tools as a horizontally scrollable bottom bar; landscape phones (≤ 499 px tall) get a compact header and a narrow left tool rail. On phones the details panel collapses to a "Details" bar above the board (collapsed by default) and the edit popover becomes a bottom sheet. The frame strip (8.9) sits directly below the board on every layout; its action buttons become icon-only when the strip is narrower than 720 px (CSS container query). Interactive controls are at least 44 × 44 CSS px; icon-only buttons keep their text as accessible name. Safe-area insets (notches, home indicator) are respected.
 
-Implementation: `frontend/src/lib/board/` (`BoardViewport`, `BoardInteractionController`, `Selection`, `ToolState`, `PopoverState`, `konvaSetup`), `frontend/src/lib/components/board/BoardCanvas.svelte` (translates Konva events into gestures), `frontend/src/lib/components/board/popover/`.
+Implementation: `frontend/src/lib/board/` (`BoardViewport`, `BoardInteractionController`, `ArrowGestures`, `ArrowHandle`, `Selection`, `ToolState`, `PopoverState`, `konvaSetup`), `frontend/src/lib/components/board/BoardCanvas.svelte` (translates Konva events into gestures), `frontend/src/lib/components/board/popover/`.
 
 ## 8.6 Field viewport and coordinate convention
 
@@ -176,14 +182,15 @@ Implementation: `frontend/src/lib/model/FieldDimensions.ts`, `frontend/src/lib/b
 Until there is server-side storage, "saved" means **exported**.
 
 - `SituationEditor` keeps a simple dirty flag (`hasUnsavedChanges` store, `isDirty()`): it becomes true with any edit that changes the situation (undo and redo included) and false when a situation is created or loaded/imported, or when it is exported (`markSaved()`). It is deliberately a flag, not a comparison: undoing back to the starting state still counts as unsaved.
-- Starting a new situation (start page or editor) or importing a file while dirty asks **"Discard changes?"** (Discard / Cancel, reusable `ConfirmDialog`). Confirm proceeds, Cancel (or Escape) keeps the current situation. For an import the question comes after the file was read successfully.
-- While dirty, a `beforeunload` handler (`UnsavedChangesGuard`) makes the browser show its own warning when the page is left or reloaded. In-app navigation between the start page and the editor keeps the situation in memory and is not affected.
+- Starting a new situation (start page or editor), importing a file, or going back to the start page with the editor's badge while dirty asks **"Discard changes?"** (Discard / Cancel, reusable `ConfirmDialog`). Confirm proceeds, Cancel (or Escape) keeps the current situation. For an import the question comes after the file was read successfully.
+- While dirty, a `beforeunload` handler (`UnsavedChangesGuard`) makes the browser show its own warning when the page is left or reloaded. Other in-app navigation (e.g. the browser's Back button from the editor to the start page) keeps the situation in memory and is not affected.
 
 ## 8.8 App navigation
 
 - `/` is the **start page**: "New situation" (opens the New situation dialog: title + Full/Half field, Full preselected) and "Import" (file picker). Creating or importing navigates to the editor. A "Saved situations" section is the placeholder for the Phase 2 list of saved situations and teams.
-- `/editor` is the **board editor** (client-only, `ssr = false`). Its header has New (same flow as on the start page), Load, Export, Undo, Redo.
-- The edited situation lives in the `situationEditor` singleton, so it survives client-side navigation between both pages. Opening `/editor` without a situation (directly, or after a reload, which loses the in-memory state) redirects to `/`.
+- `/editor` is the **board editor** (client-only, `ssr = false`). Its header has the app badge, New (same flow as on the start page), Load, Export, Undo, Redo.
+- The **badge** (top left, a link named "Start page") goes back to the start page: after "Discard changes?" if there are unsaved changes (Cancel stays in the editor), then the situation is **closed** (`SituationWorkflow.leave` → `SituationEditor.close`): it is dropped, so its changes are really discarded and the unload warning no longer applies. A click with a modifier key (e.g. open in a new tab) is left to the browser.
+- The edited situation lives in the `situationEditor` singleton, so it survives other client-side navigation between both pages (e.g. the browser's Back button). Opening `/editor` without a situation (directly, or after a reload, which loses the in-memory state) redirects to `/`.
 - Dialogs are native `<dialog>` elements opened modally (`modalDialog` action): focus moves into the dialog on open and back to the opener on close, Escape cancels, and page-wide keyboard shortcuts (undo/redo, Delete) are ignored while focus is inside a modal dialog.
 
 Implementation: `frontend/src/routes/` (`+page.svelte` start page, `editor/`), `frontend/src/lib/editor/` (`SituationWorkflow`, `NewSituationForm`, `UnsavedChangesGuard`), `frontend/src/lib/dialogs/ConfirmationPrompt.ts`, `frontend/src/lib/components/dialogs/`, `frontend/src/lib/actions/modalDialog.ts`.
@@ -203,10 +210,47 @@ Frame numbers are 1-based positions and change with the order; frames have no na
 
 **Frame strip** (`FrameStrip`): a `<nav aria-label="Frames">` with an ordered list; each frame is a button showing its number and a thumbnail, the active one with `aria-current="step"`. It scrolls horizontally when the frames don't fit and keeps the active frame in view. Actions: Move frame left/right, Add frame, Delete frame.
 
-- **Thumbnails** (`FrameThumbnail`, geometry in `FrameThumbnailGeometry`): a small inline SVG rendering of the field markings and the frame's elements from the model, oriented like the board (full field landscape; half field portrait with its goal at the bottom, via `BoardViewport`). Elements are drawn 2.5× their board size so they stay visible; labels are not drawn. SVG (instead of an offscreen Konva stage) keeps thumbnails cheap, crisp at any size, re-rendered reactively when the frame changes, and testable in jsdom.
+- **Thumbnails** (`FrameThumbnail`, geometry in `FrameThumbnailGeometry`): a small inline SVG rendering of the field markings and the frame's elements from the model, oriented like the board (full field landscape; half field portrait with its goal at the bottom, via `BoardViewport`). Elements are drawn 2.5× their board size so they stay visible, arrows (below the other elements) with their board styles enlarged the same way; labels are not drawn. SVG (instead of an offscreen Konva stage) keeps thumbnails cheap, crisp at any size, re-rendered reactively when the frame changes, and testable in jsdom.
 - **Reorder by drag and drop** (`FrameReorderGesture`, a pure state machine fed by Pointer Events, so it works for mouse, pen, and touch, unlike HTML5 drag and drop): with mouse/pen a drag starts after the pointer moved 8 CSS px (less is a tap, which selects the frame); with touch the finger has to rest for 400 ms first (a long press), so a quick swipe still scrolls the strip. While dragging, the frame follows the pointer, the others make room, and the strip auto-scrolls near its edges; the target position is the number of other frames whose center lies before the dragged frame's center. pointercancel, lost pointer capture, and Escape cancel without reordering; the click that follows a drag doesn't select.
 - **Keyboard alternative:** the "Move frame left" / "Move frame right" buttons move the active frame by one position (also usable by touch). Keyboard/swipe frame *switching* is not part of the MVP.
 
 **Details panel** (`SituationDetails`): an `<aside>` named "Details" with the situation's title (`<input>`) and description (`<textarea>`), plus the active frame's description (`FrameDescriptionEditor`, labelled "Frame N description"). Descriptions are edited as Markdown source; nothing is rendered yet. Title and situation description are stored on every input and are not undoable (a blank title is stored as is and shown as "Untitled Situation"); the frame description is one undo step per focus of the field (blur ends the session). Keyboard shortcuts (undo/redo, Delete/Backspace) are ignored while typing in these fields (8.4, 8.5). The header keeps showing the title.
 
 Implementation: `frontend/src/lib/editor/SituationEditor.ts`, `frontend/src/lib/editor/FrameWorkflow.ts` (confirmation, popover/selection reset), `frontend/src/lib/commands/ChangeFrameDescriptionCommand.ts`, `frontend/src/lib/components/frames/`, `frontend/src/lib/components/details/SituationDetails.svelte`.
+
+## 8.10 Arrows
+
+Arrows (`Pass`, `Run`, `Shot`) are elements like players and markers (stable id, per-frame copy, color, undoable edits), but they are drawn from a start to an end point and can be bent. They are free: not attached to players, they don't follow them. They have no label.
+
+**Model** (`ArrowElement`, `ArrowGeometry`): `start`, `end` and an ordered list of **bend points** the curve passes through (none = straight; any number). The curve is a **uniform Catmull-Rom spline** through start → bends → end, converted to one cubic Bézier per segment (the end points are duplicated as phantom neighbours). It passes exactly through every bend, so a dragged bend stays under the finger, it is smooth at every bend, and without bends it is a straight line. `ArrowGeometry` is a pure value class: sampling, end tangent (for the arrowhead), bounds, translate/clamp, insert/move/remove a bend, straighten.
+
+**Rendering** (`ArrowPainter`, pure, used by the board and the frame thumbnails): fixed styles per type in scene units — Pass dashed (width 4), Run wavy (width 4, a sine wave along the curve that fades in and out), Shot thick (width 9) — and the same filled arrowhead for all types (length 26), oriented along the curve's end tangent; the line stops under the head. Arrows are drawn in their own group **below** the point elements (one Konva layer: arrows, point elements, overlay), whatever their position in the frame's element list. Thumbnails draw them as SVG with the same styles, enlarged like the other elements.
+
+**Drawing** (arrow tool active; `ArrowGestures`, a pure state machine owned by `BoardInteractionController`):
+
+| Gesture (arrow tool active) | Effect |
+|---|---|
+| Press and drag (≥ 6 CSS px), release | Draws an arrow from the press point to the release point; a translucent preview follows the pointer. Also when the press is on a player or another element: players and markers aren't draggable while an arrow tool is active. |
+| Tap on the empty field | Sets the **start point** (a marker is shown); clears the selection and closes the popover. |
+| With a start point set: tap anywhere (also on an element), or drag and release | Sets the **end point** there and draws the arrow. With a mouse the preview follows the hovering pointer. |
+| Tap on an element (no start point set) | Selects it and opens the popover, as with every other tool. |
+| Escape, changing the tool, pointercancel, a second finger | Cancels the arrow being drawn (and a set start point). |
+
+A new arrow is black (`ElementCatalog.arrowColor`) and of the active type; the tool stays active and the new arrow is **not** selected. Arrows shorter than 24 CSS px on screen are discarded. Start and end are clamped to the visible area (the field, or the visible half). Drawing an arrow is one undo step.
+
+**Editing a selected arrow** (any tool): the selected arrow shows **handles** — its start, its end, every bend, and a small "+" (**add bend** handle) in the middle of every segment. Handles keep their on-screen size and have 44 CSS px hit circles; the "+" handles lie below the others.
+
+| Gesture | Effect |
+|---|---|
+| Drag the start, the end or a bend | Moves that point (clamped to the visible area); live preview, one undo step on drop. |
+| Drag a "+" | Inserts a new bend there (one undo step "Add bend"). |
+| Tap a "+" | Inserts a bend at the middle of that segment. |
+| Tap a bend | Makes it the **active bend** (highlighted) and opens the popover, which offers **Remove bend**. |
+| Double-tap / double-click a bend | Removes it. |
+| Drag the arrow's line | Moves the whole arrow, keeping its shape; it stops where any of its points would leave the visible area. |
+
+The arrow popover ("Edit arrow") offers Type (Pass/Run/Shot only — the type can't change between arrows and point elements), Color (the palette, see below), and under **Bends**: **Edit shape** (closes the popover but keeps the arrow selected, so the handles stay usable — needed on phones, where the bottom sheet can cover the board; Close clears the selection like for every element), **Remove bend** (only with an active bend), **Straighten** (only when bent; removes all bends), and Delete arrow. Adding a bend, removing a bend and straightening are undo steps of their own.
+
+**Colors:** every element's color can be changed in its popover (Player color / Color), from one palette: the four player colors, grey (the initial color of markers and the ball) and black (the initial color of arrows). The point element popover lists only point types, the arrow popover only arrow types.
+
+Implementation: `frontend/src/lib/model/elements/` (`ArrowElement`, `ArrowGeometry`, `ElementType`), `frontend/src/lib/commands/ReshapeArrowCommand.ts`, `frontend/src/lib/board/` (`ArrowGestures`, `ArrowHandle`, `BoardInteractionController`, `Selection` with the active bend), `frontend/src/lib/components/board/` (`ArrowPainter`, `ArrowShape`, `ArrowHandleShape`, `ArrowDraftPreview`, `BoardCanvas`), `frontend/src/lib/components/frames/FrameThumbnailGeometry.ts`.

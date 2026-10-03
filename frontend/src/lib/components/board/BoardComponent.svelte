@@ -12,8 +12,8 @@ is counter-rotated by `labelRotation` so it stays upright on a rotated stage.
 <script lang="ts">
 	import { Shape, Text } from "svelte-konva";
 	import type { KonvaDragTransformEvent } from "svelte-konva";
-	import type { Point } from "$lib/commands/Point";
-	import type { ElementType } from "$lib/model/elements/ElementType";
+	import type { Point } from "$lib/model/Point";
+	import type { PointElementType } from "$lib/model/elements/ElementType";
 	import { labelContrast } from "./LabelContrast";
 	import { drawFunctionFor, drawHitCircle, ELEMENT_NODE_NAME, LABEL_NODE_NAME, LABEL_STYLE } from "./Shapes";
 
@@ -26,9 +26,11 @@ is counter-rotated by `labelRotation` so it stays upright on a rotated stage.
 		x?: number;
 		y?: number;
 		color?: string;
-		type?: ElementType;
+		type?: PointElementType;
 		hitRadius: number;
 		selected?: boolean;
+		/** Off while an arrow tool is active: a press on the element then starts an arrow. */
+		draggable?: boolean;
 		/** Text drawn on the element; empty draws none. */
 		label?: string;
 		/** Rotation (degrees) of the label relative to the stage; the negated stage rotation keeps it upright. */
@@ -47,6 +49,7 @@ is counter-rotated by `labelRotation` so it stays upright on a rotated stage.
 		type = "Player",
 		hitRadius,
 		selected = false,
+		draggable = true,
 		label = "",
 		labelRotation = 0,
 		onDragStart,
@@ -87,7 +90,7 @@ is counter-rotated by `labelRotation` so it stays upright on a rotated stage.
 	{id}
 	fill={color}
 	elementType={type}
-	draggable={true}
+	{draggable}
 	stroke={selected ? SELECTED_STROKE_COLOR : undefined}
 	strokeWidth={selected ? SELECTED_STROKE_WIDTH_PX : 0}
 	strokeScaleEnabled={false}

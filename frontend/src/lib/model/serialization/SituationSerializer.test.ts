@@ -12,7 +12,10 @@ import {
 } from "./SituationImportErrors";
 import { SituationSerializer } from "./SituationSerializer";
 import fixtureV1 from "./__fixtures__/situation-v1.json";
-import fixture from "./__fixtures__/situation-v2.json";
+import fixtureV2 from "./__fixtures__/situation-v2.json";
+import fixture from "./__fixtures__/situation-v3.json";
+import { ArrowElement } from "../elements/ArrowElement";
+import { ArrowGeometry } from "../elements/ArrowGeometry";
 
 const player = new PointElement("p1", 100, 200, "oklch(62% 0.16 230)", "Player", "C");
 const ball = new PointElement("b1", 110, 210, "oklch(45% 0.01 260)", "Ball");
@@ -50,8 +53,23 @@ describe("SituationSerializer", () => {
 		expect(text).toContain('\n  "format": "tacticalboard.situation"');
 	});
 
-	it("deserializes the v2 fixture with its labels", () => {
+	it("deserializes the v3 fixture with its arrows", () => {
 		const restored = serializer.deserialize(JSON.stringify(fixture));
+
+		expect(restored.id).toBe("situation-3");
+		const [first, second] = restored.frames;
+		expect(first.elements.map((element) => element.type)).toEqual(["Pass", "Run", "Player", "Player", "Ball"]);
+		expect(first.findElement("run-1")).toBeInstanceOf(ArrowElement);
+		expect((first.findElement("run-1") as ArrowElement).bends).toEqual([
+			{ x: 1300, y: 200 },
+			{ x: 1450, y: 220 },
+		]);
+		expect((second.findElement("pass-1") as ArrowElement).bends).toEqual([{ x: 1550, y: 450 }]);
+		expect(second.findElement("shot-1")).toMatchObject({ type: "Shot", color: "oklch(64% 0.16 32)" });
+	});
+
+	it("still imports v2 files with their labels", () => {
+		const restored = serializer.deserialize(JSON.stringify(fixtureV2));
 
 		expect(restored.id).toBe("situation-1");
 		expect(restored.frames).toHaveLength(2);
@@ -70,10 +88,25 @@ describe("SituationSerializer", () => {
 		expect(restored.frames[0].findElement("player-1")).toMatchObject({ x: 1200, y: 300, type: "Player" });
 	});
 
-	it("writes format version 2 with labels", () => {
+	it("round-trips arrows with several bends", () => {
+		const arrow = new ArrowElement(
+			"a1",
+			"Shot",
+			"black",
+			new ArrowGeometry({ x: 1, y: 2 }, { x: 300, y: 400 }, [{ x: 50, y: 60 }, { x: 70, y: 80 }]),
+		);
+		const withArrow = situation.updateFrame("f2", (frame) => frame.insertElement(arrow, 0));
+
+		const restored = serializer.deserialize(serializer.serialize(withArrow));
+
+		expect(restored).toEqual(withArrow);
+		expect(restored.frames[1].elements[0]).toBeInstanceOf(ArrowElement);
+	});
+
+	it("writes format version 3 with labels", () => {
 		const written = JSON.parse(serializer.serialize(situation));
 
-		expect(written.formatVersion).toBe(2);
+		expect(written.formatVersion).toBe(3);
 		expect(written.situation.frames[0].elements[0].label).toBe("C");
 		expect(written.situation.frames[0].elements[1].label).toBe("");
 	});

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { PointElement } from "$lib/model/elements/PointElement";
 import { Frame } from "$lib/model/Frame";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { ArrowGeometry } from "$lib/model/elements/ArrowGeometry";
 import { ChangeElementTypeCommand } from "./ChangeElementTypeCommand";
 
 const player = new PointElement("p", 10, 20, "red", "Player");
@@ -44,5 +46,50 @@ describe("ChangeElementTypeCommand", () => {
 		expect(command.isNoOp(empty)).toBe(true);
 		expect(command.execute(empty)).toBe(empty);
 		expect(command.undo(empty)).toBe(empty);
+	});
+
+	it("keeps a point element's label", () => {
+		const labeled = new PointElement("l", 0, 0, "red", "Player", "C");
+		const result = ChangeElementTypeCommand.of(labeled, "Ball").execute(new Frame("f", "", [labeled]));
+
+		expect(result.findElement("l")).toMatchObject({ type: "Ball", label: "C" });
+	});
+
+	describe("arrows", () => {
+		const geometry = new ArrowGeometry({ x: 1, y: 2 }, { x: 30, y: 40 }, [{ x: 10, y: 5 }]);
+		const pass = new ArrowElement("a", "Pass", "black", geometry);
+		const arrowFrame = new Frame("f", "", [pass, player]);
+
+		it("changes an arrow's type, keeping its id, shape and color", () => {
+			const command = ChangeElementTypeCommand.of(pass, "Shot");
+			const result = command.execute(arrowFrame);
+
+			expect(command.label).toBe("Change Pass to Shot");
+			expect(result.findElement("a")).toBeInstanceOf(ArrowElement);
+			expect(result.findElement("a")).toMatchObject({ id: "a", type: "Shot", color: "black" });
+			expect((result.findElement("a") as ArrowElement).geometry.equals(geometry)).toBe(true);
+			expect(command.undo(result).findElement("a")?.type).toBe("Pass");
+		});
+
+		it("is a no-op when the arrow already has the type", () => {
+			expect(ChangeElementTypeCommand.of(pass, "Pass").isNoOp(arrowFrame)).toBe(true);
+			expect(ChangeElementTypeCommand.of(pass, "Run").isNoOp(arrowFrame)).toBe(false);
+		});
+	});
+
+	describe("families", () => {
+		it("refuses to change a point type into an arrow type and vice versa", () => {
+			expect(() => new ChangeElementTypeCommand("p", "Player", "Pass")).toThrow(/family/);
+			expect(() => new ChangeElementTypeCommand("a", "Shot", "Circle")).toThrow(/family/);
+		});
+
+		it("is a no-op (and changes nothing) when the element in the frame is of the other family", () => {
+			const pass = new ArrowElement("p", "Pass", "black", ArrowGeometry.straight({ x: 0, y: 0 }, { x: 9, y: 9 }));
+			const mixed = new Frame("f", "", [pass]);
+			const command = new ChangeElementTypeCommand("p", "Player", "Circle");
+
+			expect(command.isNoOp(mixed)).toBe(true);
+			expect(command.execute(mixed).findElement("p")).toMatchObject({ type: "Pass" });
+		});
 	});
 });

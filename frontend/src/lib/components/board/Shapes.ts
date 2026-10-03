@@ -1,7 +1,16 @@
-import type { ElementType } from "$lib/model/elements/ElementType";
+import type { PointElementType } from "$lib/model/elements/ElementType";
 
-/** Konva node name identifying board elements (as opposed to the field) in hit tests. */
+/** Konva node name identifying point elements (as opposed to the field) in hit tests. */
 export const ELEMENT_NODE_NAME = "Component";
+
+/** Konva node name identifying arrows in hit tests. */
+export const ARROW_NODE_NAME = "Arrow";
+
+/** Konva node name of the handles of the selected arrow (start, end, bends, "add bend"). */
+export const ARROW_HANDLE_NODE_NAME = "ArrowHandle";
+
+/** Konva node name of the preview of an arrow being drawn (its start marker and the arrow). */
+export const ARROW_DRAFT_NODE_NAME = "ArrowDraftStart";
 
 /** Konva node name of the label text drawn on an element. */
 export const LABEL_NODE_NAME = "ElementLabel";
@@ -86,7 +95,7 @@ export function drawTriangle(context: any, shape: any) {
 	context.restore();
 }
 
-const DRAW_FUNCTIONS: Record<ElementType, DrawFunction> = {
+const DRAW_FUNCTIONS: Record<PointElementType, DrawFunction> = {
 	Player: drawPlayer,
 	Ball: drawBall,
 	Rectangle: drawRectangle,
@@ -94,7 +103,7 @@ const DRAW_FUNCTIONS: Record<ElementType, DrawFunction> = {
 	Circle: drawCircle,
 };
 
-export function drawFunctionFor(type: ElementType): DrawFunction {
+export function drawFunctionFor(type: PointElementType): DrawFunction {
 	return DRAW_FUNCTIONS[type] ?? drawPlayer;
 }
 
@@ -102,7 +111,7 @@ export function drawFunctionFor(type: ElementType): DrawFunction {
  * Radius (scene units) of the smallest circle around the origin that
  * contains the element's drawing, i.e. its visible extent.
  */
-export function visualRadius(type: ElementType): number {
+export function visualRadius(type: PointElementType): number {
 	switch (type) {
 		case "Ball":
 			return 12;

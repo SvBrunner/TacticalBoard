@@ -1,4 +1,4 @@
-import { isElementType } from "../elements/ElementType";
+import { isArrowElementType, isElementType } from "../elements/ElementType";
 import { isFieldType } from "../FieldType";
 import { PositionCatalog } from "../positions/PositionCatalog";
 import { isSportId } from "../Sport";
@@ -107,17 +107,40 @@ export class SituationFileValidator {
 		});
 	}
 
+	/**
+	 * Arrow types have `start`, `end` and `bends`; every other type (also an
+	 * unknown one, so its other problems are reported too) is checked as a
+	 * point element with `x`, `y` and `label`.
+	 */
 	private validateElement(element: JsonObject, path: string, report: Reporter): void {
 		checkNonEmptyString(element.id, `${path}.id`, report);
 		if (!isElementType(element.type)) {
 			report(`${path}.type`, "expected known element type");
 		}
 		checkNonEmptyString(element.color, `${path}.color`, report);
+		if (isArrowElementType(element.type)) {
+			this.validateArrow(element, path, report);
+		} else {
+			this.validatePointElement(element, path, report);
+		}
+	}
+
+	private validatePointElement(element: JsonObject, path: string, report: Reporter): void {
 		checkFiniteNumber(element.x, `${path}.x`, report);
 		checkFiniteNumber(element.y, `${path}.y`, report);
 		if (!PositionCatalog.isValidLabel(element.label)) {
 			report(`${path}.label`, "expected string of at most 2 letters or digits");
 		}
+	}
+
+	private validateArrow(element: JsonObject, path: string, report: Reporter): void {
+		checkPoint(element.start, `${path}.start`, report);
+		checkPoint(element.end, `${path}.end`, report);
+		if (!Array.isArray(element.bends)) {
+			report(`${path}.bends`, "expected array");
+			return;
+		}
+		element.bends.forEach((bend, index) => checkPoint(bend, `${path}.bends[${index}]`, report));
 	}
 }
 
@@ -147,6 +170,15 @@ function checkFiniteNumber(value: unknown, path: string, report: Reporter): void
 	if (typeof value !== "number" || !Number.isFinite(value)) {
 		report(path, "expected finite number");
 	}
+}
+
+function checkPoint(value: unknown, path: string, report: Reporter): void {
+	if (!isObject(value)) {
+		report(path, "expected object with x and y");
+		return;
+	}
+	checkFiniteNumber(value.x, `${path}.x`, report);
+	checkFiniteNumber(value.y, `${path}.y`, report);
 }
 
 function checkTimestamp(value: unknown, path: string, report: Reporter): void {

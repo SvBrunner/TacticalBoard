@@ -44,11 +44,34 @@ describe("PopoverPlacement", () => {
 		expect(result.x).toBe(8);
 	});
 
-	it("uses the roomier side and keeps it on screen when neither side fits", () => {
-		const small = { width: 1000, height: 400 };
+	describe("when it fits neither below nor above", () => {
+		const short = { width: 1000, height: 400 };
 
-		const nearTop = placement.place({ x: 400, y: 100, width: 40, height: 40 }, popover, small);
-		const nearBottom = placement.place({ x: 400, y: 260, width: 40, height: 40 }, popover, small);
+		it("goes to the right of the anchor, vertically centered, without covering it", () => {
+			const result = placement.place({ x: 300, y: 150, width: 200, height: 100 }, popover, short);
+
+			expect(result).toEqual({ x: 508, y: 50, side: "right" });
+		});
+
+		it("goes to the left when there is no room on the right", () => {
+			const result = placement.place({ x: 600, y: 150, width: 200, height: 100 }, popover, short);
+
+			expect(result).toEqual({ x: 392, y: 50, side: "left" });
+		});
+
+		it("keeps a side placement inside the viewport vertically", () => {
+			const result = placement.place({ x: 300, y: 200, width: 100, height: 190 }, popover, short);
+
+			expect(result.side).toBe("right");
+			expect(result.y).toBe(400 - 300 - 8);
+		});
+	});
+
+	it("uses the roomier of below/above and keeps it on screen when it fits on no side", () => {
+		const small = { width: 300, height: 400 };
+
+		const nearTop = placement.place({ x: 130, y: 100, width: 40, height: 40 }, popover, small);
+		const nearBottom = placement.place({ x: 130, y: 260, width: 40, height: 40 }, popover, small);
 
 		expect(nearTop.side).toBe("below");
 		expect(nearTop.y).toBe(400 - 300 - 8);

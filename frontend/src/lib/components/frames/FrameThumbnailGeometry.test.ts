@@ -4,6 +4,9 @@ import { PointElement } from "$lib/model/elements/PointElement";
 import { FieldDimensions } from "$lib/model/FieldDimensions";
 import { Frame } from "$lib/model/Frame";
 import { FrameThumbnailGeometry } from "./FrameThumbnailGeometry";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { ArrowGeometry } from "$lib/model/elements/ArrowGeometry";
+import { ArrowPainter } from "../board/ArrowPainter";
 
 const full = new FrameThumbnailGeometry(new BoardViewport(FieldDimensions.FLOORBALL, "full"));
 const half = new FrameThumbnailGeometry(new BoardViewport(FieldDimensions.FLOORBALL, "half"));
@@ -92,5 +95,73 @@ describe("FrameThumbnailGeometry", () => {
 		expect(field.goalAreas[1].x + field.goalAreas[1].width).toBeCloseTo(1900);
 		expect(field.goals).toHaveLength(2);
 		expect(field.goals[0]).toBe("M 197.4 416.5 L 157.4 416.5 L 157.4 583.5 L 197.4 583.5");
+	});
+
+	describe("arrows", () => {
+		const k = FrameThumbnailGeometry.ELEMENT_ENLARGEMENT;
+		const pass = new ArrowElement("a", "Pass", "black", ArrowGeometry.straight({ x: 1200, y: 500 }, { x: 1800, y: 500 }));
+		const frame = new Frame("f", "", [new PointElement("p", 300, 700, "red", "Player"), pass]);
+
+		function pathPoints(path: string): number[][] {
+			return path
+				.split(/(?=[ML])/)
+				.map((command) => command.slice(1).trim().split(" ").map(Number));
+		}
+
+		it("lists only the arrows, separately from the marks", () => {
+			expect(full.arrows(frame).map((arrow) => arrow.id)).toEqual(["a"]);
+			expect(full.marks(frame).map((mark) => mark.id)).toEqual(["p"]);
+		});
+
+		it("draws a straight arrow from its start towards its end with the head at the end (full field)", () => {
+			const [arrow] = full.arrows(frame);
+			const points = pathPoints(arrow.path);
+
+			expect(arrow).toMatchObject({ type: "Pass", color: "black" });
+			expect(points[0]).toEqual([1200, 500]);
+			expect(points.at(-1)![1]).toBeCloseTo(500);
+			expect(points.at(-1)![0]).toBeLessThan(1800);
+			expect(arrow.head.split(" ")[0]).toBe("1800,500");
+		});
+
+		it("styles the types like the board, enlarged: Pass dashed, Shot thick, Run wavy", () => {
+			const types = (["Pass", "Run", "Shot"] as const).map((type) => full.arrows(new Frame("f", "", [pass.withType(type)]))[0]);
+			const [passLine, runLine, shotLine] = types;
+
+			expect(passLine.dash).toBe(ArrowPainter.STYLES.Pass.dash.map((d) => d * k).join(" "));
+			expect(passLine.width).toBe(ArrowPainter.STYLES.Pass.width * k);
+			expect(shotLine.dash).toBeNull();
+			expect(shotLine.width).toBe(ArrowPainter.STYLES.Shot.width * k);
+			expect(runLine.dash).toBeNull();
+			expect(Math.max(...pathPoints(runLine.path).map(([, y]) => Math.abs(y - 500)))).toBeGreaterThan(10);
+		});
+
+		it("rotates arrows with the half field: an arrow towards the goal points down", () => {
+			const [arrow] = half.arrows(frame);
+			const points = pathPoints(arrow.path);
+
+			// Scene x 1200 -> 200 from the top, x 1800 -> 800; y 500 -> the middle (500).
+			expect(points[0][0]).toBeCloseTo(500);
+			expect(points[0][1]).toBeCloseTo(200);
+			const [tip] = arrow.head.split(" ").map((pair) => pair.split(",").map(Number));
+			expect(tip[0]).toBeCloseTo(500);
+			expect(tip[1]).toBeCloseTo(800);
+		});
+
+		it("follows the bends", () => {
+			const bent = pass.withGeometry(pass.geometry.withBendInserted(0, { x: 1500, y: 200 }));
+			const points = pathPoints(full.arrows(new Frame("f", "", [bent]))[0].path);
+
+			expect(points.some(([x, y]) => Math.hypot(x - 1500, y - 200) < 1e-6)).toBe(true);
+		});
+
+		it("draws only the head of a tiny arrow", () => {
+			const tiny = pass.withGeometry(ArrowGeometry.straight({ x: 1200, y: 500 }, { x: 1210, y: 500 }));
+
+			const [arrow] = full.arrows(new Frame("f", "", [tiny]));
+
+			expect(arrow.path).toBe("");
+			expect(arrow.head).not.toBe("");
+		});
 	});
 });

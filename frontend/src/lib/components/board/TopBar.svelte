@@ -1,7 +1,8 @@
 <!--
 @component
-The editor header: situation title, undo/redo, new/load/export and theme toggle.
-On phones the buttons become icon-only; their text stays as accessible name.
+The editor header: the app badge (a link back to the start page), situation
+title, undo/redo, new/load/export and theme toggle. On phones the buttons
+become icon-only; their text stays as accessible name.
 -->
 <script lang="ts">
 	import { theme, toggleTheme } from "$lib/theme";
@@ -9,6 +10,8 @@ On phones the buttons become icon-only; their text stays as accessible name.
 
 	interface Props {
 		title: string;
+		/** The badge was activated: go back to the start page (the owner checks for unsaved changes). */
+		onHome: () => void;
 		/** Start a new situation (the owner checks for unsaved changes). */
 		onNew: () => void;
 		onExport: () => void;
@@ -19,7 +22,7 @@ On phones the buttons become icon-only; their text stays as accessible name.
 		onRedo: () => void;
 	}
 
-	let { title, onNew, onExport, onLoadFile, canUndo, canRedo, onUndo, onRedo }: Props = $props();
+	let { title, onHome, onNew, onExport, onLoadFile, canUndo, canRedo, onUndo, onRedo }: Props = $props();
 
 	let fileInput: HTMLInputElement;
 
@@ -35,6 +38,16 @@ On phones the buttons become icon-only; their text stays as accessible name.
 
 	function handleRedo() {
 		if (canRedo) onRedo();
+	}
+
+	// A real link (works without the handler, e.g. opened in a new tab); a
+	// plain activation goes through `onHome`, which asks about unsaved changes.
+	function handleHome(event: MouseEvent) {
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+			return;
+		}
+		event.preventDefault();
+		onHome();
 	}
 
 	function openFilePicker() {
@@ -53,12 +66,12 @@ On phones the buttons become icon-only; their text stays as accessible name.
 </script>
 
 <header class="topbar">
-	<div class="badge" aria-hidden="true">
-		<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--accent-contrast)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+	<a class="badge" href="/" aria-label="Start page" title="Start page" onclick={handleHome}>
+		<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--accent-contrast)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 			<circle cx="12" cy="12" r="9" />
 			<path d="M12 3v18M3 12h18" />
 		</svg>
-	</div>
+	</a>
 
 	<h1 class="title">{title}</h1>
 
@@ -137,15 +150,25 @@ On phones the buttons become icon-only; their text stays as accessible name.
 			0 6px 16px -10px oklch(20% 0.02 260 / 0.35);
 	}
 
+	/* The visible badge stays 34 px; the link's hit area is the 44 px touch target around it. */
 	.badge {
-		width: 34px;
-		height: 34px;
-		border-radius: var(--radius-sm);
-		background: var(--accent);
+		width: var(--touch-target);
+		height: var(--touch-target);
+		margin: -5px;
+		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		flex-shrink: 0;
+		border-radius: var(--radius-sm);
+		background: var(--accent);
+		background-clip: content-box;
+		padding: 5px;
+		box-sizing: border-box;
+	}
+
+	.badge:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 
 	.title {
@@ -244,8 +267,8 @@ On phones the buttons become icon-only; their text stays as accessible name.
 		}
 
 		.badge {
-			width: 28px;
-			height: 28px;
+			padding: 8px;
+			margin: -8px -2px;
 		}
 
 		.title {

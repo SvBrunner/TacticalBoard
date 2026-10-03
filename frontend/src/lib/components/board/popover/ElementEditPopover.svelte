@@ -1,11 +1,14 @@
 <!--
 @component
-Edit popover for one board element: change its type, its color and
-position label (players only), or delete it. A non-modal dialog anchored next to the element on
-larger screens; a bottom sheet on phones (pure CSS, see the media query).
+Edit popover for one board element: change its type (within its family:
+point types or arrow types), its color and, for players, the position
+label; for arrows remove the active bend or straighten it; or delete the
+element. A non-modal dialog anchored next to the element on larger
+screens; a bottom sheet on phones (pure CSS, see the media query).
 -->
 <script lang="ts">
 	import type { ScreenRect } from "$lib/board/BoardViewport";
+	import { ArrowElement } from "$lib/model/elements/ArrowElement";
 	import type { BoardElement } from "$lib/model/elements/BoardElement";
 	import { PointElement } from "$lib/model/elements/PointElement";
 	import { PositionCatalog } from "$lib/model/positions/PositionCatalog";
@@ -20,8 +23,12 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 		element: BoardElement | null;
 		/** On-screen bounds of the element (viewport CSS px). */
 		anchor: ScreenRect | null;
+		/** The active bend of the arrow being edited (offered for removal), if any. */
+		bendIndex?: number | null;
 		actions: ElementEditActions;
 		onClose: () => void;
+		/** "Edit shape" for an arrow: hide the popover but keep the arrow selected (its handles stay usable). */
+		onEditShape?: () => void;
 		placement?: PopoverPlacement;
 		/** Predefined position labels offered for players (the situation's sport). */
 		positions?: PositionCatalog;
@@ -30,8 +37,10 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 	let {
 		element,
 		anchor,
+		bendIndex = null,
 		actions,
 		onClose,
+		onEditShape,
 		placement = new PopoverPlacement(),
 		positions = PositionCatalog.forSport("floorball"),
 	}: Props = $props();
@@ -47,10 +56,17 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 		anchor ? placement.place(anchor, size, { width: viewportWidth, height: viewportHeight }) : null,
 	);
 	const openFor = $derived(element?.id ?? null);
+	const arrow = $derived(element instanceof ArrowElement ? element : null);
+	const noun = $derived(arrow ? "arrow" : "marker");
+	const kinds = $derived(element ? elementCatalog.kindsLike(element.type) : []);
+	const colorLegend = $derived(element?.type === "Player" ? "Player color" : "Color");
+	const activeBend = $derived(arrow && bendIndex !== null && bendIndex < arrow.bends.length ? bendIndex : null);
 
-	// Measure after every content change (e.g. the color row appearing).
+	// Measure after every content change (e.g. the position picker or a bend button appearing).
 	$effect(() => {
 		void element?.type;
+		void arrow?.bends.length;
+		void activeBend;
 		void anchor;
 		if (dialog) {
 			size = { width: dialog.offsetWidth, height: dialog.offsetHeight };
@@ -65,9 +81,20 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 	});
 
 	function pickType(kind: ElementKind) {
-		const type = elementCatalog.usableType(kind);
-		if (element && type) {
-			actions.changeType(element.id, type);
+		if (element) {
+			actions.changeType(element.id, kind.type);
+		}
+	}
+
+	function removeBend() {
+		if (arrow && activeBend !== null) {
+			actions.removeBend(arrow.id, activeBend);
+		}
+	}
+
+	function straighten() {
+		if (arrow) {
+			actions.straightenArrow(arrow.id);
 		}
 	}
 
@@ -107,7 +134,7 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 		onkeydown={handleKeydown}
 	>
 		<header class="header">
-			<h2 id={headingId} class="title">Edit marker</h2>
+			<h2 id={headingId} class="title">Edit {noun}</h2>
 			<button type="button" class="icon-btn" onclick={onClose} aria-label="Close">
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"
 					><path d="M6 6l12 12M18 6L6 18" /></svg
@@ -118,14 +145,13 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 		<fieldset>
 			<legend class="section-title">Type</legend>
 			<ul class="grid">
-				{#each elementCatalog.kinds as kind (kind.type)}
+				{#each kinds as kind (kind.type)}
 					<li>
 						<button
 							type="button"
 							class="type-btn"
 							class:active={element.type === kind.type}
 							aria-pressed={element.type === kind.type}
-							disabled={kind.disabled}
 							onclick={() => pickType(kind)}
 						>
 							<ElementIcon type={kind.type} size={17} />
@@ -136,36 +162,61 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 			</ul>
 		</fieldset>
 
-		{#if element.type === "Player"}
-			<fieldset>
-				<legend class="section-title">Player color</legend>
-				<ul class="swatches">
-					{#each elementCatalog.playerColors as color (color.value)}
-						<li>
-							<button
-								type="button"
-								class="swatch"
-								class:selected={element.color === color.value}
-								aria-pressed={element.color === color.value}
-								aria-label={color.name}
-								style:background={color.value}
-								onclick={() => pickColor(color.value)}
-							></button>
-						</li>
-					{/each}
-				</ul>
-			</fieldset>
+		<fieldset>
+			<legend class="section-title">{colorLegend}</legend>
+			<ul class="swatches">
+				{#each elementCatalog.colors as color (color.value)}
+					<li>
+						<button
+							type="button"
+							class="swatch"
+							class:selected={element.color === color.value}
+							aria-pressed={element.color === color.value}
+							aria-label={color.name}
+							title={color.name}
+							style:background={color.value}
+							onclick={() => pickColor(color.value)}
+						></button>
+					</li>
+				{/each}
+			</ul>
+		</fieldset>
 
-			{#if element instanceof PointElement}
-				<PositionPicker {element} {positions} {actions} />
-			{/if}
+		{#if element instanceof PointElement && element.type === "Player"}
+			<PositionPicker {element} {positions} {actions} />
+		{/if}
+
+		{#if arrow}
+			<fieldset>
+				<legend class="section-title">Bends</legend>
+				<p class="hint">Drag a + on the arrow to add a bend, drag a bend to move it. Double-tap a bend to remove it.</p>
+				{#if onEditShape || activeBend !== null || arrow.bends.length > 0}
+					<ul class="bend-actions">
+						{#if onEditShape}
+							<li>
+								<button type="button" class="action-btn" onclick={onEditShape}>Edit shape</button>
+							</li>
+						{/if}
+						{#if activeBend !== null}
+							<li>
+								<button type="button" class="action-btn" onclick={removeBend}>Remove bend</button>
+							</li>
+						{/if}
+						{#if arrow.bends.length > 0}
+							<li>
+								<button type="button" class="action-btn" onclick={straighten}>Straighten</button>
+							</li>
+						{/if}
+					</ul>
+				{/if}
+			</fieldset>
 		{/if}
 
 		<button type="button" class="delete-btn" onclick={remove}>
 			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 				<path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
 			</svg>
-			Delete marker
+			Delete {noun}
 		</button>
 	</dialog>
 {/if}
@@ -270,11 +321,6 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 		font-family: inherit;
 	}
 
-	.type-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
 	.type-btn.active {
 		background: var(--accent);
 		color: var(--accent-contrast);
@@ -287,8 +333,35 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 	}
 
 	.swatches {
-		display: flex;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, var(--touch-target));
 		gap: 8px;
+	}
+
+	.hint {
+		margin: 0 0 10px;
+		font-size: 11px;
+		line-height: 1.4;
+		color: var(--text-muted);
+	}
+
+	.bend-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.action-btn {
+		min-height: var(--touch-target);
+		padding: 0 14px;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
+		background: var(--bg-surface);
+		color: var(--text);
+		font-family: inherit;
+		font-size: 13px;
+		font-weight: 500;
+		cursor: pointer;
 	}
 
 	.swatch {
@@ -301,7 +374,9 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 	}
 
 	.swatch.selected {
-		box-shadow: 0 0 0 2px var(--accent);
+		box-shadow:
+			0 0 0 2px var(--bg-surface),
+			0 0 0 4px var(--accent);
 	}
 
 	.delete-btn {

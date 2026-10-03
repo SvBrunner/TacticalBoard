@@ -1,4 +1,4 @@
-import type { Point } from "$lib/commands/Point";
+import type { Point } from "$lib/model/Point";
 
 /** Extent of one item along the strip's main axis (CSS px, in the list's scrollable content coordinates). */
 export interface Slot {

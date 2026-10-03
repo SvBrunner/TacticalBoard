@@ -11,6 +11,10 @@ import { FakeResizeObserver } from "$lib/testing/FakeResizeObserver";
 import type { Shape } from "konva/lib/Shape";
 import type { PointElement } from "$lib/model/elements/PointElement";
 import EditorPage from "./+page.svelte";
+import { goto } from "$app/navigation";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+
+vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
 
 /** Lets pending promise continuations and the resulting DOM updates run. */
 async function settle() {
@@ -32,6 +36,7 @@ describe("editor page", () => {
 		FakeResizeObserver.reset();
 		vi.stubGlobal("ResizeObserver", FakeResizeObserver);
 		notifications.clear();
+		vi.mocked(goto).mockClear();
 		situationEditor.createNew({ title: "Breakout", fieldType: "full" });
 	});
 
@@ -419,5 +424,189 @@ describe("editor page", () => {
 		expect(click).toHaveBeenCalledOnce();
 		expect(situationEditor.isDirty()).toBe(false);
 		click.mockRestore();
+	});
+
+	describe("badge: back to the start page", () => {
+		const badge = () => within(screen.getByRole("banner")).getByRole("link", { name: "Start page" });
+
+		it("navigates right away when nothing is unsaved and closes the situation", async () => {
+			render(EditorPage);
+
+			await fireEvent.click(badge());
+			await settle();
+
+			expect(goto).toHaveBeenCalledWith("/");
+			expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+			expect(situationEditor.isSituationOpen()).toBe(false);
+		});
+
+		it("asks 'Discard changes?' first when there are unsaved changes; Discard leaves", async () => {
+			situationEditor.addElement(1, 1, "red", "Player");
+			render(EditorPage);
+
+			await fireEvent.click(badge());
+			await settle();
+			expect(screen.getByRole("alertdialog", { name: "Discard changes?" })).toHaveAttribute("open");
+			expect(goto).not.toHaveBeenCalled();
+
+			await fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+			await settle();
+
+			expect(goto).toHaveBeenCalledWith("/");
+			expect(situationEditor.isDirty()).toBe(false);
+			expect(situationEditor.isSituationOpen()).toBe(false);
+		});
+
+		it("Cancel stays in the editor with the unsaved changes", async () => {
+			situationEditor.addElement(1, 1, "red", "Player");
+			render(EditorPage);
+
+			await fireEvent.click(badge());
+			await settle();
+			await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+			await settle();
+
+			expect(goto).not.toHaveBeenCalled();
+			expect(situationEditor.isDirty()).toBe(true);
+			expect(get(situationEditor.elements)).toHaveLength(1);
+		});
+	});
+
+	describe("arrows", () => {
+		function pointer(clientX: number, clientY: number) {
+			return { button: 0, shiftKey: false, pointerType: "touch", pointerId: 1, clientX, clientY, preventDefault: () => {} };
+		}
+
+		function windowPointer(type: string, clientX: number, clientY: number) {
+			const event = new MouseEvent(type, { clientX, clientY });
+			Object.defineProperty(event, "pointerId", { value: 1 });
+			window.dispatchEvent(event);
+		}
+
+		async function showBoard() {
+			render(EditorPage);
+			FakeResizeObserver.resize(screen.getByRole("region", { name: "Field" }), 1000, 500); // scale 0.5
+			await tick();
+			return Konva.stages[Konva.stages.length - 1];
+		}
+
+		async function selectTool(name: string) {
+			await fireEvent.click(within(screen.getByRole("complementary", { name: "Tools" })).getByRole("button", { name }));
+		}
+
+		it("draws a black pass by dragging with the Pass tool; players can't be dragged meanwhile", async () => {
+			const player = situationEditor.addElement(500, 250, "red", "Player");
+			const stage = await showBoard();
+			await selectTool("Pass");
+
+			expect(stage.findOne(`#${player}`)!.draggable()).toBe(false);
+			stage.findOne(`#${player}`)!.fire("pointerdown", { evt: pointer(250, 125) }, true);
+			windowPointer("pointermove", 400, 125);
+			windowPointer("pointerup", 450, 200);
+			await tick();
+
+			const arrow = get(situationEditor.elements).find((element) => element instanceof ArrowElement) as ArrowElement;
+			expect(arrow).toMatchObject({ type: "Pass", start: { x: 500, y: 250 }, end: { x: 900, y: 400 } });
+			expect(arrow.color).toBe("oklch(15% 0 0)");
+			expect(stage.find(".Arrow")).toHaveLength(1);
+			expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		});
+
+		it("Escape and a tool change drop a pending start point", async () => {
+			const stage = await showBoard();
+			await selectTool("Shot");
+
+			stage.fire("pointerdown", { evt: pointer(100, 100) });
+			windowPointer("pointerup", 100, 100);
+			await tick();
+			expect(stage.find(".ArrowDraftStart")).toHaveLength(1);
+
+			await fireEvent.keyDown(document.body, { key: "Escape" });
+			await tick();
+			expect(stage.find(".ArrowDraftStart")).toHaveLength(0);
+
+			stage.fire("pointerdown", { evt: pointer(100, 100) });
+			windowPointer("pointerup", 100, 100);
+			await selectTool("Run");
+			await tick();
+			expect(stage.find(".ArrowDraftStart")).toHaveLength(0);
+		});
+
+		it("the arrow popover changes type and color, straightens and deletes; each change is one undo step", async () => {
+			const id = situationEditor.addArrow({ x: 200, y: 200 }, { x: 800, y: 200 }, "oklch(15% 0 0)", "Pass");
+			situationEditor.addBend(id, 0, { x: 500, y: 400 });
+			const stage = await showBoard();
+
+			stage.findOne(`#${id}`)!.fire("pointerclick", { evt: pointer(250, 100) }, true);
+			await tick();
+			const dialog = screen.getByRole("dialog", { name: "Edit arrow" });
+			expect(stage.find(".ArrowHandle")).toHaveLength(5);
+
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Run" }));
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Team B" }));
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Straighten" }));
+			await tick();
+
+			const arrow = () => get(situationEditor.elements)[0] as ArrowElement;
+			expect(arrow()).toMatchObject({ type: "Run", color: "oklch(64% 0.16 32)", bends: [] });
+			expect(within(dialog).queryByRole("button", { name: "Straighten" })).not.toBeInTheDocument();
+
+			situationEditor.undo();
+			expect(arrow().bends).toHaveLength(1);
+
+			stage.findOne(`#${id}`)!.fire("pointerclick", { evt: pointer(250, 100) }, true);
+			await tick();
+			await fireEvent.click(screen.getByRole("button", { name: /delete arrow/i }));
+			expect(get(situationEditor.elements)).toEqual([]);
+		});
+
+		it("a tapped bend handle can be removed from the popover", async () => {
+			const id = situationEditor.addArrow({ x: 200, y: 200 }, { x: 800, y: 200 }, "black", "Pass");
+			situationEditor.addBend(id, 0, { x: 400, y: 400 });
+			situationEditor.addBend(id, 1, { x: 600, y: 400 });
+			const stage = await showBoard();
+			stage.findOne(`#${id}`)!.fire("pointerclick", { evt: pointer(250, 100) }, true);
+			await tick();
+
+			const bend = stage.find(".ArrowHandle").find((node) => node.getAttr("handleKey") === "bend-1")!;
+			bend.fire("pointerclick", { evt: pointer(300, 200) }, true);
+			await tick();
+			await fireEvent.click(screen.getByRole("button", { name: "Remove bend" }));
+			await tick();
+
+			expect((get(situationEditor.elements)[0] as ArrowElement).bends).toEqual([{ x: 400, y: 400 }]);
+			expect(screen.queryByRole("button", { name: "Remove bend" })).not.toBeInTheDocument();
+			expect(get(situationEditor.history).undoLabel).toBe("Remove bend from Pass");
+		});
+
+		it("Edit shape hides the popover and keeps the handles; Close clears them", async () => {
+			const id = situationEditor.addArrow({ x: 200, y: 200 }, { x: 800, y: 200 }, "black", "Pass");
+			const stage = await showBoard();
+			stage.findOne(`#${id}`)!.fire("pointerclick", { evt: pointer(250, 100) }, true);
+			await tick();
+
+			await fireEvent.click(screen.getByRole("button", { name: "Edit shape" }));
+			await tick();
+
+			expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+			expect(stage.find(".ArrowHandle")).toHaveLength(3);
+
+			stage.findOne(`#${id}`)!.fire("pointerclick", { evt: pointer(250, 100) }, true);
+			await tick();
+			await fireEvent.click(screen.getByRole("button", { name: "Close" }));
+			await tick();
+			expect(stage.find(".ArrowHandle")).toHaveLength(0);
+		});
+
+		it("markers get a color in their popover too", async () => {
+			const id = situationEditor.addElement(500, 250, "grey", "Triangle");
+			const stage = await showBoard();
+
+			stage.findOne(`#${id}`)!.fire("pointerclick", { evt: pointer(250, 125) }, true);
+			await tick();
+			await fireEvent.click(within(screen.getByRole("group", { name: "Color" })).getByRole("button", { name: "Team C" }));
+
+			expect(get(situationEditor.elements)[0].color).toBe("oklch(64% 0.14 150)");
+		});
 	});
 });

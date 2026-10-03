@@ -7,24 +7,27 @@ import {
 	UnsupportedFormatVersionError,
 } from "./SituationImportErrors";
 import { MigrationV1ToV2 } from "./MigrationV1ToV2";
+import { MigrationV2ToV3 } from "./MigrationV2ToV3";
 import { SituationFileValidator } from "./SituationFileValidator";
 import fixtureV1 from "./__fixtures__/situation-v1.json";
-import fixture from "./__fixtures__/situation-v2.json";
+import fixtureV2 from "./__fixtures__/situation-v2.json";
+import fixture from "./__fixtures__/situation-v3.json";
 
 function file(formatVersion: unknown, extra: Record<string, unknown> = {}) {
 	return { format: "tacticalboard.situation", formatVersion, ...extra };
 }
 
 describe("SituationFileMigrator", () => {
-	it("registers the v1 → v2 migration", () => {
-		expect(SITUATION_FILE_MIGRATIONS).toHaveLength(1);
+	it("registers the v1 → v2 and v2 → v3 migrations", () => {
+		expect(SITUATION_FILE_MIGRATIONS).toHaveLength(2);
 		expect(SITUATION_FILE_MIGRATIONS[0]).toBeInstanceOf(MigrationV1ToV2);
+		expect(SITUATION_FILE_MIGRATIONS[1]).toBeInstanceOf(MigrationV2ToV3);
 	});
 
-	it("upgrades a v1 file to v2: every element gets an empty label", () => {
+	it("upgrades a v1 file to v3: every element gets an empty label", () => {
 		const migrated = new SituationFileMigrator().migrate(fixtureV1);
 
-		expect(migrated.formatVersion).toBe(2);
+		expect(migrated.formatVersion).toBe(3);
 		const frames = (migrated.situation as { frames: { elements: { label: unknown }[] }[] }).frames;
 		expect(frames.flatMap((frame) => frame.elements.map((element) => element.label))).toEqual(
 			Array(7).fill(""),
@@ -40,15 +43,19 @@ describe("SituationFileMigrator", () => {
 		expect(fixtureV1).toEqual(copy);
 	});
 
+	it("upgrades a v2 file to v3 without changing its content", () => {
+		expect(new SituationFileMigrator().migrate(fixtureV2)).toEqual({ ...fixtureV2, formatVersion: 3 });
+	});
+
 	it("passes a current-version file through unchanged", () => {
 		expect(new SituationFileMigrator().migrate(fixture)).toEqual(fixture);
 	});
 
 	it("rejects a newer format version", () => {
-		const migrate = () => new SituationFileMigrator().migrate(file(3));
+		const migrate = () => new SituationFileMigrator().migrate(file(4));
 
 		expect(migrate).toThrow(UnsupportedFormatVersionError);
-		expect(migrate).toThrow(/version 3/);
+		expect(migrate).toThrow(/version 4/);
 	});
 
 	it.each([[undefined], [0], [-1], [1.5], ["1"], [null]])("rejects a missing or invalid version %j", (version) => {

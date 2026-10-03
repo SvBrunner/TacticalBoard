@@ -7,9 +7,11 @@
 | Frame | One step of a situation. A new frame starts as a copy of the current one (inserted after it); elements keep their identity across frames. |
 | Frame strip | The numbered row of frame thumbnails below the board, used to switch, add, delete, and reorder frames. |
 | Details panel | The panel next to (desktop), below (portrait tablet) or above (phones, collapsible) the board with the situation's title and description and the current frame's description. |
-| Element | An item on a frame: a player, the ball, a marker, or (later) an arrow. Has a stable ID that stays the same across the frames of a situation, so the same player in two frames is the same element. |
+| Element | An item on a frame: a player, the ball, a marker, or an arrow. Has a stable ID that stays the same across the frames of a situation, so the same player in two frames is the same element. |
 | Position label | Short text (at most 2 letters or digits) shown on a player, e.g. a position code like C (Center), LV (Linker Verteidiger), or a jersey number. Chosen from a predefined list per sport or typed freely; set per frame. |
 | Marker | A generic shape (rectangle, triangle, circle) with no fixed meaning. |
+| Arrow | An element showing a movement: a **pass** (dashed line), a **run** (wavy line), or a **shot** (thick line), drawn from a start to an end point with an arrowhead at the end. Free: not attached to players. Its type can only change to another arrow type. |
+| Bend point | A point an arrow's curve passes through between its start and end. An arrow without bend points is straight; it can have any number of them, added, moved and removed by the user. |
 | Team code | Unique, system-generated 6-character identifier of a team (A–Z, 0–9), used to find it. |
 | Team | A group of users who share access to boards and folders, with per-member roles. |
 | Folder | Groups situations in a team or in a user's personal area. One level only, no subfolders. |

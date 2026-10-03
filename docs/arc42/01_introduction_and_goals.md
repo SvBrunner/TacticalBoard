@@ -23,11 +23,11 @@ Delivery order: the board editor is the MVP and ships first, with local JSON exp
 - Elements: players, ball, generic markers (rectangle, triangle, circle — no fixed meaning; the user interprets them).
 - Players are labelled with a position abbreviation (e.g. C, F, V, G).
 - Every element can be colored freely. There is no built-in team/side concept.
-- Pass, run, and shot arrows: placed as straight arrows (start + end) and can afterwards be bent into a curve via a control point. The three types differ in line style.
+- Pass, run, and shot arrows: drawn as straight arrows (start + end, by press-and-drag or by tapping start and end) and can afterwards be bent into a smooth curve through any number of bend points, which can be moved and removed again. The three types differ in line style (pass dashed, run wavy, shot thick); all have the same arrowhead at the end. Arrows are free (not attached to players), have no label, are always drawn below players and markers, and are copied into a new frame like every other element.
 - Undo/redo.
 - Export a situation as JSON, and import it again. Importing always creates a new situation (new situation ID, `createdAt`/`updatedAt` set to the import time; frame and element IDs are kept) and replaces the editor content.
 - The app opens on a start page offering "New situation" and "Import"; both lead into the editor. (Listing saved situations and teams there follows with storage in Phase 2.)
-- Unsaved changes (in the MVP: not exported since the last edit) are protected: starting a new situation or importing asks "Discard changes?" first, and leaving or reloading the page triggers the browser's warning.
+- Unsaved changes (in the MVP: not exported since the last edit) are protected: starting a new situation, importing, or going back to the start page (the badge in the editor header) asks "Discard changes?" first, and leaving or reloading the page triggers the browser's warning.
 - Export a situation as an animated GIF/video (frames as a slideshow).
 - Fully usable by touch on phones and tablets, not only on desktop.
 

@@ -7,6 +7,7 @@ import { get } from "svelte/store";
 function props(overrides: Record<string, unknown> = {}) {
 	return {
 		title: "Board",
+		onHome: vi.fn(),
 		onNew: vi.fn(),
 		onExport: vi.fn(),
 		onLoadFile: vi.fn(),
@@ -196,5 +197,38 @@ describe("TopBar", () => {
 			expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
 			expect(screen.getByRole("button", { name: "Redo" })).toBeDisabled();
 		});
+	});
+
+	describe("badge (back to the start page)", () => {
+		it("is a link to the start page named Start page", () => {
+			render(TopBar, { props: props() });
+
+			const link = within(screen.getByRole("banner")).getByRole("link", { name: "Start page" });
+			expect(link).toHaveAttribute("href", "/");
+		});
+
+		it("a click goes through onHome instead of following the link", async () => {
+			const onHome = vi.fn();
+			render(TopBar, { props: props({ onHome }) });
+
+			const notPrevented = await fireEvent.click(screen.getByRole("link", { name: "Start page" }));
+
+			expect(onHome).toHaveBeenCalledOnce();
+			expect(notPrevented).toBe(false);
+		});
+
+		it.each([["ctrlKey"], ["metaKey"], ["shiftKey"], ["altKey"]])(
+			"a click with %s is left to the browser (e.g. open in a new tab)",
+			async (modifier) => {
+				const onHome = vi.fn();
+				render(TopBar, { props: props({ onHome }) });
+				const link = screen.getByRole("link", { name: "Start page" });
+				link.addEventListener("click", (event) => event.preventDefault()); // jsdom can't navigate
+
+				await fireEvent.click(link, { [modifier]: true });
+
+				expect(onHome).not.toHaveBeenCalled();
+			},
+		);
 	});
 });

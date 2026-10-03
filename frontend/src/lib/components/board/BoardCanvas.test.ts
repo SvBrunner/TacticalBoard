@@ -4,7 +4,11 @@ import { tick } from "svelte";
 import Konva from "konva";
 import type { Shape } from "konva/lib/Shape";
 import BoardCanvas from "./BoardCanvas.svelte";
-import { get } from "svelte/store";
+import { get, writable } from "svelte/store";
+import type { ArrowDraft } from "$lib/board/ArrowGestures";
+import { ArrowHandle } from "$lib/board/ArrowHandle";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { ArrowGeometry } from "$lib/model/elements/ArrowGeometry";
 import { BoardInteractionController } from "$lib/board/BoardInteractionController";
 import { BoardViewport } from "$lib/board/BoardViewport";
 import { PopoverState } from "$lib/board/PopoverState";
@@ -20,7 +24,14 @@ import { FakeResizeObserver } from "$lib/testing/FakeResizeObserver";
 import { installFakeCanvasContext } from "$lib/testing/fakeCanvasContext";
 import type { Text as KonvaText } from "konva/lib/shapes/Text";
 import type { ScreenRect } from "$lib/board/BoardViewport";
-import { ELEMENT_NODE_NAME, LABEL_NODE_NAME, LABEL_STYLE } from "./Shapes";
+import {
+	ARROW_DRAFT_NODE_NAME,
+	ARROW_HANDLE_NODE_NAME,
+	ARROW_NODE_NAME,
+	ELEMENT_NODE_NAME,
+	LABEL_NODE_NAME,
+	LABEL_STYLE,
+} from "./Shapes";
 
 const player = new PointElement("p1", 500, 250, "red", "Player");
 const ball = new PointElement("b1", 1000, 500, "grey", "Ball");
@@ -34,6 +45,21 @@ function fakeController() {
 		dragMove: vi.fn((point: { x: number; y: number }) => point),
 		dragEnd: vi.fn(),
 		relocatePopover: vi.fn(),
+		pointerDown: vi.fn(),
+		pointerMove: vi.fn(),
+		pointerUp: vi.fn(),
+		pointerCancel: vi.fn(),
+		arrowDragStart: vi.fn(),
+		arrowDragMove: vi.fn((_geometry: unknown, delta: { x: number; y: number }) => delta),
+		arrowDragEnd: vi.fn(),
+		handleDragStart: vi.fn(),
+		handleDragMove: vi.fn((geometry: ArrowGeometry, handle: ArrowHandle, point: { x: number; y: number }) =>
+			handle.apply(geometry, point),
+		),
+		handleDragEnd: vi.fn(),
+		tapHandle: vi.fn(),
+		doubleTapHandle: vi.fn(),
+		arrowDraft: writable<ArrowDraft | null>(null),
 	};
 }
 
@@ -346,6 +372,7 @@ describe("BoardCanvas", () => {
 				popover,
 				bounds: new BoardViewport(),
 				neutralColor: "grey",
+				arrowColor: "black",
 			});
 			const { rerender } = render(BoardCanvas, {
 				props: { elements: get(editor.elements), selectedId: null, controller, viewport: new BoardViewport() },
@@ -550,6 +577,7 @@ describe("BoardCanvas", () => {
 				popover: new PopoverState(),
 				bounds: viewport,
 				neutralColor: "grey",
+				arrowColor: "black",
 			});
 			render(BoardCanvas, { props: { elements: [], selectedId: null, controller, viewport } });
 			await resizeField(1000, 500);
@@ -562,6 +590,501 @@ describe("BoardCanvas", () => {
 			const [placed] = get(editor.elements);
 			expect(placed).toMatchObject({ type: "Ball", x: 1900, y: 900 });
 			selection.destroy();
+		});
+	});
+
+	describe("arrows", () => {
+		const geometry = new ArrowGeometry({ x: 200, y: 200 }, { x: 800, y: 200 }, [{ x: 500, y: 400 }]);
+		const pass = new ArrowElement("a1", "Pass", "black", geometry);
+
+		function arrowShapes(): Shape[] {
+			return stage().find(`.${ARROW_NODE_NAME}`) as Shape[];
+		}
+
+		function handleShapes(): Shape[] {
+			return stage().find(`.${ARROW_HANDLE_NODE_NAME}`) as Shape[];
+		}
+
+		function handle(key: string): Shape {
+			return handleShapes().find((node) => node.getAttr("handleKey") === key)!;
+		}
+
+		/** The points an arrow shape draws through: the first moveTo is its start, the last its end (the arrowhead tip). */
+		function drawn(shape: Shape): { start: unknown; end: unknown; lineTos: number } {
+			const moves: number[][] = [];
+			let lineTos = 0;
+			const context = new Proxy(
+				{ moveTo: (x: number, y: number) => moves.push([x, y]), lineTo: () => lineTos++ },
+				{ get: (target, key) => (key in target ? target[key as keyof typeof target] : () => undefined), set: () => true },
+			);
+			shape.sceneFunc()(context as never, shape);
+			return { start: moves[0], end: moves.at(-1), lineTos };
+		}
+
+		function pointerAt(clientX: number, clientY: number, overrides: Record<string, unknown> = {}) {
+			return pointerEvent({ clientX, clientY, pointerId: 1, ...overrides });
+		}
+
+		function windowPointer(type: string, clientX: number, clientY: number, pointerId = 1) {
+			const event = new MouseEvent(type, { clientX, clientY, bubbles: true });
+			Object.defineProperty(event, "pointerId", { value: pointerId });
+			window.dispatchEvent(event);
+		}
+
+		it("draws arrows in a group below the point elements", async () => {
+			renderCanvas({ elements: [player, pass, ball] });
+			await resizeField(1000, 500);
+
+			const [arrow] = arrowShapes();
+			const [first] = elementShapes();
+			expect(arrow.id()).toBe("a1");
+			expect(arrow.getParent()!.name()).toBe("arrows");
+			expect(first.getParent()!.name()).toBe("points");
+			expect(arrow.getParent()!.zIndex()).toBeLessThan(first.getParent()!.zIndex());
+			expect(arrow.getLayer()).toBe(first.getLayer());
+		});
+
+		it("draws the arrow in scene units at the node's origin, from its start to its end", async () => {
+			renderCanvas({ elements: [pass] });
+			await resizeField(1000, 500);
+
+			const [arrow] = arrowShapes();
+			expect(arrow.position()).toEqual({ x: 0, y: 0 });
+			expect(arrow.getAttr("elementType")).toBe("Pass");
+			expect(drawn(arrow).start).toEqual([200, 200]);
+			expect(drawn(arrow).end).toEqual([800, 200]);
+		});
+
+		it("gives every arrow a hit stroke of at least 44 CSS px along its curve", async () => {
+			renderCanvas({ elements: [pass] });
+			await resizeField(400, 200); // scale 0.2
+
+			const [arrow] = arrowShapes();
+			expect((arrow.hitStrokeWidth() as number) * 0.2).toBeGreaterThanOrEqual(44 - 1e-9);
+			const context = { beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), strokeShape: vi.fn() };
+			arrow.hitFunc()(context as never, arrow);
+			expect(context.moveTo).toHaveBeenCalledWith(200, 200);
+			expect(context.lineTo).toHaveBeenLastCalledWith(800, 200);
+			expect(context.strokeShape).toHaveBeenCalledWith(arrow);
+		});
+
+		it("follows type and shape changes", async () => {
+			const { rerender } = renderCanvas({ elements: [pass] });
+			await resizeField(1000, 500);
+
+			await rerender({ elements: [pass.withType("Run").withGeometry(geometry.translate(0, 100))] });
+
+			const [arrow] = arrowShapes();
+			expect(arrow.getAttr("elementType")).toBe("Run");
+			expect(drawn(arrow).start).toEqual([200, 300]);
+			expect(drawn(arrow).lineTos).toBeGreaterThan(100); // the wave
+		});
+
+		describe("handles", () => {
+			it("are shown only for the selected arrow: add-bend handles, start, bends, end", async () => {
+				const { rerender } = renderCanvas({ elements: [pass, player] });
+				await resizeField(1000, 500);
+				expect(handleShapes()).toHaveLength(0);
+
+				await rerender({ selectedId: "p1" });
+				expect(handleShapes()).toHaveLength(0);
+
+				await rerender({ selectedId: "a1" });
+				expect(handleShapes().map((node) => node.getAttr("handleKey"))).toEqual([
+					"insert-0",
+					"insert-1",
+					"start-0",
+					"bend-0",
+					"end-0",
+				]);
+				expect(handle("start-0").position()).toEqual({ x: 200, y: 200 });
+				expect(handle("bend-0").position()).toEqual({ x: 500, y: 400 });
+				expect(handle("end-0").position()).toEqual({ x: 800, y: 200 });
+				expect(handle("insert-0").position()).toEqual(geometry.segmentMidpoint(0));
+			});
+
+			it("sit above the point elements and are draggable", async () => {
+				renderCanvas({ elements: [pass, player], selectedId: "a1" });
+				await resizeField(1000, 500);
+
+				const overlay = handle("end-0").getParent()!.getParent()!;
+				expect(overlay.name()).toBe("overlay");
+				expect(overlay.zIndex()).toBeGreaterThan(elementShapes()[0].getParent()!.zIndex());
+				expect(handleShapes().every((node) => node.draggable())).toBe(true);
+			});
+
+			it("keep the add-bend handles below the point handles, also after bends were added", async () => {
+				const { rerender } = renderCanvas({ elements: [pass], selectedId: "a1" });
+				await resizeField(1000, 500);
+
+				await rerender({ elements: [pass.withGeometry(geometry.withBendInserted(0, { x: 300, y: 300 }))] });
+
+				const inserts = handleShapes().filter((node) => node.getAttr("handleKind") === "insert");
+				const points = handleShapes().filter((node) => node.getAttr("handleKind") !== "insert");
+				expect(inserts).toHaveLength(3);
+				expect(points).toHaveLength(4);
+				expect(new Set(inserts.map((node) => node.getParent()!.name()))).toEqual(new Set(["insert-handles"]));
+				expect(new Set(points.map((node) => node.getParent()!.name()))).toEqual(new Set(["point-handles"]));
+				expect(inserts[0].getParent()!.zIndex()).toBeLessThan(points[0].getParent()!.zIndex());
+			});
+
+			it("keep their size on screen and get a hit circle of at least 44 CSS px", async () => {
+				renderCanvas({ elements: [pass], selectedId: "a1" });
+				await resizeField(400, 200); // scale 0.2
+
+				const context = { beginPath: vi.fn(), arc: vi.fn(), closePath: vi.fn(), fillStrokeShape: vi.fn() };
+				handle("end-0").hitFunc()(context as never, handle("end-0"));
+				expect(context.arc.mock.calls[0][2] * 0.2 * 2).toBeGreaterThanOrEqual(44 - 1e-9);
+				expect(handle("end-0").strokeScaleEnabled()).toBe(false);
+			});
+
+			it("highlight the active bend", async () => {
+				renderCanvas({ elements: [pass], selectedId: "a1", selectedBend: 0 });
+				await resizeField(1000, 500);
+
+				expect(handle("bend-0").fill()).not.toBe(handle("end-0").fill());
+			});
+
+			it("dragging one reports the drag, previews the shape and hides the other handles", async () => {
+				const { controller } = renderCanvas({ elements: [pass], selectedId: "a1" });
+				await resizeField(1000, 500);
+				const end = handle("end-0");
+
+				end.fire("dragstart", {});
+				end.position({ x: 900, y: 500 });
+				end.fire("dragmove", {});
+				await tick();
+
+				expect(controller.handleDragStart).toHaveBeenCalledWith("a1");
+				expect(controller.handleDragMove).toHaveBeenCalledWith(geometry, expect.objectContaining({ key: "end-0" }), { x: 900, y: 500 });
+				expect(handleShapes().map((node) => node.getAttr("handleKey"))).toEqual(["end-0"]);
+				expect(drawn(arrowShapes()[0]).end).toEqual([900, 500]);
+
+				end.fire("dragend", {});
+				await tick();
+
+				expect(controller.handleDragEnd).toHaveBeenCalledWith("a1", geometry, expect.objectContaining({ key: "end-0" }), {
+					x: 900,
+					y: 500,
+				});
+				expect(handleShapes()).toHaveLength(5);
+				expect(drawn(arrowShapes()[0]).end).toEqual([800, 200]); // until the model changes
+			});
+
+			it("dragging an add-bend handle previews the new bend under the pointer", async () => {
+				const { controller } = renderCanvas({ elements: [pass], selectedId: "a1" });
+				await resizeField(1000, 500);
+				const insert = handle("insert-1");
+
+				insert.fire("dragstart", {});
+				insert.position({ x: 700, y: 50 });
+				insert.fire("dragmove", {});
+				await tick();
+
+				expect(insert.position()).toEqual({ x: 700, y: 50 });
+				insert.fire("dragend", {});
+				expect(controller.handleDragEnd).toHaveBeenCalledWith("a1", geometry, expect.objectContaining({ key: "insert-1" }), {
+					x: 700,
+					y: 50,
+				});
+			});
+
+			it("a tap reports the handle with the arrow's on-screen bounds", async () => {
+				const { controller } = renderCanvas({ elements: [pass], selectedId: "a1" });
+				await resizeField(1000, 500); // scale 0.5
+
+				handle("bend-0").fire("pointerclick", { evt: pointerEvent() }, true);
+
+				const [id, shape, tapped, anchor] = controller.tapHandle.mock.calls[0];
+				expect(id).toBe("a1");
+				expect(shape).toEqual(geometry);
+				expect(tapped.key).toBe("bend-0");
+				expect(anchor.x).toBeCloseTo(100);
+				expect(anchor.width).toBeCloseTo(300);
+				expect(controller.tapField).not.toHaveBeenCalled();
+				expect(controller.tapElement).not.toHaveBeenCalled();
+			});
+
+			it("a double tap reports the handle", async () => {
+				const { controller } = renderCanvas({ elements: [pass], selectedId: "a1" });
+				await resizeField(1000, 500);
+
+				handle("bend-0").fire("pointerdblclick", { evt: pointerEvent() }, true);
+				stage().fire("pointerdblclick", { evt: pointerEvent() });
+
+				expect(controller.doubleTapHandle).toHaveBeenCalledOnce();
+				expect(controller.doubleTapHandle).toHaveBeenCalledWith("a1", expect.objectContaining({ key: "bend-0" }));
+			});
+		});
+
+		describe("selecting and moving", () => {
+			it("a tap on an arrow reports it with its on-screen bounds as anchor", async () => {
+				const { controller } = renderCanvas({ elements: [pass] });
+				await resizeField(1000, 500); // scale 0.5
+
+				arrowShapes()[0].fire("pointerclick", { evt: pointerEvent() }, true);
+
+				const [id, anchor, modifiers] = controller.tapElement.mock.calls[0];
+				expect(id).toBe("a1");
+				expect(anchor.x).toBeCloseTo(100);
+				expect(anchor.y).toBeCloseTo(100);
+				expect(anchor.width).toBeCloseTo(300);
+				expect(anchor.height).toBeGreaterThan(90);
+				expect(modifiers).toEqual({ shiftKey: false });
+			});
+
+			it("a context menu on an arrow reports it", async () => {
+				const { controller } = renderCanvas({ elements: [pass] });
+				await resizeField(1000, 500);
+
+				arrowShapes()[0].fire("contextmenu", { evt: pointerEvent() }, true);
+
+				expect(controller.contextMenu).toHaveBeenCalledWith("a1", expect.objectContaining({ x: expect.any(Number) }));
+			});
+
+			it("dragging an arrow moves it as a whole, limited by the controller, and resets the node after the drop", async () => {
+				const { controller } = renderCanvas({ elements: [pass], selectedId: "a1" });
+				controller.arrowDragMove.mockReturnValue({ x: 100, y: 0 });
+				await resizeField(1000, 500);
+				const [arrow] = arrowShapes();
+
+				arrow.fire("dragstart", {});
+				await tick();
+				expect(controller.arrowDragStart).toHaveBeenCalledWith("a1");
+				expect(handleShapes()).toHaveLength(0);
+
+				arrow.position({ x: 150, y: 30 });
+				arrow.fire("dragmove", {});
+				expect(controller.arrowDragMove).toHaveBeenCalledWith(geometry, { x: 150, y: 30 });
+				expect(arrow.position()).toEqual({ x: 100, y: 0 });
+
+				arrow.fire("dragend", {});
+				await tick();
+				expect(controller.arrowDragEnd).toHaveBeenCalledWith("a1", geometry, { x: 100, y: 0 });
+				expect(arrow.position()).toEqual({ x: 0, y: 0 });
+				expect(handleShapes()).toHaveLength(5);
+			});
+
+			it("re-anchors the popover at an arrow's bounds", async () => {
+				const { controller } = renderCanvas({ elements: [pass] });
+				await resizeField(1000, 500);
+
+				const anchor = controller.relocatePopover.mock.calls.at(-1)![0]("a1")!;
+				expect(anchor.x).toBeCloseTo(100);
+				expect(anchor.width).toBeCloseTo(300);
+			});
+		});
+
+		describe("with an arrow tool active", () => {
+			it("point elements and arrows are not draggable; handles still are", async () => {
+				renderCanvas({ elements: [pass, player], selectedId: "a1", arrowTool: "Shot" });
+				await resizeField(1000, 500);
+
+				expect(elementShapes()[0].draggable()).toBe(false);
+				expect(arrowShapes()[0].draggable()).toBe(false);
+				expect(handleShapes().every((node) => node.draggable())).toBe(true);
+			});
+
+			it("are draggable again once the tool is no arrow tool", async () => {
+				const { rerender } = renderCanvas({ elements: [pass, player], arrowTool: "Shot" });
+				await resizeField(1000, 500);
+
+				await rerender({ arrowTool: null });
+
+				expect(elementShapes()[0].draggable()).toBe(true);
+				expect(arrowShapes()[0].draggable()).toBe(true);
+			});
+
+			it("a press on the empty field reports the pointer in scene units", async () => {
+				const { controller } = renderCanvas({ arrowTool: "Pass" });
+				await resizeField(1000, 500); // scale 0.5
+
+				stage().fire("pointerdown", { evt: pointerAt(100, 60, { pointerId: 7 }) });
+
+				expect(controller.pointerDown).toHaveBeenCalledWith(
+					{ pointerId: 7, scene: { x: 200, y: 120 }, screen: { x: 100, y: 60 }, scale: 0.5 },
+					null,
+				);
+			});
+
+			it("a press on an element or an arrow reports its id", async () => {
+				const { controller } = renderCanvas({ elements: [player, pass], arrowTool: "Pass" });
+				await resizeField(1000, 500);
+
+				elementShapes()[0].fire("pointerdown", { evt: pointerAt(250, 125) }, true);
+				arrowShapes()[0].fire("pointerdown", { evt: pointerAt(250, 100) }, true);
+
+				expect(controller.pointerDown.mock.calls.map((call) => call[1])).toEqual(["p1", "a1"]);
+			});
+
+			it("a press on a handle or with a secondary button is not reported", async () => {
+				const { controller } = renderCanvas({ elements: [pass], selectedId: "a1", arrowTool: "Pass" });
+				await resizeField(1000, 500);
+
+				handle("end-0").fire("pointerdown", { evt: pointerAt(400, 100) }, true);
+				stage().fire("pointerdown", { evt: pointerAt(100, 60, { button: 2 }) });
+
+				expect(controller.pointerDown).not.toHaveBeenCalled();
+			});
+
+			it("moves, releases and cancels anywhere in the window are reported", async () => {
+				const { controller } = renderCanvas({ arrowTool: "Pass" });
+				await resizeField(1000, 500);
+
+				windowPointer("pointermove", 300, 100);
+				windowPointer("pointerup", 1200, 100);
+				window.dispatchEvent(new Event("pointercancel"));
+
+				expect(controller.pointerMove).toHaveBeenCalledWith(
+					expect.objectContaining({ pointerId: 1, scene: { x: 600, y: 200 }, screen: { x: 300, y: 100 } }),
+				);
+				expect(controller.pointerUp).toHaveBeenCalledWith(
+					expect.objectContaining({ scene: { x: 2400, y: 200 } }),
+					{ shiftKey: false },
+					expect.any(Function),
+				);
+				expect(controller.pointerUp.mock.calls[0][2]("missing")).toBeNull();
+				expect(controller.pointerCancel).toHaveBeenCalledOnce();
+			});
+
+			it("nothing is reported without an arrow tool", async () => {
+				const { controller } = renderCanvas({ elements: [player] });
+				await resizeField(1000, 500);
+
+				stage().fire("pointerdown", { evt: pointerAt(100, 60) });
+				windowPointer("pointermove", 300, 100);
+				windowPointer("pointerup", 300, 100);
+				window.dispatchEvent(new Event("pointercancel"));
+
+				expect(controller.pointerDown).not.toHaveBeenCalled();
+				expect(controller.pointerMove).not.toHaveBeenCalled();
+				expect(controller.pointerUp).not.toHaveBeenCalled();
+				expect(controller.pointerCancel).not.toHaveBeenCalled();
+			});
+
+			it("shows the start marker and the rubber band of the arrow being drawn, without hit areas", async () => {
+				const { controller } = renderCanvas({ arrowTool: "Run" });
+				await resizeField(1000, 500);
+				const draftNodes = () => stage().find(`.${ARROW_DRAFT_NODE_NAME}`) as Shape[];
+				expect(draftNodes()).toHaveLength(0);
+
+				controller.arrowDraft.set({ start: { x: 100, y: 100 }, end: null });
+				await tick();
+				expect(draftNodes()).toHaveLength(1);
+				expect(draftNodes()[0].position()).toEqual({ x: 100, y: 100 });
+
+				controller.arrowDraft.set({ start: { x: 100, y: 100 }, end: { x: 600, y: 300 } });
+				await tick();
+				expect(draftNodes()).toHaveLength(2);
+				expect(draftNodes()[1].getAttr("elementType")).toBe("Run");
+				expect(draftNodes().every((node) => !node.listening())).toBe(true);
+				expect(arrowShapes()).toHaveLength(0);
+
+				controller.arrowDraft.set(null);
+				await tick();
+				expect(draftNodes()).toHaveLength(0);
+			});
+		});
+
+		describe("on the rotated half field", () => {
+			const halfViewport = () => new BoardViewport(FieldDimensions.FLOORBALL, "half");
+
+			it("reports presses in full-field scene units", async () => {
+				const { controller } = renderCanvas({ viewport: halfViewport(), arrowTool: "Pass" });
+				await resizeField(1000, 500);
+
+				stage().fire("pointerdown", { evt: pointerAt(100, 60) });
+
+				expect(controller.pointerDown.mock.calls[0][0].scene).toEqual({ x: 1120, y: 800 });
+			});
+
+			it("anchors an arrow's popover at its rotated bounds", async () => {
+				const vertical = new ArrowElement("v", "Shot", "black", ArrowGeometry.straight({ x: 1200, y: 500 }, { x: 1800, y: 500 }));
+				const { controller } = renderCanvas({ viewport: halfViewport(), elements: [vertical] });
+				await resizeField(1000, 500);
+
+				arrowShapes()[0].fire("pointerclick", { evt: pointerEvent() }, true);
+
+				// Scene x 1200..1800 at y 500 -> stage x 250, y 100..400: a vertical arrow on screen.
+				const anchor = controller.tapElement.mock.calls[0][1];
+				expect(anchor.x).toBeCloseTo(250);
+				expect(anchor.y).toBeCloseTo(100);
+				expect(anchor.width).toBeCloseTo(0);
+				expect(anchor.height).toBeCloseTo(300);
+			});
+		});
+
+		describe("integration with the controller and the editor", () => {
+			function setUp(fieldType: "full" | "half" = "full") {
+				const editor = new SituationEditor(new SequentialIdGenerator(), new FixedClock());
+				editor.createNew({ title: "Arrows", fieldType });
+				const viewport = BoardViewport.forSituation(editor.current());
+				const tools = new ToolState();
+				tools.selectTool("Pass");
+				const selection = new Selection(editor.elements);
+				const controller = new BoardInteractionController({
+					editor,
+					selection,
+					tools,
+					popover: new PopoverState(),
+					bounds: viewport,
+					neutralColor: "grey",
+					arrowColor: "black",
+				});
+				const result = render(BoardCanvas, {
+					props: { elements: get(editor.elements), selectedId: null, controller, viewport, arrowTool: "Pass" },
+				});
+				return { editor, controller, selection, ...result };
+			}
+
+			it("press and drag creates an arrow (one undo step); the tool stays active", async () => {
+				const { editor, rerender, selection } = setUp();
+				await resizeField(1000, 500); // scale 0.5
+
+				stage().fire("pointerdown", { evt: pointerAt(100, 100) });
+				windowPointer("pointermove", 200, 150);
+				await tick();
+				expect(stage().find(`.${ARROW_DRAFT_NODE_NAME}`)).toHaveLength(2);
+				windowPointer("pointerup", 400, 200);
+
+				const [arrow] = get(editor.elements);
+				expect(arrow).toMatchObject({ type: "Pass", color: "black", start: { x: 200, y: 200 }, end: { x: 800, y: 400 } });
+				expect(get(editor.history).undoLabel).toBe("Add Pass");
+				expect(selection.current()).toBeNull();
+
+				await rerender({ elements: get(editor.elements) });
+				expect(arrowShapes()).toHaveLength(1);
+				expect(stage().find(`.${ARROW_DRAFT_NODE_NAME}`)).toHaveLength(0);
+				selection.destroy();
+			});
+
+			it("tap, tap creates an arrow", async () => {
+				const { editor, selection } = setUp();
+				await resizeField(1000, 500);
+
+				stage().fire("pointerdown", { evt: pointerAt(100, 100) });
+				windowPointer("pointerup", 100, 100);
+				await tick();
+				expect(stage().find(`.${ARROW_DRAFT_NODE_NAME}`)).toHaveLength(1);
+				stage().fire("pointerdown", { evt: pointerAt(300, 50) });
+				windowPointer("pointerup", 300, 50);
+
+				expect(get(editor.elements)[0]).toMatchObject({ start: { x: 200, y: 200 }, end: { x: 600, y: 100 } });
+				selection.destroy();
+			});
+
+			it("draws on the rotated half field in full-field coordinates inside the visible half", async () => {
+				const { editor, selection } = setUp("half");
+				await resizeField(1000, 500); // 500 × 500, scale 0.5
+
+				// Stage top = center line (scene x 1000), bottom = goal end (scene x 2000).
+				stage().fire("pointerdown", { evt: pointerAt(250, 50) });
+				windowPointer("pointermove", 250, 300);
+				windowPointer("pointerup", 250, 450);
+
+				expect(get(editor.elements)[0]).toMatchObject({ start: { x: 1100, y: 500 }, end: { x: 1900, y: 500 } });
+				selection.destroy();
+			});
 		});
 	});
 });

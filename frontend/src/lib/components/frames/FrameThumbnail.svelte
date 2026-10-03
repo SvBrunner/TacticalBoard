@@ -22,6 +22,7 @@ Re-renders whenever the frame (an immutable value) changes.
 	const geometry = $derived(new FrameThumbnailGeometry(viewport));
 	const field = $derived(geometry.field);
 	const marks = $derived(geometry.marks(frame));
+	const arrows = $derived(geometry.arrows(frame));
 	const width = $derived((height * geometry.width) / geometry.height);
 
 	/** Points of a triangle like the board's (apex up), scaled to `r` = the triangle's visual radius. */
@@ -61,6 +62,24 @@ Re-renders whenever the frame (an immutable value) changes.
 		{/each}
 		{#each field.goals as goal, i (i)}
 			<path class="line" d={goal} />
+		{/each}
+	</g>
+	<g class="arrows">
+		{#each arrows as arrow (arrow.id)}
+			<g data-element-id={arrow.id} data-type={arrow.type}>
+				{#if arrow.path}
+					<path
+						d={arrow.path}
+						fill="none"
+						stroke={arrow.color}
+						stroke-width={arrow.width}
+						stroke-dasharray={arrow.dash}
+						stroke-linecap={arrow.dash ? "butt" : "round"}
+						stroke-linejoin="round"
+					/>
+				{/if}
+				<polygon points={arrow.head} fill={arrow.color} />
+			</g>
 		{/each}
 	</g>
 	<g class="elements">

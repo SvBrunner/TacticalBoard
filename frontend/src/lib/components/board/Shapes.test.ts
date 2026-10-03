@@ -9,7 +9,7 @@ import {
 	drawHitCircle,
 	visualRadius,
 } from "./Shapes";
-import { ELEMENT_TYPES, type ElementType } from "$lib/model/elements/ElementType";
+import { POINT_ELEMENT_TYPES, type PointElementType } from "$lib/model/elements/ElementType";
 
 function createMockContext() {
 	return {
@@ -64,7 +64,7 @@ describe("shapes with a punched-out center (Ball, Rectangle, Triangle, Circle)",
 });
 
 describe("drawFunctionFor", () => {
-	it.each<[ElementType, unknown]>([
+	it.each<[PointElementType, unknown]>([
 		["Player", drawPlayer],
 		["Ball", drawBall],
 		["Rectangle", drawRectangle],
@@ -75,12 +75,12 @@ describe("drawFunctionFor", () => {
 	});
 
 	it("falls back to the player drawing for an unknown type", () => {
-		expect(drawFunctionFor("Unknown" as ElementType)).toBe(drawPlayer);
+		expect(drawFunctionFor("Unknown" as PointElementType)).toBe(drawPlayer);
 	});
 });
 
 describe("visualRadius", () => {
-	it.each<[ElementType, number]>([
+	it.each<[PointElementType, number]>([
 		["Player", 20],
 		["Ball", 12],
 		["Circle", 20],
@@ -90,7 +90,7 @@ describe("visualRadius", () => {
 		expect(visualRadius(type)).toBeCloseTo(radius);
 	});
 
-	it.each(ELEMENT_TYPES.map((type) => [type]))("contains every point %s draws", (type) => {
+	it.each(POINT_ELEMENT_TYPES.map((type) => [type]))("contains every point %s draws", (type) => {
 		const context = createMockContext();
 		drawFunctionFor(type)(context, {});
 		const radius = visualRadius(type);

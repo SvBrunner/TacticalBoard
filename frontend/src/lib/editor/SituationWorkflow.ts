@@ -8,6 +8,7 @@ export interface WorkflowEditor {
 	isDirty(): boolean;
 	markSaved(): void;
 	load(situation: Situation): void;
+	close(): void;
 	createNew(input: NewSituationInput): Situation;
 	undo(): string | undefined;
 	redo(): string | undefined;
@@ -82,6 +83,24 @@ export class SituationWorkflow {
 		}
 		this.deps.editor.load(imported);
 		this.log(`Loaded "${imported.displayTitle}" from ${file.name}`);
+		return true;
+	}
+
+	/**
+	 * Leaves the editor for the start page: after confirming that unsaved
+	 * changes may be discarded, runs `navigate` and then closes the
+	 * situation (so its changes are really discarded and no longer guarded
+	 * against leaving the page). Returns whether it left.
+	 */
+	async leave(navigate: () => unknown): Promise<boolean> {
+		if (!(await this.confirmDiscardIfDirty())) {
+			this.log("Leaving the editor cancelled");
+			return false;
+		}
+		const title = this.deps.editor.current().displayTitle;
+		await navigate();
+		this.deps.editor.close();
+		this.log(`Closed "${title}"`);
 		return true;
 	}
 

@@ -4,10 +4,10 @@ Decorative icon for an element kind. Hidden from assistive technology: the
 surrounding control carries the accessible name.
 -->
 <script lang="ts">
-	import type { SidebarElementType } from "$lib/model/elements/ElementType";
+	import type { ElementType } from "$lib/model/elements/ElementType";
 
 	interface Props {
-		type: SidebarElementType;
+		type: ElementType;
 		size?: number;
 	}
 

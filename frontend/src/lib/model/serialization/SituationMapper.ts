@@ -1,11 +1,14 @@
+import { ArrowElement } from "../elements/ArrowElement";
+import { ArrowGeometry } from "../elements/ArrowGeometry";
 import type { BoardElement } from "../elements/BoardElement";
-import type { PointElementType } from "../elements/ElementType";
+import { isArrowElementType, type PointElementType } from "../elements/ElementType";
 import { PointElement } from "../elements/PointElement";
+import type { Point } from "../Point";
 import type { FieldType } from "../FieldType";
 import { Frame } from "../Frame";
 import { Situation } from "../Situation";
 import type { SportId } from "../Sport";
-import type { ElementDto, FrameDto, SituationFileDto } from "./SituationFileDto";
+import type { ArrowElementDto, ElementDto, FrameDto, PointDto, PointElementDto, SituationFileDto } from "./SituationFileDto";
 import { CURRENT_FORMAT_VERSION, SITUATION_FILE_FORMAT } from "./SituationFileDto";
 
 /** Converts between the domain model and the file DTO. Expects validated input in `fromDto`. */
@@ -60,6 +63,16 @@ export class SituationMapper {
 				label: element.label,
 			};
 		}
+		if (element instanceof ArrowElement) {
+			return {
+				id: element.id,
+				type: element.type,
+				color: element.color,
+				start: pointToDto(element.start),
+				end: pointToDto(element.end),
+				bends: element.bends.map(pointToDto),
+			};
+		}
 		throw new Error(`Cannot serialize element ${element.id} of type ${element.type}`);
 	}
 
@@ -72,13 +85,25 @@ export class SituationMapper {
 	}
 
 	private elementFromDto(element: ElementDto): BoardElement {
-		return new PointElement(
-			element.id,
-			element.x,
-			element.y,
-			element.color,
-			element.type as PointElementType,
-			element.label,
-		);
+		if (isArrowElementType(element.type)) {
+			const arrow = element as ArrowElementDto;
+			return new ArrowElement(
+				arrow.id,
+				element.type,
+				arrow.color,
+				new ArrowGeometry(pointFromDto(arrow.start), pointFromDto(arrow.end), arrow.bends.map(pointFromDto)),
+			);
+		}
+		const point = element as PointElementDto;
+		return new PointElement(point.id, point.x, point.y, point.color, point.type as PointElementType, point.label);
 	}
+}
+
+function pointToDto(point: Point): PointDto {
+	return { x: point.x, y: point.y };
+}
+
+/** Only `x` and `y`: extra properties of a point in the file are dropped. */
+function pointFromDto(point: PointDto): Point {
+	return { x: point.x, y: point.y };
 }

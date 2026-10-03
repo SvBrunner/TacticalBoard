@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from "svelte";
+	import { goto } from "$app/navigation";
 	import Konva from "konva";
 	import BoardCanvas from "$lib/components/board/BoardCanvas.svelte";
 	import ElementEditPopover from "$lib/components/board/popover/ElementEditPopover.svelte";
@@ -18,6 +19,7 @@
 	import { Selection } from "$lib/board/Selection";
 	import { ToolState, type Tool } from "$lib/board/ToolState";
 	import { PositionCatalog } from "$lib/model/positions/PositionCatalog";
+	import { isArrowElementType } from "$lib/model/elements/ElementType";
 	import { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
 	import { situationEditor } from "$lib/editor/SituationEditor";
 	import { SituationFileTransfer } from "$lib/editor/SituationFileTransfer";
@@ -45,6 +47,8 @@
 	const selection = new Selection(elements);
 	const selectedId = selection.selectedId;
 	const selected = selection.selected;
+	const selectedBend = selection.selectedBend;
+	const arrowTool = $derived(isArrowElementType($activeTool) ? $activeTool : null);
 	const popover = new PopoverState();
 	const popoverAnchor = popover.anchor;
 	const controller = new BoardInteractionController({
@@ -53,8 +57,14 @@
 		tools,
 		popover,
 		// Delegates to whichever viewport the current situation uses.
-		bounds: { clamp: (point) => viewport.clamp(point) },
+		bounds: {
+			clamp: (point) => viewport.clamp(point),
+			get visibleRect() {
+				return viewport.visibleRect;
+			},
+		},
 		neutralColor: elementCatalog.neutralColor,
+		arrowColor: elementCatalog.arrowColor,
 		log: notifications,
 	});
 	const prompt = new ConfirmationPrompt();
@@ -94,13 +104,13 @@
 
 	function handleSelectTool(tool: Tool) {
 		tools.selectTool(tool);
+		controller.toolChanged();
 		notifications.notify(`Tool: ${tool}`);
 	}
 
 	function handleSelectPlayerColor(color: string) {
 		tools.selectPlayerColor(color);
-		const name = elementCatalog.playerColors.find((c) => c.value === color)?.name ?? color;
-		notifications.notify(`Player color: ${name}`);
+		notifications.notify(`Player color: ${elementCatalog.colorName(color)}`);
 	}
 
 	function handleUndo() {
@@ -112,6 +122,16 @@
 	function handleRedo() {
 		popover.close();
 		workflow.redo();
+	}
+
+	/** The badge: back to the start page, after "Discard changes?" when there are unsaved changes. */
+	async function handleHome() {
+		await workflow.leave(async () => {
+			popover.close();
+			selection.clear();
+			controller.toolChanged();
+			await goto("/");
+		});
 	}
 
 	function handleOpened() {
@@ -137,6 +157,7 @@
 <div class="editor">
 	<TopBar
 		title={$situation.displayTitle}
+		onHome={handleHome}
 		onNew={() => dialogs.startNew()}
 		onExport={() => workflow.exportCurrent()}
 		onLoadFile={(file) => dialogs.importFile(file)}
@@ -156,7 +177,14 @@
 
 		<main class="workspace">
 			<div class="canvas-area">
-				<BoardCanvas elements={$elements} selectedId={$selectedId} {controller} {viewport} />
+				<BoardCanvas
+					elements={$elements}
+					selectedId={$selectedId}
+					selectedBend={$selectedBend}
+					{controller}
+					{viewport}
+					{arrowTool}
+				/>
 			</div>
 			<FrameStrip
 				frames={$situation.frames}
@@ -188,9 +216,11 @@
 	<ElementEditPopover
 		element={$popoverAnchor ? $selected : null}
 		anchor={$popoverAnchor}
+		bendIndex={$selectedBend}
 		actions={situationEditor}
 		{positions}
 		onClose={() => controller.dismissPopover()}
+		onEditShape={() => controller.editShape()}
 	/>
 </div>
 

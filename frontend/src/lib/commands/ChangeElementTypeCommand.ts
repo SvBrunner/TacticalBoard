@@ -1,21 +1,36 @@
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import type { BoardElement } from "$lib/model/elements/BoardElement";
+import {
+	isArrowElementType,
+	isPointElementType,
+	sameFamily,
+	type ElementType,
+} from "$lib/model/elements/ElementType";
 import { PointElement } from "$lib/model/elements/PointElement";
-import type { PointElementType } from "$lib/model/elements/ElementType";
 import type { Frame } from "$lib/model/Frame";
 import type { FrameCommand } from "./FrameCommand";
 
-/** Changes the type of a point element (e.g. Player → Circle), keeping its id, position, and color. */
+/**
+ * Changes an element's type within its family, keeping everything else:
+ * a point element to another point type (e.g. Player → Circle; position
+ * and label are kept) or an arrow to another arrow type (e.g. Pass → Shot;
+ * its shape is kept). Changing between the families is not possible.
+ */
 export class ChangeElementTypeCommand implements FrameCommand {
 	readonly label: string;
 
 	constructor(
 		readonly elementId: string,
-		readonly from: PointElementType,
-		readonly to: PointElementType,
+		readonly from: ElementType,
+		readonly to: ElementType,
 	) {
+		if (!sameFamily(from, to)) {
+			throw new Error(`Cannot change ${from} to ${to}: types can only change within their family`);
+		}
 		this.label = `Change ${from} to ${to}`;
 	}
 
-	static of(element: PointElement, type: PointElementType): ChangeElementTypeCommand {
+	static of(element: BoardElement, type: ElementType): ChangeElementTypeCommand {
 		return new ChangeElementTypeCommand(element.id, element.type, type);
 	}
 
@@ -29,12 +44,20 @@ export class ChangeElementTypeCommand implements FrameCommand {
 
 	isNoOp(frame: Frame): boolean {
 		const element = frame.findElement(this.elementId);
-		return !(element instanceof PointElement) || element.type === this.to;
+		return !element || !sameFamily(element.type, this.to) || element.type === this.to;
 	}
 
-	private retype(frame: Frame, type: PointElementType): Frame {
-		return frame.updateElement(this.elementId, (element) =>
-			element instanceof PointElement ? element.withType(type) : element,
-		);
+	private retype(frame: Frame, type: ElementType): Frame {
+		return frame.updateElement(this.elementId, (element) => ChangeElementTypeCommand.withType(element, type));
+	}
+
+	private static withType(element: BoardElement, type: ElementType): BoardElement {
+		if (element instanceof PointElement && isPointElementType(type)) {
+			return element.withType(type);
+		}
+		if (element instanceof ArrowElement && isArrowElementType(type)) {
+			return element.withType(type);
+		}
+		return element;
 	}
 }

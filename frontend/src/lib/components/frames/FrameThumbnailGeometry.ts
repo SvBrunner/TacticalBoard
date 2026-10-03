@@ -1,8 +1,12 @@
 import type { BoardViewport } from "$lib/board/BoardViewport";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { ArrowGeometry } from "$lib/model/elements/ArrowGeometry";
 import type { BoardElement } from "$lib/model/elements/BoardElement";
-import type { PointElementType } from "$lib/model/elements/ElementType";
+import type { ArrowElementType, PointElementType } from "$lib/model/elements/ElementType";
 import { PointElement } from "$lib/model/elements/PointElement";
 import type { Frame } from "$lib/model/Frame";
+import type { Point } from "$lib/model/Point";
+import { ArrowPainter } from "../board/ArrowPainter";
 import { visualRadius } from "../board/Shapes";
 
 /** A rectangle in scene units. */
@@ -31,6 +35,20 @@ export interface ThumbnailMark {
 	readonly y: number;
 	/** Drawing radius (thumbnail units), already enlarged so it stays visible at thumbnail size. */
 	readonly radius: number;
+}
+
+/** One arrow as drawn in a thumbnail, in thumbnail units, styled like the board's (enlarged). */
+export interface ThumbnailArrow {
+	readonly id: string;
+	readonly type: ArrowElementType;
+	readonly color: string;
+	/** The line as SVG path data (the wave of a Run included); empty for a tiny arrow. */
+	readonly path: string;
+	/** The arrowhead as SVG polygon points. */
+	readonly head: string;
+	readonly width: number;
+	/** SVG stroke-dasharray, or `null` for a solid line. */
+	readonly dash: string | null;
 }
 
 /**
@@ -110,11 +128,40 @@ export class FrameThumbnailGeometry {
 		});
 	}
 
+	/** The frame's arrows in z-order, in thumbnail units (drawn below the point elements, like on the board). */
+	arrows(frame: Frame): ThumbnailArrow[] {
+		const fit = this.fit();
+		const toThumbnail = (point: Point) => this.viewport.sceneToStage(point, fit);
+		const painter = new ArrowPainter(FrameThumbnailGeometry.ELEMENT_ENLARGEMENT);
+		return frame.elements.filter(FrameThumbnailGeometry.isArrowElement).map((arrow) => {
+			// The mapping is a rotation plus translation, which the spline follows exactly.
+			const geometry = new ArrowGeometry(toThumbnail(arrow.start), toThumbnail(arrow.end), arrow.bends.map(toThumbnail));
+			const style = painter.style(arrow.type);
+			const shaft = painter.shaft(geometry, arrow.type);
+			return {
+				id: arrow.id,
+				type: arrow.type,
+				color: arrow.color,
+				path: shaft.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" "),
+				head: painter
+					.head(geometry)
+					.map((point) => `${point.x},${point.y}`)
+					.join(" "),
+				width: style.width,
+				dash: style.dash.length > 0 ? style.dash.join(" ") : null,
+			};
+		});
+	}
+
 	private fit() {
 		return this.viewport.fit(this.width, this.height);
 	}
 
 	private static isPointElement(element: BoardElement): element is PointElement {
 		return element instanceof PointElement;
+	}
+
+	private static isArrowElement(element: BoardElement): element is ArrowElement {
+		return element instanceof ArrowElement;
 	}
 }

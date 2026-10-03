@@ -174,4 +174,58 @@ describe("SituationWorkflow", () => {
 		silent.exportCurrent();
 		silent.undo();
 	});
+
+	describe("leave (back to the start page)", () => {
+		beforeEach(() => {
+			editor.createNew({ title: "Breakout", fieldType: "full" });
+		});
+
+		it("without unsaved changes navigates without asking and closes the situation", async () => {
+			const navigate = vi.fn();
+
+			await expect(workflow.leave(navigate)).resolves.toBe(true);
+
+			expect(confirm).not.toHaveBeenCalled();
+			expect(navigate).toHaveBeenCalledOnce();
+			expect(editor.isSituationOpen()).toBe(false);
+			expect(messages()).toContain('Closed "Breakout"');
+		});
+
+		it("with unsaved changes asks 'Discard changes?' first; confirming navigates and discards them", async () => {
+			editor.addElement(0, 0, "red", "Player");
+			const navigate = vi.fn();
+
+			await expect(workflow.leave(navigate)).resolves.toBe(true);
+
+			expect(confirm).toHaveBeenCalledWith(DISCARD_CHANGES_REQUEST);
+			expect(navigate).toHaveBeenCalledOnce();
+			expect(editor.isDirty()).toBe(false);
+			expect(editor.isSituationOpen()).toBe(false);
+		});
+
+		it("cancelling keeps the editor and the unsaved changes", async () => {
+			editor.addElement(0, 0, "red", "Player");
+			confirm.mockResolvedValue(false);
+			const navigate = vi.fn();
+
+			await expect(workflow.leave(navigate)).resolves.toBe(false);
+
+			expect(navigate).not.toHaveBeenCalled();
+			expect(editor.isDirty()).toBe(true);
+			expect(editor.isSituationOpen()).toBe(true);
+			expect(messages()).toContain("Leaving the editor cancelled");
+		});
+
+		it("closes the situation only after the navigation finished", async () => {
+			let openDuringNavigation: boolean | undefined;
+			const navigate = vi.fn(async () => {
+				openDuringNavigation = editor.isSituationOpen();
+			});
+
+			await workflow.leave(navigate);
+
+			expect(openDuringNavigation).toBe(true);
+			expect(editor.isSituationOpen()).toBe(false);
+		});
+	});
 });

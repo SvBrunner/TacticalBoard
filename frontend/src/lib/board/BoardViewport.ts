@@ -1,4 +1,4 @@
-import type { Point } from "$lib/commands/Point";
+import type { Point } from "$lib/model/Point";
 import { FieldDimensions, type SceneRect } from "$lib/model/FieldDimensions";
 import type { FieldType } from "$lib/model/FieldType";
 import type { SportId } from "$lib/model/Sport";
@@ -137,6 +137,25 @@ export class BoardViewport {
 	 * `origin` is the stage container's top-left in viewport coordinates.
 	 * Round elements look the same rotated, so the rect is axis-aligned.
 	 */
+	/**
+	 * On-screen bounds of a scene rect (e.g. an arrow's bounds); `origin`
+	 * is the stage container's top-left in viewport coordinates. Works
+	 * rotated: the result is the axis-aligned box around the mapped corners.
+	 */
+	screenRectOfBounds(bounds: SceneRect, fit: StageFit, origin: Point): ScreenRect {
+		const corners = [
+			{ x: bounds.x, y: bounds.y },
+			{ x: bounds.x + bounds.width, y: bounds.y },
+			{ x: bounds.x, y: bounds.y + bounds.height },
+			{ x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+		].map((corner) => this.sceneToStage(corner, fit));
+		const xs = corners.map((corner) => corner.x);
+		const ys = corners.map((corner) => corner.y);
+		const left = Math.min(...xs);
+		const top = Math.min(...ys);
+		return { x: origin.x + left, y: origin.y + top, width: Math.max(...xs) - left, height: Math.max(...ys) - top };
+	}
+
 	screenRect(center: Point, visualRadius: number, fit: StageFit, origin: Point): ScreenRect {
 		const onStage = this.sceneToStage(center, fit);
 		const radius = visualRadius * fit.scale;

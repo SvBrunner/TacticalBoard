@@ -1,12 +1,13 @@
 <!--
 @component
-The tool panel: Move, the element placement tools, and (with the Player
-tool) the player color. A side panel on desktop/tablet, a scrollable bottom
+The tool panel: Move, the element tools (placing players, the ball and
+markers; drawing Pass/Run/Shot arrows), and (with the Player tool) the
+player color. A side panel on desktop/tablet, a scrollable bottom
 bar on portrait phones and a narrow left rail on landscape phones.
 -->
 <script lang="ts">
 	import type { Tool } from "$lib/board/ToolState";
-	import { elementCatalog, type ElementKind } from "./ElementCatalog";
+	import { elementCatalog } from "./ElementCatalog";
 	import ElementIcon from "./ElementIcon.svelte";
 
 	interface Props {
@@ -17,13 +18,6 @@ bar on portrait phones and a narrow left rail on landscape phones.
 	}
 
 	let { activeTool, playerColor, onSelectTool, onSelectPlayerColor }: Props = $props();
-
-	function selectKind(kind: ElementKind) {
-		const type = elementCatalog.usableType(kind);
-		if (type) {
-			onSelectTool(type);
-		}
-	}
 </script>
 
 <aside class="tool-panel" aria-label="Tools">
@@ -52,9 +46,8 @@ bar on portrait phones and a narrow left rail on landscape phones.
 							class="tool-btn type-btn"
 							class:active={activeTool === kind.type}
 							aria-pressed={activeTool === kind.type}
-							disabled={kind.disabled}
-							title={kind.disabled ? `${kind.name} (not available yet)` : kind.name}
-							onclick={() => selectKind(kind)}
+							title={kind.name}
+							onclick={() => onSelectTool(kind.type)}
 						>
 							<ElementIcon type={kind.type} />
 							<span class="label">{kind.name}</span>
@@ -127,11 +120,6 @@ bar on portrait phones and a narrow left rail on landscape phones.
 		background: var(--bg-app);
 		color: var(--text);
 		border-radius: var(--radius-sm);
-	}
-
-	.tool-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
 	}
 
 	.tool-btn.active {

@@ -30,3 +30,10 @@ A half-field situation shows only one half of the field (see [ch. 8](arc42/08_cr
 ## Little room for the field on landscape phones with the details panel open
 
 On phones the details panel (title, descriptions) is a collapsible bar above the board. Opened on a phone in landscape orientation, it takes up to about half of the already small height, so the field becomes very small until the panel is collapsed again. Portrait phones and larger screens are much less affected.
+
+## Editing arrows on small screens
+
+On phones the edit popover is a bottom sheet. On a landscape phone (and partly on a portrait phone) it covers the board, including the handles of the selected arrow. The arrow popover therefore has an **Edit shape** button that hides the popover but keeps the arrow selected, so its handles can be dragged; tapping a bend brings the popover back (for "Remove bend").
+
+On a small board (e.g. a half field on a landscape phone, about 220 CSS px) the 44 CSS px hit circles of an arrow's handles overlap on short segments. Where they do, the start, end and bend handles win over the "+" (add bend) handles, so a bend can then only be added on a longer segment, or after turning the phone or using a larger screen.
+

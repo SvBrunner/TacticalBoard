@@ -7,6 +7,7 @@ import { ChangeFrameDescriptionCommand } from "$lib/commands/ChangeFrameDescript
 import type { FrameCommand } from "$lib/commands/FrameCommand";
 import { MoveElementCommand } from "$lib/commands/MoveElementCommand";
 import { RemoveElementCommand } from "$lib/commands/RemoveElementCommand";
+import { ReshapeArrowCommand } from "$lib/commands/ReshapeArrowCommand";
 import type { CommandHistory } from "$lib/history/CommandHistory";
 import { FrameHistories } from "$lib/history/FrameHistories";
 import { sameHistoryStatus, type HistoryStatus } from "$lib/history/HistoryStatus";
@@ -14,8 +15,11 @@ import type { Clock } from "$lib/model/Clock";
 import type { FieldType } from "$lib/model/FieldType";
 import { SystemClock } from "$lib/model/Clock";
 import type { BoardElement } from "$lib/model/elements/BoardElement";
-import type { ElementType } from "$lib/model/elements/ElementType";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { ArrowGeometry } from "$lib/model/elements/ArrowGeometry";
+import { sameFamily, type ArrowElementType, type ElementType, type PointElementType } from "$lib/model/elements/ElementType";
 import { PointElement } from "$lib/model/elements/PointElement";
+import type { Point } from "$lib/model/Point";
 import type { Frame } from "$lib/model/Frame";
 import type { IdGenerator } from "$lib/model/ids/IdGenerator";
 import { UuidIdGenerator } from "$lib/model/ids/IdGenerator";
@@ -128,6 +132,20 @@ export class SituationEditor {
 	}
 
 	/**
+	 * Closes the edited situation (e.g. when leaving the editor for the
+	 * start page): it is dropped with its histories and unsaved changes, and
+	 * `isSituationOpen()` is false again until a situation is created or
+	 * loaded. The editor then holds a blank placeholder situation.
+	 */
+	close(): void {
+		this.histories.clear();
+		this.situationOpened = false;
+		this.state.set(
+			SituationEditor.initialState(Situation.create({ sport: "floorball", fieldType: "full" }, this.ids, this.clock)),
+		);
+	}
+
+	/**
 	 * Starts a new situation with one empty frame and loads it (see `load`).
 	 * A blank title is stored as the default title. Sport defaults to floorball.
 	 */
@@ -223,7 +241,7 @@ export class SituationEditor {
 	}
 
 	/** Adds a point element to the active frame and returns its id. */
-	addElement(x: number, y: number, color: string, type: ElementType): string {
+	addElement(x: number, y: number, color: string, type: PointElementType): string {
 		const element = PointElement.create(this.ids, x, y, color, type);
 		this.execute(new AddElementCommand(element));
 		return element.id;
@@ -254,11 +272,59 @@ export class SituationEditor {
 		}
 	}
 
+	/**
+	 * Changes an element's type within its family (point types among each
+	 * other, arrow types among each other); a type of the other family is
+	 * ignored.
+	 */
 	changeType(id: string, type: ElementType): void {
-		const element = this.findPointElement(id);
-		if (element) {
+		const element = this.activeFrameNow().findElement(id);
+		if (element && sameFamily(element.type, type)) {
 			this.execute(ChangeElementTypeCommand.of(element, type));
 		}
+	}
+
+	/** Adds a straight arrow from `start` to `end` to the active frame (on top) and returns its id. */
+	addArrow(start: Point, end: Point, color: string, type: ArrowElementType): string {
+		const arrow = ArrowElement.create(this.ids, type, color, ArrowGeometry.straight(start, end));
+		this.execute(new AddElementCommand(arrow));
+		return arrow.id;
+	}
+
+	/**
+	 * Gives an arrow a new shape (e.g. at the end of dragging one of its
+	 * handles). Consecutive reshapes of the same arrow merge into one undo
+	 * step until `endGesture()` is called.
+	 */
+	reshapeArrow(id: string, geometry: ArrowGeometry): void {
+		this.reshape(id, () => geometry, "Reshape");
+	}
+
+	/** Moves a whole arrow by (dx, dy), keeping its shape. Merges like `reshapeArrow`. */
+	moveArrow(id: string, dx: number, dy: number): void {
+		this.reshape(id, (geometry) => geometry.translate(dx, dy), "Move");
+	}
+
+	/**
+	 * Adds a bend into segment `segmentIndex` of an arrow (see
+	 * `ArrowGeometry.withBendInserted`). A step of its own: the edit session
+	 * is ended before and after.
+	 */
+	addBend(id: string, segmentIndex: number, point: Point): void {
+		this.discreteReshape(id, (geometry) => geometry.withBendInserted(segmentIndex, point), "Add bend to");
+	}
+
+	/** Removes one bend of an arrow. A step of its own, like `addBend`. Unknown bends are ignored. */
+	removeBend(id: string, bendIndex: number): void {
+		const arrow = this.findArrow(id);
+		if (arrow && Number.isInteger(bendIndex) && bendIndex >= 0 && bendIndex < arrow.bends.length) {
+			this.discreteReshape(id, (geometry) => geometry.withBendRemoved(bendIndex), "Remove bend from");
+		}
+	}
+
+	/** Removes every bend of an arrow (it becomes straight). A step of its own, like `addBend`. */
+	straightenArrow(id: string): void {
+		this.discreteReshape(id, (geometry) => geometry.straightened(), "Straighten");
 	}
 
 	/**
@@ -342,6 +408,27 @@ export class SituationEditor {
 
 	private activeFrameNow(): Frame {
 		return SituationEditor.activeFrameOf(get(this.state));
+	}
+
+	private reshape(id: string, change: (geometry: ArrowGeometry) => ArrowGeometry, action: string): void {
+		const arrow = this.findArrow(id);
+		if (arrow) {
+			this.execute(ReshapeArrowCommand.of(arrow, change(arrow.geometry), action));
+		}
+	}
+
+	private discreteReshape(id: string, change: (geometry: ArrowGeometry) => ArrowGeometry, action: string): void {
+		if (!this.findArrow(id)) {
+			return;
+		}
+		this.activeHistory().seal();
+		this.reshape(id, change, action);
+		this.activeHistory().seal();
+	}
+
+	private findArrow(id: string): ArrowElement | undefined {
+		const element = this.activeFrameNow().findElement(id);
+		return element instanceof ArrowElement ? element : undefined;
 	}
 
 	private findPointElement(id: string): PointElement | undefined {

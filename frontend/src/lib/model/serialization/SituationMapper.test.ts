@@ -3,7 +3,9 @@ import { PointElement } from "../elements/PointElement";
 import { Frame } from "../Frame";
 import { Situation } from "../Situation";
 import { SituationMapper } from "./SituationMapper";
-import fixture from "./__fixtures__/situation-v2.json";
+import fixture from "./__fixtures__/situation-v3.json";
+import { ArrowElement } from "../elements/ArrowElement";
+import { ArrowGeometry } from "../elements/ArrowGeometry";
 import type { SituationFileDto } from "./SituationFileDto";
 
 const situation = new Situation({
@@ -26,10 +28,10 @@ const situation = new Situation({
 describe("SituationMapper", () => {
 	const mapper = new SituationMapper();
 
-	it("toDto produces the v2 file shape", () => {
+	it("toDto produces the v3 file shape for point elements", () => {
 		expect(mapper.toDto(situation)).toEqual({
 			format: "tacticalboard.situation",
-			formatVersion: 2,
+			formatVersion: 3,
 			situation: {
 				id: "s",
 				title: "Breakout",
@@ -80,5 +82,46 @@ describe("SituationMapper", () => {
 		const dto = fixture as SituationFileDto;
 
 		expect(mapper.toDto(mapper.fromDto(dto))).toEqual(dto);
+	});
+
+	describe("arrows", () => {
+		const pass = new ArrowElement("a1", "Pass", "black", ArrowGeometry.straight({ x: 1, y: 2 }, { x: 3, y: 4 }));
+		const run = new ArrowElement(
+			"a2",
+			"Run",
+			"blue",
+			new ArrowGeometry({ x: 10, y: 20 }, { x: 50, y: 60 }, [{ x: 20, y: 40 }, { x: 35.5, y: 41.25 }]),
+		);
+		const withArrows = situation.updateFrame("f1", (frame) => frame.insertElement(pass, 0).addElement(run));
+
+		it("toDto writes start, end and bends and no x, y or label", () => {
+			const elements = mapper.toDto(withArrows).situation.frames[0].elements;
+
+			expect(elements[0]).toEqual({ id: "a1", type: "Pass", color: "black", start: { x: 1, y: 2 }, end: { x: 3, y: 4 }, bends: [] });
+			expect(elements.at(-1)).toEqual({
+				id: "a2",
+				type: "Run",
+				color: "blue",
+				start: { x: 10, y: 20 },
+				end: { x: 50, y: 60 },
+				bends: [{ x: 20, y: 40 }, { x: 35.5, y: 41.25 }],
+			});
+		});
+
+		it("round-trips arrows mixed with point elements, keeping the z-order", () => {
+			const restored = mapper.fromDto(mapper.toDto(withArrows));
+
+			expect(restored).toEqual(withArrows);
+			expect(restored.frames[0].elements.map((element) => element.id)).toEqual(["a1", "p1", "b1", "a2"]);
+			expect(restored.frames[0].elements[0]).toBeInstanceOf(ArrowElement);
+			expect(restored.frames[0].elements[1]).toBeInstanceOf(PointElement);
+		});
+
+		it("fromDto drops extra properties of points", () => {
+			const dto = mapper.toDto(withArrows);
+			(dto.situation.frames[0].elements[0] as { start: object }).start = { x: 1, y: 2, z: 9 };
+
+			expect((mapper.fromDto(dto).frames[0].elements[0] as ArrowElement).start).toEqual({ x: 1, y: 2 });
+		});
 	});
 });

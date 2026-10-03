@@ -18,7 +18,7 @@ near an edge the strip scrolls by itself.
 <script lang="ts">
 	import { onDestroy } from "svelte";
 	import type { BoardViewport } from "$lib/board/BoardViewport";
-	import type { Point } from "$lib/commands/Point";
+	import type { Point } from "$lib/model/Point";
 	import type { Frame } from "$lib/model/Frame";
 	import FrameThumbnail from "./FrameThumbnail.svelte";
 	import { FrameReorderGesture, type PointerKind, type Slot } from "./FrameReorderGesture";

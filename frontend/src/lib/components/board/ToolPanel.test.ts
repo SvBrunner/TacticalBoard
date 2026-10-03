@@ -101,17 +101,32 @@ describe("ToolPanel", () => {
 		expect(screen.getByRole("button", { name: "Move" })).toHaveAttribute("aria-pressed", "false");
 	});
 
-	it("Pass, Run and Shot are visible but disabled (not implemented yet)", async () => {
+	it("Pass, Run and Shot are enabled arrow tools", async () => {
 		const onSelectTool = vi.fn();
 		render(ToolPanel, { props: props({ onSelectTool }) });
 
 		for (const name of ["Pass", "Run", "Shot"]) {
 			const button = screen.getByRole("button", { name });
 			expect(button).toBeVisible();
-			expect(button).toBeDisabled();
+			expect(button).toBeEnabled();
 			await fireEvent.click(button);
 		}
-		expect(onSelectTool).not.toHaveBeenCalled();
+		expect(onSelectTool.mock.calls).toEqual([["Pass"], ["Run"], ["Shot"]]);
+	});
+
+	it("no tool is disabled", () => {
+		render(ToolPanel, { props: props({ activeTool: "Player" }) });
+
+		for (const button of screen.getAllByRole("button")) {
+			expect(button).toBeEnabled();
+		}
+	});
+
+	it("marks an active arrow tool pressed and hides the player colors", () => {
+		render(ToolPanel, { props: props({ activeTool: "Run" }) });
+
+		expect(screen.getByRole("button", { name: "Run" })).toHaveAttribute("aria-pressed", "true");
+		expect(screen.queryByText("Player color")).not.toBeInTheDocument();
 	});
 
 	it("shows the player-color swatches only when Player is active", async () => {

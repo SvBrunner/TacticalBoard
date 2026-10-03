@@ -3,6 +3,8 @@ import { get, writable, type Writable } from "svelte/store";
 import { Selection } from "./Selection";
 import { PointElement } from "$lib/model/elements/PointElement";
 import type { BoardElement } from "$lib/model/elements/BoardElement";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { ArrowGeometry } from "$lib/model/elements/ArrowGeometry";
 
 const a = new PointElement("a", 1, 2, "red", "Player");
 const b = new PointElement("b", 3, 4, "blue", "Ball");
@@ -97,5 +99,80 @@ describe("Selection", () => {
 		elements.set([b]);
 
 		expect(selection.current()).toBe("a");
+	});
+
+	describe("active bend of an arrow", () => {
+		const arrow = new ArrowElement(
+			"arrow",
+			"Pass",
+			"black",
+			new ArrowGeometry({ x: 0, y: 0 }, { x: 100, y: 0 }, [{ x: 30, y: 30 }, { x: 60, y: 30 }]),
+		);
+
+		beforeEach(() => {
+			elements.set([a, arrow]);
+		});
+
+		it("is none at first and after selecting an element", () => {
+			expect(get(selection.selectedBend)).toBeNull();
+			selection.select("arrow");
+			expect(selection.currentBend()).toBeNull();
+		});
+
+		it("selectBend selects the arrow and makes the bend active", () => {
+			selection.selectBend("arrow", 1);
+
+			expect(selection.current()).toBe("arrow");
+			expect(get(selection.selectedBend)).toBe(1);
+		});
+
+		it("selectBend ignores unknown bends, unknown ids and point elements", () => {
+			selection.selectBend("arrow", 2);
+			selection.selectBend("arrow", -1);
+			selection.selectBend("missing", 0);
+			selection.selectBend("a", 0);
+
+			expect(selection.current()).toBeNull();
+			expect(selection.currentBend()).toBeNull();
+		});
+
+		it("selecting (again) and clearing reset the active bend", () => {
+			selection.selectBend("arrow", 0);
+			selection.select("arrow");
+			expect(selection.currentBend()).toBeNull();
+
+			selection.selectBend("arrow", 0);
+			selection.clear();
+			expect(selection.currentBend()).toBeNull();
+		});
+
+		it("clearBend keeps the arrow selected", () => {
+			selection.selectBend("arrow", 0);
+
+			selection.clearBend();
+
+			expect(selection.current()).toBe("arrow");
+			expect(selection.currentBend()).toBeNull();
+		});
+
+		it("is dropped when the arrow loses that bend, and kept while it still has it", () => {
+			selection.selectBend("arrow", 1);
+
+			elements.set([a, arrow.withGeometry(arrow.geometry.translate(5, 5))]);
+			expect(selection.currentBend()).toBe(1);
+
+			elements.set([a, arrow.withGeometry(arrow.geometry.withBendRemoved(0))]);
+			expect(selection.currentBend()).toBeNull();
+			expect(selection.current()).toBe("arrow");
+		});
+
+		it("is dropped with the arrow", () => {
+			selection.selectBend("arrow", 0);
+
+			elements.set([a]);
+
+			expect(selection.current()).toBeNull();
+			expect(selection.currentBend()).toBeNull();
+		});
 	});
 });

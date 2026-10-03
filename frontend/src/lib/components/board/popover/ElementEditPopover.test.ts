@@ -6,6 +6,8 @@ import type { BoardElement } from "$lib/model/elements/BoardElement";
 import type { ScreenRect } from "$lib/board/BoardViewport";
 import { PopoverPlacement } from "./PopoverPlacement";
 import { PositionCatalog } from "$lib/model/positions/PositionCatalog";
+import { ArrowElement } from "$lib/model/elements/ArrowElement";
+import { ArrowGeometry } from "$lib/model/elements/ArrowGeometry";
 
 const TEAM_A = "oklch(62% 0.16 230)";
 const TEAM_B = "oklch(64% 0.16 32)";
@@ -18,6 +20,8 @@ function fakeActions() {
 		changeType: vi.fn(),
 		changeColor: vi.fn(),
 		changeLabel: vi.fn(),
+		removeBend: vi.fn(),
+		straightenArrow: vi.fn(),
 		removeElement: vi.fn(),
 		endGesture: vi.fn(),
 	};
@@ -72,7 +76,23 @@ describe("ElementEditPopover", () => {
 			const group = screen.getByRole("group", { name: "Type" });
 			expect(group.tagName).toBe("FIELDSET");
 			const items = within(within(group).getByRole("list")).getAllByRole("listitem");
-			expect(items).toHaveLength(8);
+			expect(items).toHaveLength(5);
+		});
+
+		it("offers only the point types for a point element", () => {
+			render(ElementEditPopover, { props: props() });
+
+			const group = screen.getByRole("group", { name: "Type" });
+			expect(within(group).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual([
+				"Player",
+				"Ball",
+				"Rectangle",
+				"Triangle",
+				"Circle",
+			]);
+			for (const name of ["Pass", "Run", "Shot"]) {
+				expect(within(group).queryByRole("button", { name })).not.toBeInTheDocument();
+			}
 		});
 
 		it("marks the element's current type pressed", () => {
@@ -100,40 +120,34 @@ describe("ElementEditPopover", () => {
 			expect(screen.getByRole("button", { name: "Player" })).toHaveAttribute("aria-pressed", "false");
 		});
 
-		it("disabled types cannot be picked", async () => {
-			const actions = fakeActions();
-			render(ElementEditPopover, { props: props({ actions }) });
-
-			for (const name of ["Pass", "Run", "Shot"]) {
-				const button = screen.getByRole("button", { name });
-				expect(button).toBeDisabled();
-				await fireEvent.click(button);
-			}
-
-			expect(actions.changeType).not.toHaveBeenCalled();
-		});
 	});
 
-	describe("Player color", () => {
-		it("is a fieldset with a legend and a list of named swatches for players", () => {
+	describe("Color", () => {
+		const PALETTE = ["Team A", "Team B", "Team C", "Team D", "Grey", "Black"];
+
+		it("is a fieldset with a Player color legend and a list of named swatches for players", () => {
 			render(ElementEditPopover, { props: props() });
 
 			const group = screen.getByRole("group", { name: "Player color" });
 			expect(group.tagName).toBe("FIELDSET");
 			const items = within(within(group).getByRole("list")).getAllByRole("listitem");
-			expect(items.map((item) => within(item).getByRole("button").getAttribute("aria-label"))).toEqual([
-				"Team A",
-				"Team B",
-				"Team C",
-				"Team D",
-			]);
+			expect(items.map((item) => within(item).getByRole("button").getAttribute("aria-label"))).toEqual(PALETTE);
 		});
 
-		it("is only shown when the element is a Player", () => {
-			render(ElementEditPopover, { props: props({ element: circle }) });
+		it.each([["Ball"], ["Rectangle"], ["Triangle"], ["Circle"]] as const)("is offered for a %s too, as Color", (type) => {
+			render(ElementEditPopover, { props: props({ element: player.withType(type) }) });
 
-			expect(screen.queryByRole("group", { name: "Player color" })).not.toBeInTheDocument();
-			expect(screen.queryByText("Player color")).not.toBeInTheDocument();
+			const group = screen.getByRole("group", { name: "Color" });
+			expect(within(group).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(PALETTE);
+		});
+
+		it("picking a color for a marker changes its color", async () => {
+			const actions = fakeActions();
+			render(ElementEditPopover, { props: props({ element: circle, actions }) });
+
+			await fireEvent.click(screen.getByRole("button", { name: "Black" }));
+
+			expect(actions.changeColor).toHaveBeenCalledWith("el-2", "oklch(15% 0 0)");
 		});
 
 		it("marks the element's color pressed", () => {
@@ -257,5 +271,121 @@ describe("ElementEditPopover", () => {
 		render(ElementEditPopover, { props: props({ anchor: null }) });
 
 		expect(screen.getByRole("dialog").style.getPropertyValue("--anchor-x")).toBe("");
+	});
+
+	describe("for an arrow", () => {
+		const geometry = new ArrowGeometry({ x: 0, y: 0 }, { x: 100, y: 0 }, [{ x: 30, y: 30 }, { x: 60, y: 30 }]);
+		const pass = new ArrowElement("arrow-1", "Pass", "oklch(15% 0 0)", geometry);
+		const straightPass = pass.withGeometry(geometry.straightened());
+
+		it("is named Edit arrow", () => {
+			render(ElementEditPopover, { props: props({ element: pass }) });
+
+			expect(screen.getByRole("dialog", { name: "Edit arrow" })).toBeInTheDocument();
+		});
+
+		it("offers only the arrow types, the current one pressed", () => {
+			render(ElementEditPopover, { props: props({ element: pass }) });
+
+			const group = screen.getByRole("group", { name: "Type" });
+			expect(within(group).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual(["Pass", "Run", "Shot"]);
+			expect(within(group).getByRole("button", { name: "Pass" })).toHaveAttribute("aria-pressed", "true");
+		});
+
+		it("picking a type changes the arrow's type", async () => {
+			const actions = fakeActions();
+			render(ElementEditPopover, { props: props({ element: pass, actions }) });
+
+			await fireEvent.click(screen.getByRole("button", { name: "Shot" }));
+
+			expect(actions.changeType).toHaveBeenCalledWith("arrow-1", "Shot");
+		});
+
+		it("offers the color palette with the arrow's color (black) pressed", async () => {
+			const actions = fakeActions();
+			render(ElementEditPopover, { props: props({ element: pass, actions }) });
+
+			const group = screen.getByRole("group", { name: "Color" });
+			expect(within(group).getByRole("button", { name: "Black" })).toHaveAttribute("aria-pressed", "true");
+			await fireEvent.click(within(group).getByRole("button", { name: "Team B" }));
+			expect(actions.changeColor).toHaveBeenCalledWith("arrow-1", TEAM_B);
+		});
+
+		it("has no position label", () => {
+			render(ElementEditPopover, { props: props({ element: pass }) });
+
+			expect(screen.queryByRole("group", { name: "Position" })).not.toBeInTheDocument();
+		});
+
+		it("offers Straighten only when the arrow is bent", async () => {
+			const actions = fakeActions();
+			const { rerender } = render(ElementEditPopover, { props: props({ element: pass, actions }) });
+
+			await fireEvent.click(screen.getByRole("button", { name: "Straighten" }));
+			expect(actions.straightenArrow).toHaveBeenCalledWith("arrow-1");
+
+			await rerender(props({ element: straightPass, actions }));
+			expect(screen.queryByRole("button", { name: "Straighten" })).not.toBeInTheDocument();
+		});
+
+		it("offers Remove bend only for an active bend of this arrow", async () => {
+			const actions = fakeActions();
+			const { rerender } = render(ElementEditPopover, { props: props({ element: pass, actions }) });
+			expect(screen.queryByRole("button", { name: "Remove bend" })).not.toBeInTheDocument();
+
+			await rerender(props({ element: pass, actions, bendIndex: 1 }));
+			await fireEvent.click(screen.getByRole("button", { name: "Remove bend" }));
+			expect(actions.removeBend).toHaveBeenCalledWith("arrow-1", 1);
+
+			await rerender(props({ element: straightPass, actions, bendIndex: 1 }));
+			expect(screen.queryByRole("button", { name: "Remove bend" })).not.toBeInTheDocument();
+		});
+
+		it("explains how to add and remove bends in a Bends group", () => {
+			render(ElementEditPopover, { props: props({ element: straightPass }) });
+
+			const group = screen.getByRole("group", { name: "Bends" });
+			expect(group.tagName).toBe("FIELDSET");
+			expect(within(group).getByText(/add a bend/i)).toBeInTheDocument();
+			expect(within(group).getByText(/remove it/i)).toBeInTheDocument();
+		});
+
+		it("offers Edit shape when the owner handles it", async () => {
+			const onEditShape = vi.fn();
+			const { rerender } = render(ElementEditPopover, { props: props({ element: straightPass }) });
+			expect(screen.queryByRole("button", { name: "Edit shape" })).not.toBeInTheDocument();
+			expect(within(screen.getByRole("group", { name: "Bends" })).queryByRole("list")).not.toBeInTheDocument();
+
+			await rerender(props({ element: straightPass, onEditShape }));
+			await fireEvent.click(screen.getByRole("button", { name: "Edit shape" }));
+
+			expect(onEditShape).toHaveBeenCalledOnce();
+		});
+
+		it("point elements have no Bends group, even with a bend index", () => {
+			render(ElementEditPopover, { props: props({ bendIndex: 0 }) });
+
+			expect(screen.queryByRole("group", { name: "Bends" })).not.toBeInTheDocument();
+			expect(screen.queryByRole("button", { name: "Remove bend" })).not.toBeInTheDocument();
+		});
+
+		it("Delete arrow removes the arrow and closes", async () => {
+			const actions = fakeActions();
+			const onClose = vi.fn();
+			render(ElementEditPopover, { props: props({ element: pass, actions, onClose }) });
+
+			await fireEvent.click(screen.getByRole("button", { name: /delete arrow/i }));
+
+			expect(actions.removeElement).toHaveBeenCalledWith("arrow-1");
+			expect(onClose).toHaveBeenCalledOnce();
+		});
+
+		it("all buttons are type=button", () => {
+			render(ElementEditPopover, { props: props({ element: pass, bendIndex: 0 }) });
+
+			for (const button of screen.getAllByRole("button")) {
+				expect(button).toHaveAttribute("type", "button");
+			}
+		});
 	});
 });

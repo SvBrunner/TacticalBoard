@@ -272,4 +272,34 @@ describe("BoardViewport", () => {
 			});
 		});
 	});
+
+	describe("screenRectOfBounds", () => {
+		const bounds = { x: 1200, y: 100, width: 400, height: 200 };
+
+		it("maps a scene rect to viewport coordinates", () => {
+			const viewport = new BoardViewport();
+			const fit = viewport.fit(1000, 500); // scale 0.5
+
+			expect(viewport.screenRectOfBounds(bounds, fit, { x: 10, y: 30 })).toEqual({ x: 610, y: 80, width: 200, height: 100 });
+		});
+
+		it("swaps width and height on the rotated half field", () => {
+			const viewport = new BoardViewport(FLOORBALL, "half");
+			const fit = viewport.fit(1000, 500); // scale 0.5
+
+			expect(viewport.screenRectOfBounds(bounds, fit, { x: 10, y: 30 })).toEqual({ x: 360, y: 130, width: 100, height: 200 });
+		});
+
+		it("handles a zero-size rect (a point)", () => {
+			const viewport = new BoardViewport();
+			const fit = viewport.fit(1000, 500);
+
+			expect(viewport.screenRectOfBounds({ x: 200, y: 100, width: 0, height: 0 }, fit, { x: 0, y: 0 })).toEqual({
+				x: 100,
+				y: 50,
+				width: 0,
+				height: 0,
+			});
+		});
+	});
 });
