@@ -5,6 +5,7 @@ import { PointElement } from "$lib/model/elements/PointElement";
 import { Frame } from "$lib/model/Frame";
 import { SequentialIdGenerator } from "$lib/model/ids/IdGenerator";
 import { DEFAULT_SITUATION_TITLE, Situation } from "$lib/model/Situation";
+import { EMPTY_HISTORY_STATUS, type HistoryStatus } from "$lib/history/HistoryStatus";
 import { SituationEditor, situationEditor } from "./SituationEditor";
 
 const START = "2026-01-01T00:00:00.000Z";
@@ -212,6 +213,288 @@ describe("SituationEditor", () => {
 			expect(first.findElement("p1")).toMatchObject({ x: 9, y: 9 });
 			expect(first.elements).toHaveLength(2);
 			expect(second).toBe(loaded.frames[1]);
+		});
+	});
+
+	describe("selectFrame", () => {
+		it("switches the active frame without changing the situation", () => {
+			editor.load(twoFrameSituation());
+			const before = editor.current();
+
+			editor.selectFrame("f2");
+
+			expect(get(editor.activeFrame).id).toBe("f2");
+			expect(get(editor.elements)).toEqual(before.frames[1].elements);
+			expect(editor.current()).toBe(before);
+		});
+
+		it("is not an undo step", () => {
+			editor.load(twoFrameSituation());
+
+			editor.selectFrame("f2");
+
+			expect(get(editor.history)).toEqual(EMPTY_HISTORY_STATUS);
+			editor.selectFrame("f1");
+			expect(get(editor.history)).toEqual(EMPTY_HISTORY_STATUS);
+		});
+
+		it("throws for an unknown frame id", () => {
+			expect(() => editor.selectFrame("missing")).toThrow(/no frame/);
+		});
+
+		it("edits go to the newly active frame", () => {
+			editor.load(twoFrameSituation());
+
+			editor.selectFrame("f2");
+			editor.moveElement("p1", 7, 7);
+
+			const [first, second] = editor.current().frames;
+			expect(first.findElement("p1")).toMatchObject({ x: 0, y: 0 });
+			expect(second.findElement("p1")).toMatchObject({ x: 7, y: 7 });
+		});
+	});
+
+	describe("undo/redo", () => {
+		const elementsNow = () => get(editor.elements);
+
+		it("starts with nothing to undo or redo", () => {
+			expect(get(editor.history)).toEqual(EMPTY_HISTORY_STATUS);
+			expect(editor.undo()).toBeUndefined();
+			expect(editor.redo()).toBeUndefined();
+		});
+
+		it("addElement is undoable and redo re-adds the same element id", () => {
+			const id = editor.addElement(10, 20, "blue", "Ball");
+
+			expect(editor.undo()).toBe("Add Ball");
+			expect(elementsNow()).toEqual([]);
+
+			expect(editor.redo()).toBe("Add Ball");
+			expect(elementsNow()).toHaveLength(1);
+			expect(elementsNow()[0]).toMatchObject({ id, x: 10, y: 20, color: "blue", type: "Ball" });
+		});
+
+		it("removeElement is undoable and restores the original z-order", () => {
+			const a = editor.addElement(0, 0, "red", "Player");
+			const b = editor.addElement(1, 1, "red", "Player");
+			const c = editor.addElement(2, 2, "red", "Player");
+
+			editor.removeElement(b);
+			expect(elementsNow().map((element) => element.id)).toEqual([a, c]);
+
+			expect(editor.undo()).toBe("Delete Player");
+			expect(elementsNow().map((element) => element.id)).toEqual([a, b, c]);
+
+			editor.redo();
+			expect(elementsNow().map((element) => element.id)).toEqual([a, c]);
+		});
+
+		it("moveElement is undoable and redoable", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+			editor.endGesture();
+
+			editor.moveElement(id, 5, 6);
+
+			expect(editor.undo()).toBe("Move Player");
+			expect(elementsNow()[0]).toMatchObject({ x: 0, y: 0 });
+			editor.redo();
+			expect(elementsNow()[0]).toMatchObject({ x: 5, y: 6 });
+		});
+
+		it("consecutive moves of one element merge into one step until endGesture", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+
+			editor.moveElement(id, 1, 1);
+			editor.moveElement(id, 2, 2);
+			editor.endGesture();
+			editor.moveElement(id, 3, 3);
+
+			editor.undo();
+			expect(elementsNow()[0]).toMatchObject({ x: 2, y: 2 });
+			editor.undo();
+			expect(elementsNow()[0]).toMatchObject({ x: 0, y: 0 });
+			expect(get(editor.history).undoLabel).toBe("Add Player");
+		});
+
+		it("changeColor is undoable and redoable", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+
+			editor.changeColor(id, "green");
+
+			expect(editor.undo()).toBe("Change Player color");
+			expect(elementsNow()[0].color).toBe("red");
+			editor.redo();
+			expect(elementsNow()[0].color).toBe("green");
+		});
+
+		it("changeType is undoable and redoable", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+
+			editor.changeType(id, "Circle");
+
+			expect(editor.undo()).toBe("Change Player to Circle");
+			expect(elementsNow()[0]).toMatchObject({ id, type: "Player" });
+			editor.redo();
+			expect(elementsNow()[0]).toMatchObject({ id, type: "Circle" });
+		});
+
+		it("unchanged edits and unknown ids create no undo steps", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+			editor.endGesture();
+
+			editor.moveElement(id, 0, 0);
+			editor.changeColor(id, "red");
+			editor.changeType(id, "Player");
+			editor.removeElement("missing");
+			editor.moveElement("missing", 1, 1);
+			editor.changeColor("missing", "green");
+			editor.changeType("missing", "Ball");
+
+			expect(get(editor.history).undoLabel).toBe("Add Player");
+			editor.undo();
+			expect(get(editor.history).canUndo).toBe(false);
+		});
+
+		it("a new edit after undo clears redo", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+			editor.changeColor(id, "green");
+			editor.undo();
+
+			editor.changeColor(id, "blue");
+
+			expect(get(editor.history).canRedo).toBe(false);
+			expect(editor.redo()).toBeUndefined();
+		});
+
+		it("undo and redo with nothing to do leave the situation untouched", () => {
+			const before = editor.current();
+			clock.advance(1000);
+
+			editor.undo();
+			editor.redo();
+
+			expect(editor.current()).toBe(before);
+		});
+
+		it("refreshes updatedAt on undo and on redo", () => {
+			editor.addElement(0, 0, "red", "Player");
+
+			clock.set("2026-02-01T00:00:00.000Z");
+			editor.undo();
+			expect(editor.current().updatedAt).toBe("2026-02-01T00:00:00.000Z");
+
+			clock.set("2026-03-01T00:00:00.000Z");
+			editor.redo();
+			expect(editor.current().updatedAt).toBe("2026-03-01T00:00:00.000Z");
+			expect(editor.current().createdAt).toBe(START);
+		});
+
+		it("the history store reflects the active frame's history", () => {
+			const seen: HistoryStatus[] = [];
+			const unsubscribe = editor.history.subscribe((status) => seen.push(status));
+
+			editor.addElement(0, 0, "red", "Player");
+			editor.undo();
+			editor.redo();
+			unsubscribe();
+
+			expect(seen).toEqual([
+				EMPTY_HISTORY_STATUS,
+				{ canUndo: true, canRedo: false, undoLabel: "Add Player", redoLabel: undefined },
+				{ canUndo: false, canRedo: true, undoLabel: undefined, redoLabel: "Add Player" },
+				{ canUndo: true, canRedo: false, undoLabel: "Add Player", redoLabel: undefined },
+			]);
+		});
+
+		it("keeps an independent history per frame", () => {
+			editor.load(twoFrameSituation());
+
+			editor.moveElement("p1", 1, 1);
+			editor.selectFrame("f2");
+			expect(get(editor.history).canUndo).toBe(false);
+
+			editor.changeColor("p1", "green");
+			editor.addElement(3, 3, "blue", "Ball");
+			expect(get(editor.history).undoLabel).toBe("Add Ball");
+
+			editor.selectFrame("f1");
+			expect(get(editor.history)).toMatchObject({ canUndo: true, undoLabel: "Move Player" });
+			editor.undo();
+
+			const [first, second] = editor.current().frames;
+			expect(first.findElement("p1")).toMatchObject({ x: 0, y: 0 });
+			expect(second.findElement("p1")).toMatchObject({ x: 50, y: 50, color: "green" });
+			expect(second.elements).toHaveLength(2);
+
+			editor.selectFrame("f2");
+			editor.undo();
+			editor.undo();
+			expect(editor.current().frames[1].elements).toEqual(twoFrameSituation().frames[1].elements);
+			expect(get(editor.history).canUndo).toBe(false);
+		});
+
+		it("switching frames ends the edit session, so moves don't merge across a switch", () => {
+			editor.load(twoFrameSituation());
+			editor.moveElement("p1", 1, 1);
+
+			editor.selectFrame("f2");
+			editor.selectFrame("f1");
+			editor.moveElement("p1", 2, 2);
+
+			editor.undo();
+			expect(get(editor.elements)[0]).toMatchObject({ x: 1, y: 1 });
+		});
+
+		it("the history store follows frame switches", () => {
+			editor.load(twoFrameSituation());
+			const seen: boolean[] = [];
+			const unsubscribe = editor.history.subscribe((status) => seen.push(status.canUndo));
+
+			editor.moveElement("p1", 1, 1);
+			editor.selectFrame("f2");
+			editor.selectFrame("f1");
+			unsubscribe();
+
+			expect(seen).toEqual([false, true, false, true]);
+		});
+
+		it("load is not undoable and clears every frame's history", () => {
+			editor.load(twoFrameSituation());
+			editor.moveElement("p1", 1, 1);
+			editor.selectFrame("f2");
+			editor.moveElement("p1", 2, 2);
+			editor.undo();
+
+			const reloaded = twoFrameSituation();
+			editor.load(reloaded);
+
+			expect(get(editor.history)).toEqual(EMPTY_HISTORY_STATUS);
+			expect(editor.undo()).toBeUndefined();
+			expect(editor.redo()).toBeUndefined();
+			expect(editor.current()).toBe(reloaded);
+			editor.selectFrame("f2");
+			expect(get(editor.history)).toEqual(EMPTY_HISTORY_STATUS);
+		});
+
+		it("load clears the history of the initial situation", () => {
+			editor.addElement(0, 0, "red", "Player");
+
+			editor.load(twoFrameSituation());
+
+			expect(get(editor.history).canUndo).toBe(false);
+		});
+
+		it("the history store keeps working after load with the same frame ids", () => {
+			editor.load(twoFrameSituation());
+			const seen: boolean[] = [];
+			const unsubscribe = editor.history.subscribe((status) => seen.push(status.canUndo));
+
+			editor.moveElement("p1", 1, 1);
+			editor.load(twoFrameSituation());
+			editor.moveElement("p1", 2, 2);
+			unsubscribe();
+
+			expect(seen).toEqual([false, true, false, true]);
 		});
 	});
 

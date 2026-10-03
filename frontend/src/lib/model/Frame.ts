@@ -28,6 +28,27 @@ export class Frame {
 		return new Frame(this.id, this.description, [...this.elements, element]);
 	}
 
+	/**
+	 * Inserts an element at the given position in the z-order (0 = bottom).
+	 * The index is clamped to the valid range.
+	 */
+	insertElement(element: BoardElement, index: number): Frame {
+		if (this.findElement(element.id)) {
+			throw new Error(`Frame ${this.id} already contains an element with id ${element.id}`);
+		}
+		const position = Math.min(Math.max(Math.trunc(index), 0), this.elements.length);
+		return new Frame(this.id, this.description, [
+			...this.elements.slice(0, position),
+			element,
+			...this.elements.slice(position),
+		]);
+	}
+
+	/** Position of the element in the z-order, or -1 when the frame does not contain it. */
+	indexOfElement(id: string): number {
+		return this.elements.findIndex((element) => element.id === id);
+	}
+
 	removeElement(id: string): Frame {
 		if (!this.findElement(id)) {
 			return this;

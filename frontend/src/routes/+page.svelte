@@ -13,6 +13,8 @@
 	import { notifications } from "$lib/debug/Notifications";
 	import NotificationStack from "$lib/debug/NotificationStack.svelte";
 	import { onMount } from "svelte";
+	import Konva from "konva";
+	import { UndoRedoShortcuts } from "$lib/history/UndoRedoShortcuts";
 
 	let contextMenuBoardComponent: ContextMenuBoardComponent;
 	let sceneWidth: number = 2000;
@@ -27,7 +29,13 @@
 	const nonPlayerColor = "oklch(45% 0.01 260)";
 	const elements = situationEditor.elements;
 	const situation = situationEditor.situation;
+	const history = situationEditor.history;
 	const fileTransfer = new SituationFileTransfer();
+	const shortcuts = new UndoRedoShortcuts({
+		undo: handleUndo,
+		redo: handleRedo,
+		isBlocked: () => Konva.isDragging(),
+	});
 
 	function fitStageIntoParentContainer() {
 		const container = document.getElementById("stage-parent");
@@ -96,6 +104,19 @@
 		contextMenuBoardComponent.onPageClick(null);
 	}
 
+	function handleUndo() {
+		// The context menu may target an element the undo removes or changes.
+		hideContextMenu();
+		const label = situationEditor.undo();
+		notifications.notify(label ? `Undo: ${label}` : "Nothing to undo");
+	}
+
+	function handleRedo() {
+		hideContextMenu();
+		const label = situationEditor.redo();
+		notifications.notify(label ? `Redo: ${label}` : "Nothing to redo");
+	}
+
 	function handleExport() {
 		const filename = fileTransfer.export(situationEditor.current());
 		notifications.notify(`Exported ${$situation.frames.length} frame(s) to ${filename}`);
@@ -118,13 +139,23 @@
 	});
 </script>
 
+<svelte:window onkeydown={(e) => shortcuts.handle(e)} />
+
 <svelte:head>
 	<title>Tactical Board</title>
 	<meta name="description" content="This is the board" />
 </svelte:head>
 
 <div class="tb-root {$theme}">
-	<TopBar title={$situation.displayTitle} onExport={handleExport} onLoadFile={handleLoadFile} />
+	<TopBar
+		title={$situation.displayTitle}
+		onExport={handleExport}
+		onLoadFile={handleLoadFile}
+		canUndo={$history.canUndo}
+		canRedo={$history.canRedo}
+		onUndo={handleUndo}
+		onRedo={handleRedo}
+	/>
 
 	<div class="body">
 		<Sidebar bind:activeTool bind:selectedColor />

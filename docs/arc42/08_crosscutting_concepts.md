@@ -85,3 +85,18 @@ Situations are exported and imported as JSON files named `<slug-of-title>.situat
 **Import creates a new situation:** the imported situation gets a fresh situation ID; frame and element IDs are kept. It replaces the content of the editor.
 
 Implementation: `frontend/src/lib/model/serialization/` (`SituationSerializer` facade, `SituationFileMigrator`, `SituationFileValidator`, `SituationMapper`).
+
+## 8.4 Editing via commands (undo/redo)
+
+Every change to the model goes **`SituationEditor` → command → the active frame's `CommandHistory`**. UI components never construct commands or change the model themselves; they call the editor's public methods (`addElement`, `moveElement`, `undo`, `redo`, …).
+
+- **Commands** work on the immutable model: `execute(frame)` / `undo(frame)` return a new frame and address elements by id, never by reference or index. A command records what it needs to revert itself (e.g. the removed element and its z-order index, a move's start position). Commands that would change nothing (same position/color/type, unknown id) are not recorded. Several commands can be grouped into one undo step with `CompositeCommand`.
+- **One history per frame**, keyed by frame id: undo/redo always act on the active frame's history. Switching frames is not an undo step.
+- **Limit:** 200 steps per frame; the oldest steps are dropped. Histories live in memory only and do not survive a page reload.
+- **Loading/importing a situation is not undoable** and clears all histories.
+- **Edit sessions:** until the history is sealed (`SituationEditor.endGesture()`, called at the end of a drag and — once text fields exist — on blur), a new command may merge into the previous one (`Command.mergeWith`). So consecutive moves of one element during a gesture, or all keystrokes of one text-field focus, become a single undo step. Undo, redo, and switching frames also seal.
+- **Not undoable:** selection and tool changes. After undo, nothing is selected automatically.
+- **Feedback:** undo/redo is shown only via the enabled state of the Undo/Redo buttons; what was undone/redone is logged to the debug notification log, not shown as user-facing UI.
+- **Shortcuts:** Ctrl/Cmd+Z undo; Ctrl/Cmd+Shift+Z and Ctrl+Y redo. Ignored while typing in text fields, during IME composition, with Alt held, and while an element is being dragged.
+
+Implementation: `frontend/src/lib/history/` (generic: `Command`, `CommandHistory`, `CompositeCommand`, `FrameHistories`, `UndoRedoShortcuts`) and `frontend/src/lib/commands/` (one class per frame command).

@@ -33,6 +33,52 @@ describe("Frame", () => {
 		});
 	});
 
+	describe("insertElement", () => {
+		const circle = new PointElement("c1", 5, 5, "blue", "Circle");
+
+		it.each([
+			[0, ["c1", "p1", "b1"]],
+			[1, ["p1", "c1", "b1"]],
+			[2, ["p1", "b1", "c1"]],
+		])("inserts at index %i", (index, expected) => {
+			const frame = new Frame("f", "d", [player, ball]);
+
+			const inserted = frame.insertElement(circle, index);
+
+			expect(inserted.elements.map((element) => element.id)).toEqual(expected);
+			expect(inserted).toMatchObject({ id: "f", description: "d" });
+			expect(frame.elements).toEqual([player, ball]);
+		});
+
+		it.each([
+			[-3, ["c1", "p1", "b1"]],
+			[99, ["p1", "b1", "c1"]],
+		])("clamps the out-of-range index %i", (index, expected) => {
+			const frame = new Frame("f", "", [player, ball]);
+
+			expect(frame.insertElement(circle, index).elements.map((element) => element.id)).toEqual(expected);
+		});
+
+		it("throws on a duplicate element id", () => {
+			const frame = new Frame("f", "", [player]);
+
+			expect(() => frame.insertElement(player, 0)).toThrow(/already contains/);
+		});
+	});
+
+	describe("indexOfElement", () => {
+		it("returns the z-order position of the element", () => {
+			const frame = new Frame("f", "", [player, ball]);
+
+			expect(frame.indexOfElement("p1")).toBe(0);
+			expect(frame.indexOfElement("b1")).toBe(1);
+		});
+
+		it("returns -1 for an unknown id", () => {
+			expect(new Frame("f", "", [player]).indexOfElement("missing")).toBe(-1);
+		});
+	});
+
 	describe("removeElement", () => {
 		it("removes only the matching element", () => {
 			const frame = new Frame("f", "d", [player, ball]);

@@ -22,6 +22,8 @@
 		const newX = e.target.attrs.x;
 		const newY = e.target.attrs.y;
 		situationEditor.moveElement(id, newX, newY);
+		// A drag is one undo step: don't let the next drag merge into this one.
+		situationEditor.endGesture();
 	}
 </script>
 

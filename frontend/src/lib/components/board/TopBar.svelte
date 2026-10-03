@@ -10,8 +10,21 @@
 	export let title: string;
 	export let onExport: () => void;
 	export let onLoadFile: (file: File) => void;
+	export let canUndo: boolean;
+	export let canRedo: boolean;
+	export let onUndo: () => void;
+	export let onRedo: () => void;
 
 	let fileInput: HTMLInputElement;
+
+	// Guarded as well as `disabled`, so a synthetic click on a disabled button can't trigger it.
+	function handleUndo() {
+		if (canUndo) onUndo();
+	}
+
+	function handleRedo() {
+		if (canRedo) onRedo();
+	}
 
 	function handleFileChange(e: Event) {
 		const file = (e.target as HTMLInputElement).files?.[0];
@@ -35,6 +48,23 @@
 	</div>
 
 	<div class="spacer"></div>
+
+	<div class="history" role="group" aria-label="History">
+		<button class="btn icon" on:click={handleUndo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">
+			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M9 14L4 9l5-5" />
+				<path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+			</svg>
+		</button>
+		<button class="btn icon" on:click={handleRedo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M15 14l5-5-5-5" />
+				<path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+			</svg>
+		</button>
+	</div>
+
+	<div class="divider"></div>
 
 	<button
 		class="btn ghost"
@@ -146,6 +176,16 @@
 		padding: 0;
 		background: var(--bg-app);
 		color: var(--text);
+	}
+
+	.btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.history {
+		display: flex;
+		gap: 8px;
 	}
 
 	.divider {
