@@ -36,7 +36,7 @@ sequenceDiagram
 
     U->>F: Click "Save"
     F->>B: POST /boards (JSON board content, folder, team)
-    B->>T: Check user's role in team (Bearbeiter/Admin required)
+    B->>T: Check user's role in team (Editor/Admin required)
     T-->>B: Authorized
     B->>DB: Persist board
     DB-->>B: OK
@@ -44,4 +44,3 @@ sequenceDiagram
     F-->>U: Confirmation
 ```
 
-_TBD: exact required role for saving/editing a board — assumed "Bearbeiter or Admin" here based on the role names from chapter 1, not yet explicitly confirmed._

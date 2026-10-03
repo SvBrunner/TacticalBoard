@@ -4,7 +4,7 @@ A tactics board for drawing and saving game situations across different sports â
 
 Currently implemented: a floorball board where you place, move, and color player markers on a canvas, then save/load a board as JSON.
 
-Planned: support for more sports, plus a user-management system with teams and per-team roles (Admin, Editor, Reader), where a team organizes its saved situations into folders.
+Planned: multi-frame situations and more editor features, then a backend with users and teams (per-team roles Admin, Editor, Reader) where a team organizes its saved situations into folders, and later more sports. See [docs/roadmap.md](docs/roadmap.md).
 
 ## Structure
 
@@ -38,12 +38,13 @@ Without Nix, install `pnpm` and Node.js yourself, then run the same commands fro
 | `pnpm run build` | Production build |
 | `pnpm run preview` | Preview the production build |
 | `pnpm run check` | Type-check with svelte-check |
+| `pnpm test` | Run the Vitest test suite |
 
 ## Tech stack
 
 - SvelteKit 2 + Svelte 5
 - Konva / svelte-konva for the drawing canvas
-- Sveltestrap (Bootstrap) for UI chrome
+- Vitest + Testing Library for tests
 
 pnpm is the only supported package manager â€” the lockfile and `pnpm-workspace.yaml` in `frontend/` are the source of truth.
 

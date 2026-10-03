@@ -2,18 +2,24 @@
 
 ## 8.1 Authorization Concept
 
-Roles are scoped per team (chapter 1): **Admin**, **Bearbeiter** (editor), **Leser** (reader). They apply across the Teams, Folders, and Boards modules (chapter 5).
+There are two levels of roles:
 
-**Proposed permission matrix — not yet confirmed, draft only:**
+- **System-wide:** *system administrator* or *normal user*. System administrators only handle operations/technical settings and have no special access to teams or their content. Any user can create a team.
+- **Per team:** **Admin**, **Editor**, **Reader**. These apply across the Teams, Folders, and Boards modules (chapter 5). The creator of a team becomes its Admin. Members whose join request is accepted start as Reader.
 
-| Action | Admin | Bearbeiter | Leser |
+**Team permission matrix (confirmed):**
+
+| Action | Admin | Editor | Reader |
 |---|---|---|---|
 | View team's boards/folders | ✅ | ✅ | ✅ |
 | Create/edit/delete a board | ✅ | ✅ | ❌ |
 | Create/rename/delete a folder | ✅ | ✅ | ❌ |
+| Accept/reject join requests | ✅ | ❌ | ❌ |
 | Manage team members/roles | ✅ | ❌ | ❌ |
-| Leave the team | ✅ | ✅ | ✅ |
+| Leave the team | ✅¹ | ✅ | ✅ |
 | Delete the team | ✅ | ❌ | ❌ |
+
+¹ Except the team's last Admin, who has to delete the team instead.
 
 Enforcement point: the backend (chapter 5's Teams module owns the role check; Boards/Folders modules call into it rather than duplicating authorization logic).
 
@@ -28,6 +34,6 @@ Example shape:
   "type": "https://tacticalboard/errors/forbidden",
   "title": "Forbidden",
   "status": 403,
-  "detail": "Role 'Leser' cannot edit boards in this team."
+  "detail": "Role 'Reader' cannot edit boards in this team."
 }
 ```

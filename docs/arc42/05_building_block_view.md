@@ -30,7 +30,7 @@ The backend is decomposed by business domain, not by technical layer:
 |---|---|
 | **Boards** | Board CRUD (save/load/edit/delete on the server), JSON export/import of a board's content. |
 | **Folders** | Grouping a team's boards into folders. |
-| **Teams** | Team creation, join/leave, membership management, roles (Admin, Bearbeiter, Leser). |
+| **Teams** | Team creation, join/leave, membership management, roles (Admin, Editor, Reader), join requests. |
 | **Users/Auth** | Local representation of authenticated users; maps tokens from the IdP to app-level identity and team roles. |
 
 _TBD: how these modules depend on each other (e.g. does Folders depend on Boards, does Teams own authorization checks used by Boards/Folders) — to be refined once implementation starts._

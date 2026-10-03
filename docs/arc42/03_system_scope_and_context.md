@@ -17,7 +17,7 @@ graph LR
     Spieler -- views / uses boards --> System
 ```
 
-_TBD: how Trainer and Spieler map onto the team roles from chapter 1 (Admin, Bearbeiter, Leser) — not yet decided._
+Trainer and Spieler are descriptive actor types only. They are not roles in the system and do not map onto the team roles (Admin, Editor, Reader, see ch. 8).
 
 ## 3.2 Technical Context
 
