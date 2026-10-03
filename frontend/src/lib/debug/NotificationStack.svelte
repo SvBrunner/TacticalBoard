@@ -1,27 +1,42 @@
+<!--
+@component
+Debug log of notifications as dismissible toasts. Rendered only in dev mode
+(`import.meta.env.DEV`); production builds show nothing.
+-->
 <script lang="ts">
 	import { notifications } from "./Notifications";
+
+	interface Props {
+		/** Whether the stack is shown at all; defaults to dev mode. */
+		enabled?: boolean;
+	}
+
+	let { enabled = import.meta.env.DEV }: Props = $props();
 
 	const list = notifications.notifications;
 </script>
 
-<div class="stack" role="log" aria-live="polite">
-	{#each $list as n (n.id)}
-		<button class="toast {n.level}" on:click={() => notifications.dismiss(n.id)}>
-			{n.message}
-		</button>
-	{/each}
-</div>
+{#if enabled}
+	<div class="stack" role="log" aria-live="polite">
+		{#each $list as n (n.id)}
+			<button type="button" class="toast {n.level}" onclick={() => notifications.dismiss(n.id)}>
+				{n.message}
+			</button>
+		{/each}
+	</div>
+{/if}
 
 <style>
 	.stack {
 		position: fixed;
-		top: 16px;
-		right: 16px;
+		/* Below the header, so it never covers the header's buttons. */
+		top: calc(72px + env(safe-area-inset-top, 0px));
+		right: calc(16px + env(safe-area-inset-right, 0px));
 		z-index: 1000;
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		max-width: 340px;
+		max-width: min(340px, calc(100vw - 32px));
 		pointer-events: none;
 	}
 
@@ -50,6 +65,19 @@
 	.toast.error {
 		border-color: var(--danger, #c33);
 		color: var(--danger, #c33);
+	}
+
+	@media (max-width: 599px), (max-height: 499px) {
+		.stack {
+			top: calc(56px + env(safe-area-inset-top, 0px));
+			right: calc(8px + env(safe-area-inset-right, 0px));
+			max-width: min(280px, calc(100vw - 16px));
+		}
+
+		.toast {
+			font-size: 11px;
+			padding: 6px 8px;
+		}
 	}
 
 	@keyframes pop-in {

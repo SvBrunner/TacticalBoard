@@ -1,35 +1,46 @@
 <script lang="ts">
-	import { Stage, Layer, Rect } from "svelte-konva";
-	import BoardComponent from "$lib/components/board/BoardComponent.svelte";
-	import FloorballFullField from "$lib/components/board/background/FloorballFullField.svelte";
-	import ContextMenuBoardComponent from "$lib/components/board/contextmenus/ContextMenuBoardComponent.svelte";
+	import { onDestroy, onMount } from "svelte";
+	import Konva from "konva";
+	import BoardCanvas from "$lib/components/board/BoardCanvas.svelte";
+	import ElementEditPopover from "$lib/components/board/popover/ElementEditPopover.svelte";
 	import TopBar from "$lib/components/board/TopBar.svelte";
-	import Sidebar from "$lib/components/board/Sidebar.svelte";
+	import ToolPanel from "$lib/components/board/ToolPanel.svelte";
+	import { elementCatalog } from "$lib/components/board/ElementCatalog";
+	import { BoardInteractionController } from "$lib/board/BoardInteractionController";
+	import { BoardViewport } from "$lib/board/BoardViewport";
+	import { configureKonva } from "$lib/board/konvaSetup";
+	import { PopoverState } from "$lib/board/PopoverState";
+	import { Selection } from "$lib/board/Selection";
+	import { ToolState, type Tool } from "$lib/board/ToolState";
 	import { situationEditor } from "$lib/editor/SituationEditor";
 	import { SituationFileTransfer } from "$lib/editor/SituationFileTransfer";
-	import type { ElementType } from "$lib/model/elements/ElementType";
-	import { PointElement } from "$lib/model/elements/PointElement";
 	import { theme } from "$lib/theme";
 	import { notifications } from "$lib/debug/Notifications";
 	import NotificationStack from "$lib/debug/NotificationStack.svelte";
-	import { onMount } from "svelte";
-	import Konva from "konva";
 	import { UndoRedoShortcuts } from "$lib/history/UndoRedoShortcuts";
 
-	let contextMenuBoardComponent: ContextMenuBoardComponent;
-	let sceneWidth: number = 2000;
-	let sceneHeight: number = 1000;
-	let baseScale = { x: 1, y: 1 };
-
-	let containerWidth = sceneWidth;
-	let containerHeight = sceneHeight;
-
-	let activeTool: "Move" | ElementType = "Player";
-	let selectedColor = "oklch(62% 0.16 230)";
-	const nonPlayerColor = "oklch(45% 0.01 260)";
 	const elements = situationEditor.elements;
 	const situation = situationEditor.situation;
 	const history = situationEditor.history;
+
+	const viewport = new BoardViewport(2000, 1000);
+	const tools = new ToolState();
+	const activeTool = tools.activeTool;
+	const playerColor = tools.playerColor;
+	const selection = new Selection(elements);
+	const selectedId = selection.selectedId;
+	const selected = selection.selected;
+	const popover = new PopoverState();
+	const popoverAnchor = popover.anchor;
+	const controller = new BoardInteractionController({
+		editor: situationEditor,
+		selection,
+		tools,
+		popover,
+		bounds: viewport,
+		neutralColor: elementCatalog.neutralColor,
+		log: notifications,
+	});
 	const fileTransfer = new SituationFileTransfer();
 	const shortcuts = new UndoRedoShortcuts({
 		undo: handleUndo,
@@ -37,82 +48,32 @@
 		isBlocked: () => Konva.isDragging(),
 	});
 
-	function fitStageIntoParentContainer() {
-		const container = document.getElementById("stage-parent");
-		if (container == null) {
-			return;
-		}
-
-		const cs = getComputedStyle(container);
-		const paddingX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-		const borderX = parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
-
-		const parentContainerWidth = container.offsetWidth - paddingX - borderX;
-		const scale = parentContainerWidth / sceneWidth;
-
-		containerWidth = parentContainerWidth;
-		containerHeight = parentContainerWidth * (sceneHeight / sceneWidth);
-		baseScale = { x: scale, y: scale };
-
-		notifications.notify(
-			`Stage sized to ${Math.round(containerWidth)}×${Math.round(containerHeight)} (scale ${scale.toFixed(3)})`,
-		);
-	}
-
-	function handleStageOnClick(e: any) {
-		const target = e.target;
-		const evt = e.evt;
-		// getRelativePointerPosition (not getPointerPosition) accounts for the
-		// Stage's own scale, giving coordinates in the same units as sceneWidth/Height.
-		const pos = target.getStage().getRelativePointerPosition();
-		const x = pos.x;
-		const y = pos.y;
-
-		if (target.attrs.name === "Component") {
-			if (evt.shiftKey) {
-				notifications.notify(`Deleted ${target.attrs.elementType} ${target.attrs.id}`);
-				situationEditor.removeElement(target.attrs.id);
-			}
-			return;
-		}
-
-		if (activeTool === "Move") {
-			notifications.notify(`Click ignored (tool is Move) at (${Math.round(x)}, ${Math.round(y)})`);
-			return;
-		}
-
-		const color = activeTool === "Player" ? selectedColor : nonPlayerColor;
-		situationEditor.addElement(x, y, color, activeTool);
-		notifications.notify(`Added ${activeTool} at (${Math.round(x)}, ${Math.round(y)})`);
-	}
-
-	function handleStageOnContextMenu(e: any) {
-		e.evt.preventDefault();
-		const target = e.target;
-		if (target.attrs.name === "Component") {
-			notifications.notify(`Opened marker menu for ${target.attrs.elementType} ${target.attrs.id}`);
-			contextMenuBoardComponent.showRightClickContextMenu(
-				e.evt,
-				target.attrs.id,
-				target.attrs.elementType,
-				target.attrs.fill,
-			);
+	function handleKeydown(event: KeyboardEvent) {
+		if (!shortcuts.handle(event)) {
+			controller.keyDown(event);
 		}
 	}
 
-	function hideContextMenu() {
-		contextMenuBoardComponent.onPageClick(null);
+	function handleSelectTool(tool: Tool) {
+		tools.selectTool(tool);
+		notifications.notify(`Tool: ${tool}`);
+	}
+
+	function handleSelectPlayerColor(color: string) {
+		tools.selectPlayerColor(color);
+		const name = elementCatalog.playerColors.find((c) => c.value === color)?.name ?? color;
+		notifications.notify(`Player color: ${name}`);
 	}
 
 	function handleUndo() {
-		// The context menu may target an element the undo removes or changes.
-		hideContextMenu();
+		// The popover may target an element the undo removes or changes.
+		popover.close();
 		const label = situationEditor.undo();
 		notifications.notify(label ? `Undo: ${label}` : "Nothing to undo");
 	}
 
 	function handleRedo() {
-		hideContextMenu();
+		popover.close();
 		const label = situationEditor.redo();
 		notifications.notify(label ? `Redo: ${label}` : "Nothing to redo");
 	}
@@ -126,6 +87,7 @@
 		notifications.notify(`Loading ${file.name}…`);
 		try {
 			const imported = await fileTransfer.import(file);
+			popover.close();
 			situationEditor.load(imported);
 			notifications.notify(`Loaded "${imported.displayTitle}" from ${file.name}`);
 		} catch (err) {
@@ -134,12 +96,15 @@
 	}
 
 	onMount(() => {
-		fitStageIntoParentContainer();
-		window.addEventListener("resize", fitStageIntoParentContainer);
+		configureKonva();
+	});
+
+	onDestroy(() => {
+		selection.destroy();
 	});
 </script>
 
-<svelte:window onkeydown={(e) => shortcuts.handle(e)} />
+<svelte:window onkeydown={handleKeydown} />
 
 <svelte:head>
 	<title>Tactical Board</title>
@@ -158,83 +123,77 @@
 	/>
 
 	<div class="body">
-		<Sidebar bind:activeTool bind:selectedColor />
+		<ToolPanel
+			activeTool={$activeTool}
+			playerColor={$playerColor}
+			onSelectTool={handleSelectTool}
+			onSelectPlayerColor={handleSelectPlayerColor}
+		/>
 
-		<div class="canvas-area">
-			<div id="stage-parent" class="field-card">
-				<Stage
-					onclick={handleStageOnClick}
-					oncontextmenu={handleStageOnContextMenu}
-					onpointerdown={hideContextMenu}
-					id="stage"
-					width={containerWidth}
-					height={containerHeight}
-					scale={baseScale}
-				>
-					<Layer>
-						<Rect width={sceneWidth} height={sceneHeight} fill="white" />
-					</Layer>
-					<FloorballFullField width={sceneWidth} height={sceneHeight} />
-
-					<Layer>
-						{#each $elements as element (element.id)}
-							{#if element instanceof PointElement}
-								<BoardComponent
-									x={element.x}
-									y={element.y}
-									color={element.color}
-									type={element.type}
-									id={element.id}
-								/>
-							{/if}
-						{/each}
-					</Layer>
-				</Stage>
-			</div>
-		</div>
+		<main class="canvas-area">
+			<BoardCanvas elements={$elements} selectedId={$selectedId} {controller} {viewport} />
+		</main>
 	</div>
+
+	<ElementEditPopover
+		element={$popoverAnchor ? $selected : null}
+		anchor={$popoverAnchor}
+		actions={situationEditor}
+		onClose={() => popover.close()}
+	/>
 </div>
 
-<ContextMenuBoardComponent bind:this={contextMenuBoardComponent} />
 <NotificationStack />
 
 <style>
 	.tb-root {
 		width: 100%;
 		height: 100vh;
+		height: 100dvh;
 		background: var(--bg-app);
 		color: var(--text);
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-rows: auto minmax(0, 1fr);
+		/* Explicit: an implicit auto column would grow to the header's min-content on narrow screens. */
+		grid-template-columns: minmax(0, 1fr);
 		overflow: hidden;
 	}
 
 	.body {
-		flex-grow: 1;
-		display: flex;
+		min-height: 0;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		grid-template-areas: "tools field";
 		overflow: hidden;
+	}
+
+	.body > :global(.tool-panel) {
+		grid-area: tools;
 	}
 
 	.canvas-area {
-		flex-grow: 1;
-		position: relative;
+		grid-area: field;
+		min-width: 0;
+		min-height: 0;
+		display: flex;
 		background-color: var(--bg-canvas);
 		background-image: radial-gradient(var(--dot) 1.5px, transparent 1.5px);
 		background-size: 22px 22px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 40px;
+		padding-right: env(safe-area-inset-right, 0px);
 	}
 
-	.field-card {
-		width: 100%;
-		max-width: 1400px;
-		aspect-ratio: 2 / 1;
-		background: var(--field-surface);
-		border-radius: var(--radius-lg);
-		box-shadow: var(--shadow);
-		border: 1px solid var(--border);
-		overflow: hidden;
+	/* Phone portrait: field in the middle, tools as a bottom bar. */
+	@media (max-width: 599px) {
+		.body {
+			grid-template-columns: minmax(0, 1fr);
+			grid-template-rows: minmax(0, 1fr) auto;
+			grid-template-areas:
+				"field"
+				"tools";
+		}
+
+		.canvas-area {
+			padding-left: env(safe-area-inset-left, 0px);
+		}
 	}
 </style>

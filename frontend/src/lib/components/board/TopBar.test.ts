@@ -28,6 +28,61 @@ describe("TopBar", () => {
 		expect(screen.getByText("My Situation")).toBeInTheDocument();
 	});
 
+	describe("semantics", () => {
+		it("is the banner landmark with the title as the page's h1", () => {
+			render(TopBar, { props: props({ title: "My Situation" }) });
+
+			const banner = screen.getByRole("banner");
+			expect(within(banner).getByRole("heading", { level: 1, name: "My Situation" })).toBeInTheDocument();
+		});
+
+		it("gives every button an accessible name (also when shown icon-only on phones)", () => {
+			render(TopBar, { props: props() });
+
+			for (const name of ["Undo", "Redo", "Load", "Export JSON", "Toggle theme"]) {
+				expect(screen.getByRole("button", { name })).toBeInTheDocument();
+			}
+		});
+
+		it("hides decorative icons from assistive technology", () => {
+			const { container } = render(TopBar, { props: props() });
+
+			for (const svg of container.querySelectorAll("svg")) {
+				expect(svg.closest("[aria-hidden='true']")).not.toBeNull();
+			}
+		});
+
+		it("uses type=button so nothing submits a form", () => {
+			render(TopBar, { props: props() });
+
+			for (const button of screen.getAllByRole("button")) {
+				expect(button).toHaveAttribute("type", "button");
+			}
+		});
+	});
+
+	it("clicking Load opens the file picker", async () => {
+		const { container } = render(TopBar, { props: props() });
+		const input = container.querySelector<HTMLInputElement>("input[type=file]")!;
+		const click = vi.spyOn(input, "click");
+
+		await fireEvent.click(screen.getByRole("button", { name: "Load" }));
+
+		expect(click).toHaveBeenCalledOnce();
+	});
+
+	it("choosing a file calls onLoadFile and resets the input", async () => {
+		const onLoadFile = vi.fn();
+		const { container } = render(TopBar, { props: props({ onLoadFile }) });
+		const input = container.querySelector<HTMLInputElement>("input[type=file]")!;
+		const file = new File(["{}"], "s.situation.json", { type: "application/json" });
+		Object.defineProperty(input, "files", { value: [file], configurable: true });
+
+		await fireEvent.change(input);
+
+		expect(onLoadFile).toHaveBeenCalledWith(file);
+	});
+
 	it("clicking Export calls onExport", async () => {
 		const onExport = vi.fn();
 		render(TopBar, { props: props({ onExport }) });

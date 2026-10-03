@@ -7,10 +7,10 @@
     export let height: number;
 </script>
 
-<Layer>
+<Layer listening={false}>
     <Lines {width} {height} x={width / 2} y={height / 2} />
 </Layer>
-<Layer>
+<Layer listening={false}>
     <GoalArea {width} {height} y={height / 2} />
     <GoalArea {width} {height} y={height / 2} mirrored={true} />
     <Goal x={width * 0.0987} y={height / 2} {width} {height} />

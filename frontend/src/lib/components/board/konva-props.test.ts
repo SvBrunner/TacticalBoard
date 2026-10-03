@@ -109,3 +109,47 @@ describe("svelte-konva components use on<event> props, not on:event directives",
 		}
 	});
 });
+
+// Konva 10 fires `click`/`dblclick`/`mousedown` only for the mouse and
+// `tap` only for touch, so a handler on one of them silently ignores the
+// other input device (this is how tapping once placed nothing on phones).
+// Board components listen to the device-agnostic pointer events
+// (`onpointerclick`, `onpointerdown`, ...) instead.
+describe("svelte-konva components use device-agnostic pointer events", () => {
+	const root = process.cwd();
+	const files = [
+		...collectSvelteFiles(join(root, "src/lib/components/board")),
+		...collectSvelteFiles(join(root, "src/routes")),
+	];
+	const tagPattern = new RegExp(`<(${KONVA_COMPONENTS.join("|")})\\b[\\s\\S]*?(?:/>|>)`, "g");
+
+	it.each(files.map((f) => [f.replace(root, ""), f]))(
+		"%s has no mouse- or touch-only event prop on a Konva component",
+		(_label, file) => {
+			const content = readFileSync(file, "utf-8");
+			const tags = content.match(tagPattern) ?? [];
+			for (const tag of tags) {
+				expect(tag).not.toMatch(/\son(click|dblclick|tap|dbltap|mousedown|mouseup|touchstart|touchend)=/);
+			}
+		},
+	);
+});
+
+// The board handles every touch gesture itself; without `touch-action: none`
+// on the stage's container the browser would scroll or zoom the page while
+// a finger drags an element.
+describe("the stage container opts out of browser touch gestures", () => {
+	const content = readFileSync(join(process.cwd(), "src/lib/components/board/BoardCanvas.svelte"), "utf-8");
+
+	it("wraps the Stage in the stage container", () => {
+		expect(content).toMatch(/class="stage-container"[\s\S]*<Stage\b/);
+	});
+
+	it("sets touch-action: none, no text selection and no iOS callout on it", () => {
+		const rule = content.match(/\.stage-container\s*\{([^}]*)\}/)?.[1] ?? "";
+
+		expect(rule).toMatch(/touch-action:\s*none/);
+		expect(rule).toMatch(/(^|\s)user-select:\s*none/);
+		expect(rule).toMatch(/-webkit-touch-callout:\s*none/);
+	});
+});

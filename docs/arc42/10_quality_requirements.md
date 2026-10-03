@@ -17,4 +17,8 @@ graph TD
 
 ## 10.2 Quality Scenarios
 
-_TBD — no concrete, measurable scenarios (target numbers, load assumptions) defined yet. Add these once there's something to measure against._
+| ID | Quality | Scenario | Expected response |
+|---|---|---|---|
+| U-1 | Usability (touch) | A trainer holds a phone (portrait or landscape) or a tablet and, using only a finger, places a player, moves it, changes its type and color, and deletes it. | All of it works by touch alone, without a keyboard, mouse, or right-click. Every interactive target (buttons, swatches, elements on the field) is at least 44 × 44 CSS px; the field is fully visible without scrolling; the page neither scrolls nor zooms while working on the field. |
+
+_Further scenarios (performance target numbers, load assumptions) are still to be defined once there's something to measure against._

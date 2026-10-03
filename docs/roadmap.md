@@ -21,7 +21,7 @@ Next, in this order:
    *Everything else builds on this; changing it later touches every feature and already-exported files.*
 2. [x] **Undo/redo** as commands on the model.
    *Every later feature then goes through commands from the start instead of being retrofitted.*
-3. [ ] **Touch baseline**: place, move, select, and color popover by touch; responsive layout for phones and tablets.
+3. [x] **Touch baseline**: place, move, select, and color popover by touch; responsive layout for phones and tablets.
    *Settles the interaction pattern before arrows. From here on, touch usability is a requirement for every step.*
 4. [ ] **Create a new situation** with title and full/half field; **half field** rendering.
 5. [ ] **Position labels** on players (C, F, V, G, …).

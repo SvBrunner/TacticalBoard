@@ -100,3 +100,31 @@ Every change to the model goes **`SituationEditor` → command → the active fr
 - **Shortcuts:** Ctrl/Cmd+Z undo; Ctrl/Cmd+Shift+Z and Ctrl+Y redo. Ignored while typing in text fields, during IME composition, with Alt held, and while an element is being dragged.
 
 Implementation: `frontend/src/lib/history/` (generic: `Command`, `CommandHistory`, `CompositeCommand`, `FrameHistories`, `UndoRedoShortcuts`) and `frontend/src/lib/commands/` (one class per frame command).
+
+## 8.5 Touch interaction concept
+
+The board editor is fully usable by touch on phones (portrait and landscape) and tablets, and with mouse and keyboard on desktop. Touch, mouse, and pen share one interaction model; there is no separate "mobile mode".
+
+**Gestures** (all devices):
+
+| Gesture | Effect |
+|---|---|
+| Tap/click on an element | Selects it **and** opens the edit popover (type, player color, Delete). Same with any tool active: a tap on an element never places a new element on top of it. |
+| Tap/click on the empty field, placement tool active | Places an element there (Player in the selected player color, everything else neutral). The tool stays active; the new element is **not** selected. Clears the selection. |
+| Tap/click on the empty field, Move tool | Clears the selection and closes the popover. |
+| Drag an element | Moves it; one drag = one undo step. The popover closes while dragging, the selection stays. Elements can't be dragged off the field. |
+| Right-click / long-press on an element | Same as a tap. |
+| Delete button in the popover | Deletes the element. |
+| Desktop only: Shift+click, Delete/Backspace, Escape | Shift+click deletes the clicked element; Delete/Backspace deletes the selected element; Escape clears the selection and closes the popover. Ignored while typing in a text field. |
+
+A press only turns into a drag after the pointer has moved 6 CSS px (Konva `dragDistance`), so finger jitter doesn't move elements. Taps use Konva's `pointerclick`, which fires for mouse, touch, and pen alike and not after a drag.
+
+**Hit-area rule:** elements are drawn in scene units and scale with the field, so they look the same (proportional) on every device. Their invisible hit area is a solid circle of radius `max(visual radius, 22 CSS px / scale)`, i.e. at least 44 CSS px across on screen. Where hit areas of nearby elements overlap, the topmost element wins; a tap inside an element's enlarged hit area selects it rather than placing a new element.
+
+**Field fitting, no rotation:** the field (2000 × 1000 scene units) is scaled uniformly by `min(available width / 2000, available height / 1000)` and centered, re-fitted whenever its container changes size. It is never rotated — on a portrait phone it stays horizontal and becomes small.
+
+**No pinch-zoom (MVP):** the board area disables browser touch gestures (`touch-action: none`), so pinching neither zooms the page nor the board. See [known limitations](../known-limitations.md).
+
+**Layout:** desktop (≥ 1024 px) has a side tool panel; tablets (600–1023 px) keep the side panel with tighter spacing; portrait phones (≤ 599 px wide) get a compact header with icon-only buttons and the tools as a horizontally scrollable bottom bar; landscape phones (≤ 499 px tall) get a compact header and a narrow left tool rail. On phones the edit popover becomes a bottom sheet. Interactive controls are at least 44 × 44 CSS px; icon-only buttons keep their text as accessible name. Safe-area insets (notches, home indicator) are respected.
+
+Implementation: `frontend/src/lib/board/` (`BoardViewport`, `BoardInteractionController`, `Selection`, `ToolState`, `PopoverState`, `konvaSetup`), `frontend/src/lib/components/board/BoardCanvas.svelte` (translates Konva events into gestures), `frontend/src/lib/components/board/popover/`.

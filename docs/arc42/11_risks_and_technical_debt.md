@@ -13,3 +13,4 @@ See also [known-limitations.md](../known-limitations.md).
 ## Technical debt
 
 - The board page cannot be server-rendered (see [known-limitations.md](../known-limitations.md)) — accepted trade-off for now given Konva's browser-only requirement.
+- No pinch-zoom on the board (see [known-limitations.md](../known-limitations.md)) — accepted for the MVP. On small phones in portrait the field, and with it every element, is drawn small; enlarged touch hit areas keep elements tappable, but precise placement is harder than on larger screens.

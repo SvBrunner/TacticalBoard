@@ -37,4 +37,21 @@ describe("NotificationStack", () => {
 
 		expect(screen.queryByText("dismiss me")).not.toBeInTheDocument();
 	});
+
+	it("is shown in dev mode by default (tests run in dev mode)", async () => {
+		expect(import.meta.env.DEV).toBe(true);
+		render(NotificationStack);
+
+		expect(screen.getByRole("log")).toBeInTheDocument();
+	});
+
+	it("renders nothing when not enabled (production)", async () => {
+		render(NotificationStack, { props: { enabled: false } });
+
+		notifications.notify("hidden");
+		await Promise.resolve();
+
+		expect(screen.queryByRole("log")).not.toBeInTheDocument();
+		expect(screen.queryByText("hidden")).not.toBeInTheDocument();
+	});
 });
