@@ -23,7 +23,7 @@ Next, in this order:
    *Every later feature then goes through commands from the start instead of being retrofitted.*
 3. [x] **Touch baseline**: place, move, select, and color popover by touch; responsive layout for phones and tablets.
    *Settles the interaction pattern before arrows. From here on, touch usability is a requirement for every step.*
-4. [ ] **Create a new situation** with title and full/half field; **half field** rendering.
+4. [x] **Create a new situation** with title and full/half field; **half field** rendering.
 5. [ ] **Position labels** on players (C, F, V, G, …).
 6. [ ] **Frames UI**: add frame (copy of the previous one), switch, delete; description per frame.
 7. [ ] **Pass/run/shot arrows**: straight, bendable via a control point.
@@ -37,6 +37,7 @@ Architecture decisions: .NET, PostgreSQL, self-hosted OIDC IdP, containers (see 
 - [ ] Backend skeleton + IdP login
 - [ ] System-wide user types: system administrator (operations only) and normal user
 - [ ] Personal area: save/load/edit/delete situations on the server, in flat folders
+- [ ] Start page lists the saved situations and teams (the MVP start page only offers "New situation" and "Import", with a placeholder section for this list)
 - [ ] Teams: create (name, logo, generated 6-character code A–Z/0–9), overview page of all teams searchable by name/code, team links
 - [ ] Join requests, accepted/rejected by team Admins; new members start as Reader
 - [ ] Leaving a team (the last Admin has to delete the team instead)

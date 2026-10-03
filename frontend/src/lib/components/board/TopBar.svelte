@@ -1,6 +1,6 @@
 <!--
 @component
-The app header: situation title, undo/redo, load/export and theme toggle.
+The editor header: situation title, undo/redo, new/load/export and theme toggle.
 On phones the buttons become icon-only; their text stays as accessible name.
 -->
 <script lang="ts">
@@ -9,6 +9,8 @@ On phones the buttons become icon-only; their text stays as accessible name.
 
 	interface Props {
 		title: string;
+		/** Start a new situation (the owner checks for unsaved changes). */
+		onNew: () => void;
 		onExport: () => void;
 		onLoadFile: (file: File) => void;
 		canUndo: boolean;
@@ -17,7 +19,7 @@ On phones the buttons become icon-only; their text stays as accessible name.
 		onRedo: () => void;
 	}
 
-	let { title, onExport, onLoadFile, canUndo, canRedo, onUndo, onRedo }: Props = $props();
+	let { title, onNew, onExport, onLoadFile, canUndo, canRedo, onUndo, onRedo }: Props = $props();
 
 	let fileInput: HTMLInputElement;
 
@@ -77,6 +79,13 @@ On phones the buttons become icon-only; their text stays as accessible name.
 		</div>
 
 		<div class="divider" aria-hidden="true"></div>
+
+		<button type="button" class="btn ghost" title="New situation" onclick={onNew}>
+			<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+				<path d="M12 5v14M5 12h14" />
+			</svg>
+			<span class="label">New</span>
+		</button>
 
 		<button type="button" class="btn ghost" title="Load" onclick={openFilePicker}>
 			<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">

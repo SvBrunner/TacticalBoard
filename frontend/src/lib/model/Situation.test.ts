@@ -115,6 +115,19 @@ describe("Situation", () => {
 			});
 		});
 
+		it("withTimestamps changes both timestamps and nothing else", () => {
+			const result = situation.withTimestamps("2026-05-01T00:00:00.000Z", "2026-05-02T00:00:00.000Z");
+
+			expect(result).toMatchObject({
+				id: "s",
+				title: "Title",
+				createdAt: "2026-05-01T00:00:00.000Z",
+				updatedAt: "2026-05-02T00:00:00.000Z",
+			});
+			expect(result.frames).toEqual(situation.frames);
+			expect(situation.createdAt).toBe("2026-01-01T00:00:00.000Z");
+		});
+
 		it("withId changes only the id", () => {
 			const result = situation.withId("other");
 

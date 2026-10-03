@@ -1,8 +1,11 @@
 <!--
 @component
 The board: field background plus the active frame's elements on a Konva
-stage that is scaled to fit the available space (never rotated). Translates
-raw Konva pointer/drag events into board gestures for the controller.
+stage that is scaled to fit the available space. The viewport decides what
+is visible: the whole field (landscape, unrotated) or the half field
+(portrait, stage rotated by 90°, the rest of the field cropped). Translates
+raw Konva pointer/drag events into board gestures (in scene units) for the
+controller.
 -->
 <script lang="ts">
 	import { Stage, Layer, Rect } from "svelte-konva";
@@ -43,9 +46,9 @@ raw Konva pointer/drag events into board gestures for the controller.
 		const type = node.getAttr("elementType");
 		const container = node.getStage()?.container().getBoundingClientRect();
 		return viewport.screenRect(
-			node.getAbsolutePosition(),
+			node.position(),
 			isElementType(type) ? visualRadius(type) : 0,
-			fit.scale,
+			fit,
 			{ x: container?.left ?? 0, y: container?.top ?? 0 },
 		);
 	}
@@ -60,9 +63,9 @@ raw Konva pointer/drag events into board gestures for the controller.
 			controller.tapElement(node.id(), anchorFor(node), { shiftKey: e.evt.shiftKey });
 			return;
 		}
-		const position = e.target.getStage()?.getRelativePointerPosition();
+		const position = e.target.getStage()?.getPointerPosition();
 		if (position) {
-			controller.tapField(position);
+			controller.tapField(viewport.stageToScene(position, fit));
 		}
 	}
 
@@ -83,13 +86,16 @@ raw Konva pointer/drag events into board gestures for the controller.
 				height={fit.height}
 				scaleX={fit.scale}
 				scaleY={fit.scale}
+				rotation={fit.rotation}
+				x={fit.x}
+				y={fit.y}
 				onpointerclick={handlePointerClick}
 				oncontextmenu={handleContextMenu}
 			>
 				<Layer listening={false}>
-					<Rect width={viewport.sceneWidth} height={viewport.sceneHeight} fill="white" />
+					<Rect width={viewport.field.width} height={viewport.field.height} fill="white" />
 				</Layer>
-				<FloorballFullField width={viewport.sceneWidth} height={viewport.sceneHeight} />
+				<FloorballFullField width={viewport.field.width} height={viewport.field.height} />
 
 				<Layer>
 					{#each elements as element (element.id)}

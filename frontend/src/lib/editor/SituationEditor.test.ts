@@ -498,6 +498,210 @@ describe("SituationEditor", () => {
 		});
 	});
 
+	describe("isSituationOpen", () => {
+		it("is false for the blank placeholder situation the editor starts with", () => {
+			expect(editor.isSituationOpen()).toBe(false);
+		});
+
+		it("is true when constructed with a situation", () => {
+			expect(new SituationEditor(new SequentialIdGenerator(), clock, twoFrameSituation()).isSituationOpen()).toBe(true);
+		});
+
+		it("becomes true after load", () => {
+			editor.load(twoFrameSituation());
+
+			expect(editor.isSituationOpen()).toBe(true);
+		});
+
+		it("becomes true after createNew", () => {
+			editor.createNew({ title: "x", fieldType: "full" });
+
+			expect(editor.isSituationOpen()).toBe(true);
+		});
+	});
+
+	describe("createNew", () => {
+		it("creates a floorball situation with the title, field type, one empty frame and fresh ids", () => {
+			const ids = new SequentialIdGenerator("id-");
+			const fresh = new SituationEditor(ids, clock);
+			fresh.addElement(1, 1, "red", "Player");
+
+			const created = fresh.createNew({ title: "Powerplay", fieldType: "half" });
+
+			expect(fresh.current()).toBe(created);
+			expect(created).toMatchObject({ title: "Powerplay", description: "", sport: "floorball", fieldType: "half" });
+			expect(created.frames).toHaveLength(1);
+			expect(created.frames[0].elements).toEqual([]);
+			const usedIds = [created.id, created.frames[0].id];
+			expect(new Set(usedIds).size).toBe(2);
+			expect(usedIds.every((id) => id.startsWith("id-"))).toBe(true);
+			expect(created.id).not.toBe(get(fresh.situation).frames[0].id);
+		});
+
+		it("gets a different situation id than the previous situation", () => {
+			const before = editor.current().id;
+
+			expect(editor.createNew({ title: "", fieldType: "full" }).id).not.toBe(before);
+		});
+
+		it.each([["full" as const], ["half" as const]])("keeps the field type %s", (fieldType) => {
+			expect(editor.createNew({ title: "t", fieldType }).fieldType).toBe(fieldType);
+		});
+
+		it.each([[""], ["   "], ["\t\n"]])("stores the default title for the blank title %j", (title) => {
+			const created = editor.createNew({ title, fieldType: "full" });
+
+			expect(created.title).toBe(DEFAULT_SITUATION_TITLE);
+		});
+
+		it("keeps a non-blank title as entered", () => {
+			expect(editor.createNew({ title: "Breakout 1", fieldType: "full" }).title).toBe("Breakout 1");
+		});
+
+		it("sets createdAt and updatedAt to now", () => {
+			clock.set("2026-09-09T09:09:09.000Z");
+
+			const created = editor.createNew({ title: "t", fieldType: "full" });
+
+			expect(created.createdAt).toBe("2026-09-09T09:09:09.000Z");
+			expect(created.updatedAt).toBe("2026-09-09T09:09:09.000Z");
+		});
+
+		it("makes the first frame active", () => {
+			editor.load(twoFrameSituation());
+			editor.selectFrame("f2");
+
+			const created = editor.createNew({ title: "t", fieldType: "full" });
+
+			expect(get(editor.activeFrame)).toBe(created.frames[0]);
+			expect(get(editor.elements)).toEqual([]);
+		});
+
+		it("is not undoable and clears every history", () => {
+			editor.load(twoFrameSituation());
+			editor.moveElement("p1", 1, 1);
+			editor.selectFrame("f2");
+			editor.moveElement("p1", 2, 2);
+			editor.undo();
+
+			editor.createNew({ title: "t", fieldType: "half" });
+
+			expect(get(editor.history)).toEqual(EMPTY_HISTORY_STATUS);
+			expect(editor.undo()).toBeUndefined();
+			expect(editor.redo()).toBeUndefined();
+		});
+
+		it("uses the given sport", () => {
+			expect(editor.createNew({ title: "t", fieldType: "full", sport: "floorball" }).sport).toBe("floorball");
+		});
+	});
+
+	describe("unsaved changes", () => {
+		const dirtyNow = () => get(editor.hasUnsavedChanges);
+
+		it("has none at the start", () => {
+			expect(dirtyNow()).toBe(false);
+			expect(editor.isDirty()).toBe(false);
+		});
+
+		it.each([
+			["addElement", (e: SituationEditor) => e.addElement(0, 0, "red", "Player")],
+			["removeElement", (e: SituationEditor) => e.removeElement("p1")],
+			["moveElement", (e: SituationEditor) => e.moveElement("p1", 5, 5)],
+			["changeColor", (e: SituationEditor) => e.changeColor("p1", "green")],
+			["changeType", (e: SituationEditor) => e.changeType("p1", "Ball")],
+		])("%s marks the situation dirty", (_name, edit) => {
+			editor.load(twoFrameSituation());
+
+			edit(editor);
+
+			expect(dirtyNow()).toBe(true);
+			expect(editor.isDirty()).toBe(true);
+		});
+
+		it("edits that change nothing don't mark it dirty", () => {
+			editor.load(twoFrameSituation());
+
+			editor.moveElement("p1", 0, 0);
+			editor.removeElement("missing");
+			editor.undo();
+			editor.redo();
+			editor.selectFrame("f2");
+			editor.endGesture();
+
+			expect(dirtyNow()).toBe(false);
+		});
+
+		it("markSaved clears it, a later edit sets it again", () => {
+			editor.addElement(0, 0, "red", "Player");
+
+			editor.markSaved();
+			expect(dirtyNow()).toBe(false);
+
+			editor.addElement(1, 1, "red", "Player");
+			expect(dirtyNow()).toBe(true);
+		});
+
+		it("markSaved without changes changes nothing", () => {
+			const before = editor.current();
+
+			editor.markSaved();
+
+			expect(dirtyNow()).toBe(false);
+			expect(editor.current()).toBe(before);
+		});
+
+		it("undo after saving counts as a change", () => {
+			editor.addElement(0, 0, "red", "Player");
+			editor.markSaved();
+
+			editor.undo();
+			expect(dirtyNow()).toBe(true);
+
+			editor.markSaved();
+			editor.redo();
+			expect(dirtyNow()).toBe(true);
+		});
+
+		it("undoing back to the starting state still counts as unsaved (simple flag)", () => {
+			editor.addElement(0, 0, "red", "Player");
+
+			editor.undo();
+
+			expect(get(editor.history).canUndo).toBe(false);
+			expect(dirtyNow()).toBe(true);
+		});
+
+		it("load clears it", () => {
+			editor.addElement(0, 0, "red", "Player");
+
+			editor.load(twoFrameSituation());
+
+			expect(dirtyNow()).toBe(false);
+		});
+
+		it("createNew clears it", () => {
+			editor.addElement(0, 0, "red", "Player");
+
+			editor.createNew({ title: "", fieldType: "half" });
+
+			expect(dirtyNow()).toBe(false);
+		});
+
+		it("the store notifies only on actual changes", () => {
+			const seen: boolean[] = [];
+			const unsubscribe = editor.hasUnsavedChanges.subscribe((dirty) => seen.push(dirty));
+
+			const id = editor.addElement(0, 0, "red", "Player");
+			editor.moveElement(id, 3, 3);
+			editor.markSaved();
+			editor.markSaved();
+			unsubscribe();
+
+			expect(seen).toEqual([false, true, false]);
+		});
+	});
+
 	it("exports a shared singleton instance", () => {
 		expect(situationEditor).toBeInstanceOf(SituationEditor);
 	});

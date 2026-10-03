@@ -1,3 +1,5 @@
+import type { Clock } from "$lib/model/Clock";
+import { SystemClock } from "$lib/model/Clock";
 import type { IdGenerator } from "$lib/model/ids/IdGenerator";
 import { UuidIdGenerator } from "$lib/model/ids/IdGenerator";
 import type { Situation } from "$lib/model/Situation";
@@ -35,6 +37,7 @@ export class SituationFileTransfer {
 		private readonly serializer: SituationSerializer = new SituationSerializer(),
 		private readonly downloader: FileDownloader = new BrowserFileDownloader(),
 		private readonly ids: IdGenerator = new UuidIdGenerator(),
+		private readonly clock: Clock = new SystemClock(),
 	) {}
 
 	/** Downloads the situation as a file and returns the file name used. */
@@ -45,13 +48,15 @@ export class SituationFileTransfer {
 	}
 
 	/**
-	 * Reads a situation file. The result is always a new situation (fresh
-	 * situation id); frame and element ids are kept.
+	 * Reads a situation file. The result is always a new situation: fresh
+	 * situation id, and `createdAt` = `updatedAt` = the import time; frame and
+	 * element ids are kept.
 	 * @throws SituationImportError when the file is not a valid situation file.
 	 */
 	async import(file: Blob): Promise<Situation> {
 		const situation = this.serializer.deserialize(await file.text());
-		return situation.withId(this.ids.next());
+		const now = this.clock.now().toISOString();
+		return situation.withId(this.ids.next()).withTimestamps(now, now);
 	}
 
 	/** `<slug of title>.situation.json`, or `situation.json` when the title has no usable characters. */

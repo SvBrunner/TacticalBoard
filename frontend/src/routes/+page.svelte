@@ -1,199 +1,215 @@
+<!--
+@component
+Start page (overview): start a new situation or import one from a file;
+either opens the editor. The "Saved situations" section is where the list
+of saved situations and teams goes once there is storage (Phase 2).
+-->
 <script lang="ts">
-	import { onDestroy, onMount } from "svelte";
-	import Konva from "konva";
-	import BoardCanvas from "$lib/components/board/BoardCanvas.svelte";
-	import ElementEditPopover from "$lib/components/board/popover/ElementEditPopover.svelte";
-	import TopBar from "$lib/components/board/TopBar.svelte";
-	import ToolPanel from "$lib/components/board/ToolPanel.svelte";
-	import { elementCatalog } from "$lib/components/board/ElementCatalog";
-	import { BoardInteractionController } from "$lib/board/BoardInteractionController";
-	import { BoardViewport } from "$lib/board/BoardViewport";
-	import { configureKonva } from "$lib/board/konvaSetup";
-	import { PopoverState } from "$lib/board/PopoverState";
-	import { Selection } from "$lib/board/Selection";
-	import { ToolState, type Tool } from "$lib/board/ToolState";
+	import { goto } from "$app/navigation";
+	import SituationDialogs from "$lib/components/dialogs/SituationDialogs.svelte";
+	import { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
 	import { situationEditor } from "$lib/editor/SituationEditor";
 	import { SituationFileTransfer } from "$lib/editor/SituationFileTransfer";
-	import { theme } from "$lib/theme";
+	import { SituationWorkflow } from "$lib/editor/SituationWorkflow";
 	import { notifications } from "$lib/debug/Notifications";
-	import NotificationStack from "$lib/debug/NotificationStack.svelte";
-	import { UndoRedoShortcuts } from "$lib/history/UndoRedoShortcuts";
 
-	const elements = situationEditor.elements;
-	const situation = situationEditor.situation;
-	const history = situationEditor.history;
-
-	const viewport = new BoardViewport(2000, 1000);
-	const tools = new ToolState();
-	const activeTool = tools.activeTool;
-	const playerColor = tools.playerColor;
-	const selection = new Selection(elements);
-	const selectedId = selection.selectedId;
-	const selected = selection.selected;
-	const popover = new PopoverState();
-	const popoverAnchor = popover.anchor;
-	const controller = new BoardInteractionController({
+	const prompt = new ConfirmationPrompt();
+	const workflow = new SituationWorkflow({
 		editor: situationEditor,
-		selection,
-		tools,
-		popover,
-		bounds: viewport,
-		neutralColor: elementCatalog.neutralColor,
+		files: new SituationFileTransfer(),
+		confirm: (request) => prompt.request(request),
 		log: notifications,
 	});
-	const fileTransfer = new SituationFileTransfer();
-	const shortcuts = new UndoRedoShortcuts({
-		undo: handleUndo,
-		redo: handleRedo,
-		isBlocked: () => Konva.isDragging(),
-	});
 
-	function handleKeydown(event: KeyboardEvent) {
-		if (!shortcuts.handle(event)) {
-			controller.keyDown(event);
+	let dialogs: SituationDialogs;
+	let fileInput: HTMLInputElement;
+
+	function openEditor() {
+		void goto("/editor");
+	}
+
+	function handleFileChange(event: Event) {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = "";
+		if (file) {
+			void dialogs.importFile(file);
 		}
 	}
-
-	function handleSelectTool(tool: Tool) {
-		tools.selectTool(tool);
-		notifications.notify(`Tool: ${tool}`);
-	}
-
-	function handleSelectPlayerColor(color: string) {
-		tools.selectPlayerColor(color);
-		const name = elementCatalog.playerColors.find((c) => c.value === color)?.name ?? color;
-		notifications.notify(`Player color: ${name}`);
-	}
-
-	function handleUndo() {
-		// The popover may target an element the undo removes or changes.
-		popover.close();
-		const label = situationEditor.undo();
-		notifications.notify(label ? `Undo: ${label}` : "Nothing to undo");
-	}
-
-	function handleRedo() {
-		popover.close();
-		const label = situationEditor.redo();
-		notifications.notify(label ? `Redo: ${label}` : "Nothing to redo");
-	}
-
-	function handleExport() {
-		const filename = fileTransfer.export(situationEditor.current());
-		notifications.notify(`Exported ${$situation.frames.length} frame(s) to ${filename}`);
-	}
-
-	async function handleLoadFile(file: File) {
-		notifications.notify(`Loading ${file.name}…`);
-		try {
-			const imported = await fileTransfer.import(file);
-			popover.close();
-			situationEditor.load(imported);
-			notifications.notify(`Loaded "${imported.displayTitle}" from ${file.name}`);
-		} catch (err) {
-			notifications.notify(`Failed to load ${file.name}: ${(err as Error).message}`, "error");
-		}
-	}
-
-	onMount(() => {
-		configureKonva();
-	});
-
-	onDestroy(() => {
-		selection.destroy();
-	});
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <svelte:head>
 	<title>Tactical Board</title>
-	<meta name="description" content="This is the board" />
+	<meta name="description" content="Tactics board for floorball situations." />
 </svelte:head>
 
-<div class="tb-root {$theme}">
-	<TopBar
-		title={$situation.displayTitle}
-		onExport={handleExport}
-		onLoadFile={handleLoadFile}
-		canUndo={$history.canUndo}
-		canRedo={$history.canRedo}
-		onUndo={handleUndo}
-		onRedo={handleRedo}
-	/>
+<main class="start">
+	<header class="masthead">
+		<div class="badge" aria-hidden="true">
+			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-contrast)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+				<circle cx="12" cy="12" r="9" />
+				<path d="M12 3v18M3 12h18" />
+			</svg>
+		</div>
+		<h1 class="app-title">Tactical Board</h1>
+	</header>
 
-	<div class="body">
-		<ToolPanel
-			activeTool={$activeTool}
-			playerColor={$playerColor}
-			onSelectTool={handleSelectTool}
-			onSelectPlayerColor={handleSelectPlayerColor}
-		/>
+	<section class="panel" aria-labelledby="start-heading">
+		<h2 id="start-heading" class="panel-title">Start</h2>
+		<ul class="actions">
+			<li>
+				<button type="button" class="action primary" onclick={() => dialogs.startNew()}>
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+						<path d="M12 5v14M5 12h14" />
+					</svg>
+					New situation
+				</button>
+			</li>
+			<li>
+				<button type="button" class="action" onclick={() => fileInput.click()}>
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+						<path d="M12 15V3M7 8l5-5 5 5" />
+						<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+					</svg>
+					Import
+				</button>
+				<input
+					bind:this={fileInput}
+					type="file"
+					accept=".json"
+					class="hidden-input"
+					onchange={handleFileChange}
+				/>
+			</li>
+		</ul>
+	</section>
 
-		<main class="canvas-area">
-			<BoardCanvas elements={$elements} selectedId={$selectedId} {controller} {viewport} />
-		</main>
-	</div>
+	<section class="panel" aria-labelledby="saved-heading">
+		<h2 id="saved-heading" class="panel-title">Saved situations</h2>
+		<p class="empty-state">Saved situations will appear here once storage is available.</p>
+	</section>
+</main>
 
-	<ElementEditPopover
-		element={$popoverAnchor ? $selected : null}
-		anchor={$popoverAnchor}
-		actions={situationEditor}
-		onClose={() => popover.close()}
-	/>
-</div>
-
-<NotificationStack />
+<SituationDialogs bind:this={dialogs} {workflow} {prompt} onOpened={openEditor} />
 
 <style>
-	.tb-root {
+	.start {
+		width: min(720px, 100%);
+		margin: 0 auto;
+		padding: 48px 24px;
+		padding-top: calc(48px + env(safe-area-inset-top, 0px));
+		padding-left: calc(24px + env(safe-area-inset-left, 0px));
+		padding-right: calc(24px + env(safe-area-inset-right, 0px));
+		padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+		display: flex;
+		flex-direction: column;
+		gap: 24px;
+	}
+
+	.masthead {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+	}
+
+	.badge {
+		width: 48px;
+		height: 48px;
+		border-radius: var(--radius-md);
+		background: var(--accent);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+
+	.app-title {
+		margin: 0;
+		font-size: 28px;
+		font-weight: 700;
+	}
+
+	.panel {
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		padding: 24px;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.panel-title {
+		margin: 0;
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+
+	.actions {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 12px;
+	}
+
+	.action {
 		width: 100%;
-		height: 100vh;
-		height: 100dvh;
+		min-height: 72px;
+		padding: 0 20px;
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		border: none;
+		border-radius: var(--radius-md);
 		background: var(--bg-app);
 		color: var(--text);
-		display: grid;
-		grid-template-rows: auto minmax(0, 1fr);
-		/* Explicit: an implicit auto column would grow to the header's min-content on narrow screens. */
-		grid-template-columns: minmax(0, 1fr);
-		overflow: hidden;
+		box-shadow: inset 0 0 0 1px var(--border);
+		font-size: 16px;
+		font-weight: 600;
+		text-align: left;
+		cursor: pointer;
 	}
 
-	.body {
-		min-height: 0;
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		grid-template-areas: "tools field";
-		overflow: hidden;
+	.action.primary {
+		background: var(--accent);
+		color: var(--accent-contrast);
+		box-shadow: none;
 	}
 
-	.body > :global(.tool-panel) {
-		grid-area: tools;
+	.action:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 
-	.canvas-area {
-		grid-area: field;
-		min-width: 0;
-		min-height: 0;
-		display: flex;
-		background-color: var(--bg-canvas);
-		background-image: radial-gradient(var(--dot) 1.5px, transparent 1.5px);
-		background-size: 22px 22px;
-		padding-right: env(safe-area-inset-right, 0px);
+	.hidden-input {
+		display: none;
 	}
 
-	/* Phone portrait: field in the middle, tools as a bottom bar. */
+	.empty-state {
+		margin: 0;
+		font-size: 14px;
+		line-height: 1.5;
+		color: var(--text-muted);
+	}
+
 	@media (max-width: 599px) {
-		.body {
-			grid-template-columns: minmax(0, 1fr);
-			grid-template-rows: minmax(0, 1fr) auto;
-			grid-template-areas:
-				"field"
-				"tools";
+		.start {
+			padding-top: calc(24px + env(safe-area-inset-top, 0px));
+			padding-left: calc(16px + env(safe-area-inset-left, 0px));
+			padding-right: calc(16px + env(safe-area-inset-right, 0px));
+			gap: 16px;
 		}
 
-		.canvas-area {
-			padding-left: env(safe-area-inset-left, 0px);
+		.app-title {
+			font-size: 22px;
+		}
+
+		.panel {
+			padding: 16px;
+			border-radius: var(--radius-md);
 		}
 	}
 </style>

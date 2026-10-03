@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { PointElement } from "$lib/model/elements/PointElement";
 import { Frame } from "$lib/model/Frame";
+import { FixedClock } from "$lib/model/Clock";
 import { SequentialIdGenerator } from "$lib/model/ids/IdGenerator";
 import { Situation } from "$lib/model/Situation";
 import {
@@ -35,8 +36,10 @@ function situation(title = "Powerplay vs. 2-3-1"): Situation {
 	});
 }
 
-function transfer(downloader = new FakeDownloader()) {
-	return new SituationFileTransfer(new SituationSerializer(), downloader, new SequentialIdGenerator("new-"));
+const IMPORT_TIME = "2026-07-07T07:07:07.000Z";
+
+function transfer(downloader = new FakeDownloader(), clock = new FixedClock(IMPORT_TIME)) {
+	return new SituationFileTransfer(new SituationSerializer(), downloader, new SequentialIdGenerator("new-"), clock);
 }
 
 describe("SituationFileTransfer", () => {
@@ -82,7 +85,26 @@ describe("SituationFileTransfer", () => {
 			expect(imported.id).toBe("new-1");
 			expect(imported.frames.map((frame) => frame.id)).toEqual(["f1", "f2"]);
 			expect(imported.frames.map((frame) => frame.elements[0].id)).toEqual(["p1", "p1"]);
-			expect(imported.withId(original.id)).toEqual(original);
+			expect(imported.withId(original.id).withTimestamps(original.createdAt, original.updatedAt)).toEqual(original);
+		});
+
+		it("sets createdAt and updatedAt to the import time", async () => {
+			const file = new File([new SituationSerializer().serialize(situation())], "x.situation.json");
+
+			const imported = await transfer().import(file);
+
+			expect(imported.createdAt).toBe(IMPORT_TIME);
+			expect(imported.updatedAt).toBe(IMPORT_TIME);
+		});
+
+		it("reads the import time when importing, not when constructed", async () => {
+			const clock = new FixedClock("2026-01-01T00:00:00.000Z");
+			const fileTransfer = transfer(new FakeDownloader(), clock);
+			clock.set("2026-08-08T08:08:08.000Z");
+
+			const imported = await fileTransfer.import(new File([new SituationSerializer().serialize(situation())], "x.json"));
+
+			expect(imported.createdAt).toBe("2026-08-08T08:08:08.000Z");
 		});
 
 		it("rejects invalid JSON", async () => {

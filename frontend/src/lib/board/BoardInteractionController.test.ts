@@ -7,6 +7,7 @@ import {
 	type ToolSource,
 	type KeyInput,
 } from "./BoardInteractionController";
+import { FieldDimensions } from "$lib/model/FieldDimensions";
 import { BoardViewport, type ScreenRect } from "./BoardViewport";
 import type { Tool } from "./ToolState";
 
@@ -78,7 +79,7 @@ describe("BoardInteractionController", () => {
 			selection,
 			tools,
 			popover,
-			bounds: new BoardViewport(2000, 1000),
+			bounds: new BoardViewport(),
 			neutralColor: "neutral",
 			log,
 		});
@@ -329,5 +330,40 @@ describe("BoardInteractionController", () => {
 		});
 
 		expect(() => quiet.tapField({ x: 1, y: 2 })).not.toThrow();
+	});
+
+	describe("with a half-field viewport", () => {
+		let half: BoardInteractionController;
+
+		beforeEach(() => {
+			half = new BoardInteractionController({
+				editor,
+				selection,
+				tools,
+				popover,
+				bounds: new BoardViewport(FieldDimensions.FLOORBALL, "half"),
+				neutralColor: "neutral",
+			});
+		});
+
+		it("places in full-field coordinates inside the visible half", () => {
+			half.tapField({ x: 1500, y: 400 });
+
+			expect(editor.addElement).toHaveBeenCalledWith(1500, 400, "team-a", "Player");
+		});
+
+		it("clamps a placement outside the visible half onto it", () => {
+			half.tapField({ x: 900, y: 1100 });
+
+			expect(editor.addElement).toHaveBeenCalledWith(1000, 1000, "team-a", "Player");
+		});
+
+		it("keeps drags inside the visible half", () => {
+			expect(half.dragMove({ x: 200, y: 500 })).toEqual({ x: 1000, y: 500 });
+
+			half.dragEnd("el-1", { x: 2100, y: -5 });
+
+			expect(editor.moveElement).toHaveBeenCalledWith("el-1", 2000, 0);
+		});
 	});
 });

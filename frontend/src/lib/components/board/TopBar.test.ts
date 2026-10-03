@@ -7,6 +7,7 @@ import { get } from "svelte/store";
 function props(overrides: Record<string, unknown> = {}) {
 	return {
 		title: "Board",
+		onNew: vi.fn(),
 		onExport: vi.fn(),
 		onLoadFile: vi.fn(),
 		canUndo: false,
@@ -39,7 +40,7 @@ describe("TopBar", () => {
 		it("gives every button an accessible name (also when shown icon-only on phones)", () => {
 			render(TopBar, { props: props() });
 
-			for (const name of ["Undo", "Redo", "Load", "Export JSON", "Toggle theme"]) {
+			for (const name of ["Undo", "Redo", "New", "Load", "Export JSON", "Toggle theme"]) {
 				expect(screen.getByRole("button", { name })).toBeInTheDocument();
 			}
 		});
@@ -59,6 +60,25 @@ describe("TopBar", () => {
 				expect(button).toHaveAttribute("type", "button");
 			}
 		});
+	});
+
+	it("clicking New calls onNew only", async () => {
+		const onNew = vi.fn();
+		const onLoadFile = vi.fn();
+		const onExport = vi.fn();
+		render(TopBar, { props: props({ onNew, onLoadFile, onExport }) });
+
+		await fireEvent.click(screen.getByRole("button", { name: "New" }));
+
+		expect(onNew).toHaveBeenCalledOnce();
+		expect(onLoadFile).not.toHaveBeenCalled();
+		expect(onExport).not.toHaveBeenCalled();
+	});
+
+	it("the New button explains itself as 'New situation'", () => {
+		render(TopBar, { props: props() });
+
+		expect(screen.getByRole("button", { name: "New" })).toHaveAttribute("title", "New situation");
 	});
 
 	it("clicking Load opens the file picker", async () => {

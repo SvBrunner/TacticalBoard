@@ -9,10 +9,11 @@ Delivery order: the board editor is the MVP and ships first, with local JSON exp
 *Situations (MVP)*
 - A situation is the single core unit. A "standard situation" (e.g. a free hit recorded once and recalled later) is not a separate concept; technically it is an ordinary situation.
 - Only floorball is supported for now. The data model stays sport-agnostic so other sports can be added later.
-- A situation has a title and a description. The title is optional: new situations get the default title "Untitled Situation", and a blank title is shown as that default. (Incrementing default titles — "Untitled Situation 2", … — follows in Phase 2.)
+- A situation has a title and a description. The title is optional: a new situation created with a blank title gets the default title "Untitled Situation" as its real title, and a blank title (e.g. from an imported file) is shown as that default. (Incrementing default titles — "Untitled Situation 2", … — follows in Phase 2.)
 - Situation and frame descriptions are Markdown source text.
 - A situation records when it was created and last updated (`createdAt`/`updatedAt`); both are part of the exported file. Every edit refreshes `updatedAt`.
-- A situation uses either the full field or half the field. This is chosen when the situation is created and applies to all its frames.
+- A situation uses either the full field or half the field. This is chosen when the situation is created and applies to all its frames. The full field is shown in landscape; the half field in portrait, with its goal at the bottom. Which half is used doesn't matter to the user.
+- Creating a new situation asks only for the title and full/half field (no description).
 - A situation consists of one or more ordered **frames**. A new frame starts as a copy of the previous one, including its description; elements keep their identity (same ID) across frames.
 - Each frame has its own description text.
 - Frames can be played back as a slideshow (one after another, no interpolated movement) in the editor.
@@ -23,7 +24,9 @@ Delivery order: the board editor is the MVP and ships first, with local JSON exp
 - Every element can be colored freely. There is no built-in team/side concept.
 - Pass, run, and shot arrows: placed as straight arrows (start + end) and can afterwards be bent into a curve via a control point. The three types differ in line style.
 - Undo/redo.
-- Export a situation as JSON, and import it again. Importing always creates a new situation (new situation ID; frame and element IDs are kept) and replaces the editor content.
+- Export a situation as JSON, and import it again. Importing always creates a new situation (new situation ID, `createdAt`/`updatedAt` set to the import time; frame and element IDs are kept) and replaces the editor content.
+- The app opens on a start page offering "New situation" and "Import"; both lead into the editor. (Listing saved situations and teams there follows with storage in Phase 2.)
+- Unsaved changes (in the MVP: not exported since the last edit) are protected: starting a new situation or importing asks "Discard changes?" first, and leaving or reloading the page triggers the browser's warning.
 - Export a situation as an animated GIF/video (frames as a slideshow).
 - Fully usable by touch on phones and tablets, not only on desktop.
 

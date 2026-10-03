@@ -9,6 +9,7 @@ import type { CommandHistory } from "$lib/history/CommandHistory";
 import { FrameHistories } from "$lib/history/FrameHistories";
 import { sameHistoryStatus, type HistoryStatus } from "$lib/history/HistoryStatus";
 import type { Clock } from "$lib/model/Clock";
+import type { FieldType } from "$lib/model/FieldType";
 import { SystemClock } from "$lib/model/Clock";
 import type { BoardElement } from "$lib/model/elements/BoardElement";
 import type { ElementType } from "$lib/model/elements/ElementType";
@@ -16,20 +17,34 @@ import { PointElement } from "$lib/model/elements/PointElement";
 import type { Frame } from "$lib/model/Frame";
 import type { IdGenerator } from "$lib/model/ids/IdGenerator";
 import { UuidIdGenerator } from "$lib/model/ids/IdGenerator";
-import { Situation } from "$lib/model/Situation";
+import { DEFAULT_SITUATION_TITLE, Situation } from "$lib/model/Situation";
+import type { SportId } from "$lib/model/Sport";
 import { distinctUntilChanged } from "$lib/stores/distinctUntilChanged";
 
 interface EditorState {
 	readonly situation: Situation;
 	readonly activeFrameId: string;
+	/** True after any edit since the situation was loaded/created or last marked saved. */
+	readonly dirty: boolean;
+}
+
+/** What the user chooses when creating a new situation. */
+export interface NewSituationInput {
+	readonly title: string;
+	readonly fieldType: FieldType;
+	readonly sport?: SportId;
 }
 
 /**
  * Application service holding the situation being edited and the active
  * frame. It is the UI's only entry point for changing the model: every edit
  * becomes a command executed through the active frame's undo/redo history
- * (one independent history per frame). Loading a situation is not undoable
- * and clears all histories.
+ * (one independent history per frame). Loading or creating a situation is
+ * not undoable and clears all histories.
+ *
+ * Unsaved changes: any edit (undo/redo included) marks the situation dirty
+ * until it is marked saved (in the MVP: exported) or replaced. It is a plain
+ * flag: undoing back to the starting state still counts as unsaved.
  */
 export class SituationEditor {
 	private readonly state: Writable<EditorState>;
@@ -40,13 +55,23 @@ export class SituationEditor {
 	readonly elements: Readable<readonly BoardElement[]>;
 	/** Undo/redo status of the active frame's history. */
 	readonly history: Readable<HistoryStatus>;
+	readonly hasUnsavedChanges: Readable<boolean>;
 
+	private situationOpened: boolean;
+
+	/**
+	 * Without an `initial` situation the editor starts with a blank
+	 * placeholder situation and `isSituationOpen()` is false until a
+	 * situation is created or loaded.
+	 */
 	constructor(
 		private readonly ids: IdGenerator = new UuidIdGenerator(),
 		private readonly clock: Clock = new SystemClock(),
-		initial: Situation = Situation.create({ sport: "floorball", fieldType: "full" }, ids, clock),
+		initial?: Situation,
 	) {
-		this.state = writable<EditorState>(SituationEditor.initialState(initial));
+		this.situationOpened = initial !== undefined;
+		const situation = initial ?? Situation.create({ sport: "floorball", fieldType: "full" }, ids, clock);
+		this.state = writable<EditorState>(SituationEditor.initialState(situation));
 		this.situation = derived(this.state, (state) => state.situation);
 		this.activeFrame = derived(this.state, (state) => SituationEditor.activeFrameOf(state));
 		this.elements = derived(this.activeFrame, (frame) => frame.elements);
@@ -58,16 +83,52 @@ export class SituationEditor {
 			),
 			sameHistoryStatus,
 		);
+		// A boolean derived store only notifies on actual changes.
+		this.hasUnsavedChanges = derived(this.state, (state) => state.dirty);
 	}
 
 	current(): Situation {
 		return get(this.state).situation;
 	}
 
-	/** Replaces the edited situation; the first frame becomes active. Not undoable: clears every history. */
+	/** Whether a situation has been created or loaded (or given at construction). */
+	isSituationOpen(): boolean {
+		return this.situationOpened;
+	}
+
+	/** Whether there were edits since the situation was loaded/created or last marked saved. */
+	isDirty(): boolean {
+		return get(this.state).dirty;
+	}
+
+	/** Records that the current state has been saved (in the MVP: exported). */
+	markSaved(): void {
+		this.state.update((state) => (state.dirty ? { ...state, dirty: false } : state));
+	}
+
+	/**
+	 * Replaces the edited situation; the first frame becomes active and there
+	 * are no unsaved changes. Not undoable: clears every history.
+	 */
 	load(situation: Situation): void {
 		this.histories.clear();
+		this.situationOpened = true;
 		this.state.set(SituationEditor.initialState(situation));
+	}
+
+	/**
+	 * Starts a new situation with one empty frame and loads it (see `load`).
+	 * A blank title is stored as the default title. Sport defaults to floorball.
+	 */
+	createNew(input: NewSituationInput): Situation {
+		const title = input.title.trim() === "" ? DEFAULT_SITUATION_TITLE : input.title;
+		const situation = Situation.create(
+			{ sport: input.sport ?? "floorball", fieldType: input.fieldType, title },
+			this.ids,
+			this.clock,
+		);
+		this.load(situation);
+		return situation;
 	}
 
 	/** Makes another frame the active one. Not an undo step; ends the current edit session. */
@@ -151,7 +212,7 @@ export class SituationEditor {
 		if (changed === state.situation) {
 			return;
 		}
-		this.state.set({ ...state, situation: changed.withUpdatedAt(this.clock.now().toISOString()) });
+		this.state.set({ ...state, situation: changed.withUpdatedAt(this.clock.now().toISOString()), dirty: true });
 	}
 
 	private activeHistory(): CommandHistory<Frame> {
@@ -168,7 +229,7 @@ export class SituationEditor {
 	}
 
 	private static initialState(situation: Situation): EditorState {
-		return { situation, activeFrameId: situation.frames[0].id };
+		return { situation, activeFrameId: situation.frames[0].id, dirty: false };
 	}
 
 	private static activeFrameOf(state: EditorState): Frame {

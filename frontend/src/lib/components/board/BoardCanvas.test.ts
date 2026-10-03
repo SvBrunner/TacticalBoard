@@ -4,7 +4,16 @@ import { tick } from "svelte";
 import Konva from "konva";
 import type { Shape } from "konva/lib/Shape";
 import BoardCanvas from "./BoardCanvas.svelte";
+import { get } from "svelte/store";
+import { BoardInteractionController } from "$lib/board/BoardInteractionController";
 import { BoardViewport } from "$lib/board/BoardViewport";
+import { PopoverState } from "$lib/board/PopoverState";
+import { Selection } from "$lib/board/Selection";
+import { ToolState } from "$lib/board/ToolState";
+import { SituationEditor } from "$lib/editor/SituationEditor";
+import { FixedClock } from "$lib/model/Clock";
+import { FieldDimensions } from "$lib/model/FieldDimensions";
+import { SequentialIdGenerator } from "$lib/model/ids/IdGenerator";
 import { PointElement } from "$lib/model/elements/PointElement";
 import type { BoardElement } from "$lib/model/elements/BoardElement";
 import { FakeResizeObserver } from "$lib/testing/FakeResizeObserver";
@@ -32,7 +41,7 @@ function renderCanvas(overrides: Record<string, unknown> = {}) {
 			elements: [player, ball] as readonly BoardElement[],
 			selectedId: null as string | null,
 			controller,
-			viewport: new BoardViewport(2000, 1000),
+			viewport: new BoardViewport(),
 			...overrides,
 		},
 	});
@@ -82,7 +91,7 @@ describe("BoardCanvas", () => {
 		expect(container.querySelector(".stage-container")).toBeNull();
 	});
 
-	it("sizes and scales the stage to fit the field area without rotating", async () => {
+	it("sizes and scales the full field to fit the field area without rotating or offsetting it", async () => {
 		const { container } = renderCanvas();
 
 		await resizeField(400, 600);
@@ -91,6 +100,8 @@ describe("BoardCanvas", () => {
 		expect(stage().height()).toBe(200);
 		expect(stage().scaleX()).toBe(0.2);
 		expect(stage().scaleY()).toBe(0.2);
+		expect(stage().rotation()).toBe(0);
+		expect(stage().position()).toEqual({ x: 0, y: 0 });
 		const box = container.querySelector<HTMLElement>(".stage-container")!;
 		expect(box.style.width).toBe("400px");
 		expect(box.style.height).toBe("200px");
@@ -238,6 +249,128 @@ describe("BoardCanvas", () => {
 			expect(controller.dragMove).toHaveBeenCalledWith({ x: 2300, y: -40 });
 			expect(shape.position()).toEqual({ x: 2000, y: 0 });
 			expect(controller.dragEnd).toHaveBeenCalledWith("p1", { x: 2000, y: 0 });
+		});
+	});
+
+	describe("half field", () => {
+		const halfViewport = () => new BoardViewport(FieldDimensions.FLOORBALL, "half");
+		// In the visible (right) half, and one hidden in the left half.
+		const forward = new PointElement("f1", 1800, 500, "red", "Player");
+		const hidden = new PointElement("h1", 300, 300, "blue", "Player");
+
+		function renderHalf(overrides: Record<string, unknown> = {}) {
+			return renderCanvas({ viewport: halfViewport(), elements: [forward, hidden], ...overrides });
+		}
+
+		it("rotates the stage by 90° and offsets it so the visible half fills it", async () => {
+			const { container } = renderHalf();
+
+			await resizeField(1000, 500); // the floorball half is square: 500 × 500, scale 0.5
+
+			expect(stage().width()).toBe(500);
+			expect(stage().height()).toBe(500);
+			expect(stage().scaleX()).toBe(0.5);
+			expect(stage().scaleY()).toBe(0.5);
+			expect(stage().rotation()).toBe(90);
+			expect(stage().position()).toEqual({ x: 500, y: -500 });
+			const box = container.querySelector<HTMLElement>(".stage-container")!;
+			expect(box.style.width).toBe("500px");
+			expect(box.style.height).toBe("500px");
+		});
+
+		it("Konva's transform matches the viewport mapping: the half's goal end is at the bottom", async () => {
+			renderHalf();
+			await resizeField(1000, 500);
+			const viewport = halfViewport();
+			const fit = viewport.fit(1000, 500);
+
+			const [visible] = elementShapes();
+
+			const expected = viewport.sceneToStage({ x: 1800, y: 500 }, fit);
+			const actual = visible.getAbsolutePosition();
+			expect(actual.x).toBeCloseTo(expected.x);
+			expect(actual.y).toBeCloseTo(expected.y);
+			expect(actual.y).toBeGreaterThan(fit.height / 2);
+		});
+
+		it("keeps elements of the hidden half in the scene, outside the visible stage area", async () => {
+			renderHalf();
+			await resizeField(1000, 500);
+
+			const shapes = elementShapes();
+			expect(shapes.map((shape) => shape.id())).toEqual(["f1", "h1"]);
+			const outside = shapes[1].getAbsolutePosition();
+			expect(outside.y).toBeLessThan(0);
+		});
+
+		it("a tap reports the full-field scene point, same as Konva's own inverse transform", async () => {
+			const { controller } = renderHalf();
+			await resizeField(1000, 500);
+
+			stage().setPointersPositions({ clientX: 100, clientY: 60 } as unknown as PointerEvent);
+			stage().fire("pointerclick", { evt: pointerEvent() });
+
+			expect(controller.tapField).toHaveBeenCalledWith({ x: 1120, y: 800 });
+			const konva = stage().getRelativePointerPosition()!;
+			expect(konva.x).toBeCloseTo(1120);
+			expect(konva.y).toBeCloseTo(800);
+		});
+
+		it("anchors the popover at the element's rotated on-screen position", async () => {
+			const { controller } = renderHalf();
+			await resizeField(1000, 500);
+
+			elementShapes()[0].fire("pointerclick", { evt: pointerEvent() }, true);
+
+			// Scene (1800, 500) -> stage (250, 400); Player radius 20 -> 10 px.
+			expect(controller.tapElement).toHaveBeenCalledWith(
+				"f1",
+				{ x: 240, y: 390, width: 20, height: 20 },
+				{ shiftKey: false },
+			);
+		});
+
+		it("drags in scene coordinates despite the rotation", async () => {
+			const { controller } = renderHalf();
+			controller.dragMove.mockReturnValue({ x: 2000, y: 400 });
+			await resizeField(1000, 500);
+			const shape = elementShapes()[0];
+
+			shape.fire("dragstart", {});
+			shape.position({ x: 2100, y: 400 });
+			shape.fire("dragmove", {});
+			shape.fire("dragend", {});
+
+			expect(controller.dragMove).toHaveBeenCalledWith({ x: 2100, y: 400 });
+			expect(controller.dragEnd).toHaveBeenCalledWith("f1", { x: 2000, y: 400 });
+		});
+
+		it("placing by tap stores full-field coordinates in the visible half (integration)", async () => {
+			const editor = new SituationEditor(new SequentialIdGenerator(), new FixedClock());
+			editor.createNew({ title: "Half", fieldType: "half" });
+			const viewport = BoardViewport.forSituation(editor.current());
+			const tools = new ToolState();
+			tools.selectTool("Ball");
+			const selection = new Selection(editor.elements);
+			const controller = new BoardInteractionController({
+				editor,
+				selection,
+				tools,
+				popover: new PopoverState(),
+				bounds: viewport,
+				neutralColor: "grey",
+			});
+			render(BoardCanvas, { props: { elements: [], selectedId: null, controller, viewport } });
+			await resizeField(1000, 500);
+
+			// Near the bottom-left of the stage: bottom = goal end (scene x 2000),
+			// left = scene y 1000.
+			stage().setPointersPositions({ clientX: 50, clientY: 450 } as unknown as PointerEvent);
+			stage().fire("pointerclick", { evt: pointerEvent() });
+
+			const [placed] = get(editor.elements);
+			expect(placed).toMatchObject({ type: "Ball", x: 1900, y: 900 });
+			selection.destroy();
 		});
 	});
 });

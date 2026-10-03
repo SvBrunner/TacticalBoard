@@ -119,6 +119,11 @@ export class Situation implements SituationProps {
 		return this.with({ updatedAt });
 	}
 
+	/** Sets both timestamps (used when importing a file as a new situation). */
+	withTimestamps(createdAt: string, updatedAt: string): Situation {
+		return this.with({ createdAt, updatedAt });
+	}
+
 	private with(changes: Partial<Omit<SituationProps, "sport" | "fieldType">>): Situation {
 		return new Situation({ ...this.toProps(), ...changes });
 	}
