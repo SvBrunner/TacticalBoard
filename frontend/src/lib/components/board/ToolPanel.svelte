@@ -3,7 +3,8 @@
 The tool panel: Move, the element tools (placing players, the ball and
 markers; drawing Pass/Run/Shot arrows), and (with the Player tool) the
 player color. A side panel on desktop/tablet, a scrollable bottom
-bar on portrait phones and a narrow left rail on landscape phones.
+bar on portrait phones and a narrow left rail on landscape phones. `disabled` (during playback) disables every
+button; the active tool stays marked.
 -->
 <script lang="ts">
 	import type { Tool } from "$lib/board/ToolState";
@@ -15,9 +16,20 @@ bar on portrait phones and a narrow left rail on landscape phones.
 		playerColor: string;
 		onSelectTool: (tool: Tool) => void;
 		onSelectPlayerColor: (color: string) => void;
+		/** No tool or color can be chosen (e.g. during playback). */
+		disabled?: boolean;
 	}
 
-	let { activeTool, playerColor, onSelectTool, onSelectPlayerColor }: Props = $props();
+	let { activeTool, playerColor, onSelectTool, onSelectPlayerColor, disabled = false }: Props = $props();
+
+	// Guarded as well as `disabled`, so a synthetic click on a disabled button can't trigger it.
+	function selectTool(tool: Tool) {
+		if (!disabled) onSelectTool(tool);
+	}
+
+	function selectPlayerColor(color: string) {
+		if (!disabled) onSelectPlayerColor(color);
+	}
 </script>
 
 <aside class="tool-panel" aria-label="Tools">
@@ -28,7 +40,8 @@ bar on portrait phones and a narrow left rail on landscape phones.
 			class:active={activeTool === "Move"}
 			aria-pressed={activeTool === "Move"}
 			title="Move"
-			onclick={() => onSelectTool("Move")}
+			{disabled}
+			onclick={() => selectTool("Move")}
 		>
 			<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"
 				><path d="M4 3.5l16 6.6-6.4 2-2 6.4z" /></svg
@@ -47,7 +60,8 @@ bar on portrait phones and a narrow left rail on landscape phones.
 							class:active={activeTool === kind.type}
 							aria-pressed={activeTool === kind.type}
 							title={kind.name}
-							onclick={() => onSelectTool(kind.type)}
+							{disabled}
+							onclick={() => selectTool(kind.type)}
 						>
 							<ElementIcon type={kind.type} />
 							<span class="label">{kind.name}</span>
@@ -72,7 +86,8 @@ bar on portrait phones and a narrow left rail on landscape phones.
 							aria-label={color.name}
 							title={color.name}
 							style:background={color.value}
-							onclick={() => onSelectPlayerColor(color.value)}
+							{disabled}
+							onclick={() => selectPlayerColor(color.value)}
 						></button>
 					</li>
 				{/each}
@@ -179,6 +194,12 @@ bar on portrait phones and a narrow left rail on landscape phones.
 		width: var(--touch-target);
 		height: var(--touch-target);
 		box-shadow: 0 0 0 2px transparent;
+	}
+
+	.tool-btn:disabled,
+	.swatch:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 
 	.swatch.selected {

@@ -223,3 +223,8 @@ textarea.text-input {
 	outline: 2px solid var(--accent);
 	outline-offset: 1px;
 }
+
+.text-input:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}

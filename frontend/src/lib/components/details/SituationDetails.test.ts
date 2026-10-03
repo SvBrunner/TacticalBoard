@@ -94,4 +94,21 @@ describe("SituationDetails", () => {
 			expect(toggle).toHaveAttribute("aria-expanded", "false");
 		});
 	});
+
+	describe("disabled (during playback)", () => {
+		it("disables the title and description fields but keeps showing them", () => {
+			const { title, description } = renderDetails({ disabled: true });
+
+			expect(title()).toBeDisabled();
+			expect(description()).toBeDisabled();
+			expect(title().value).toBe("Breakout");
+		});
+
+		it("is enabled by default", () => {
+			const { title, description } = renderDetails();
+
+			expect(title()).toBeEnabled();
+			expect(description()).toBeEnabled();
+		});
+	});
 });

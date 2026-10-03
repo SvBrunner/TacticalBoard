@@ -154,4 +154,35 @@ describe("ToolPanel", () => {
 
 		expect(onSelectPlayerColor).toHaveBeenCalledWith(TEAM_B);
 	});
+
+	describe("disabled (during playback)", () => {
+		it("disables every tool and color button but keeps the active tool marked", () => {
+			render(ToolPanel, { props: props({ activeTool: "Player", disabled: true }) });
+
+			const panel = screen.getByRole("complementary", { name: "Tools" });
+			for (const button of within(panel).getAllByRole("button")) {
+				expect(button).toBeDisabled();
+			}
+			expect(screen.getByRole("button", { name: "Player" })).toHaveAttribute("aria-pressed", "true");
+		});
+
+		it("reports nothing, also for synthetic clicks", () => {
+			const onSelectTool = vi.fn();
+			const onSelectPlayerColor = vi.fn();
+			render(ToolPanel, { props: props({ activeTool: "Player", disabled: true, onSelectTool, onSelectPlayerColor }) });
+
+			screen.getByRole("button", { name: "Ball" }).click();
+			screen.getByRole("button", { name: "Move" }).click();
+			screen.getByRole("button", { name: "Team B" }).click();
+
+			expect(onSelectTool).not.toHaveBeenCalled();
+			expect(onSelectPlayerColor).not.toHaveBeenCalled();
+		});
+
+		it("is enabled by default", () => {
+			render(ToolPanel, { props: props() });
+
+			expect(screen.getByRole("button", { name: "Ball" })).toBeEnabled();
+		});
+	});
 });

@@ -20,7 +20,7 @@ const FRAMES = [
 const ITEM_WIDTH = 60;
 const ITEM_STEP = 68;
 
-function renderStrip(overrides: Partial<{ frames: readonly Frame[]; activeFrameId: string }> = {}) {
+function renderStrip(overrides: Partial<{ frames: readonly Frame[]; activeFrameId: string; playing: boolean }> = {}) {
 	const handlers = {
 		onSelect: vi.fn<(id: string) => void>(),
 		onAdd: vi.fn<() => void>(),
@@ -382,6 +382,55 @@ describe("FrameStrip", () => {
 				await release(30, "touch");
 				expect(touchMove()).toBe(false);
 			});
+		});
+	});
+
+	describe("during playback", () => {
+		it("marks the frame being shown (passed as active frame)", () => {
+			renderStrip({ activeFrameId: "f3", playing: true });
+
+			expect(frameButton(3)).toHaveAttribute("aria-current", "step");
+			expect(frameButton(1)).not.toHaveAttribute("aria-current");
+		});
+
+		it("disables adding, deleting and moving frames", () => {
+			const { nav } = renderStrip({ activeFrameId: "f2", playing: true });
+
+			for (const name of ["Move frame left", "Move frame right", "Add frame", "Delete frame"]) {
+				expect(within(nav).getByRole("button", { name })).toBeDisabled();
+			}
+		});
+
+		it("reports no frame actions, also for synthetic clicks", () => {
+			const { nav, onAdd, onDelete, onMove } = renderStrip({ activeFrameId: "f2", playing: true });
+
+			for (const name of ["Move frame left", "Move frame right", "Add frame", "Delete frame"]) {
+				within(nav).getByRole("button", { name }).click();
+			}
+
+			expect(onAdd).not.toHaveBeenCalled();
+			expect(onDelete).not.toHaveBeenCalled();
+			expect(onMove).not.toHaveBeenCalled();
+		});
+
+		it("a tap on a frame is still reported", async () => {
+			const { onSelect } = renderStrip({ playing: true });
+
+			await fireEvent.click(frameButton(3));
+
+			expect(onSelect).toHaveBeenCalledWith("f3");
+		});
+
+		it("frames can't be reordered by dragging", async () => {
+			const { items, onMove, onSelect } = renderStrip({ playing: true });
+
+			await press(items()[0], 30);
+			await moveTo(200);
+			await release(200);
+
+			expect(onMove).not.toHaveBeenCalled();
+			expect(items()[0].style.transform).toBe("");
+			expect(onSelect).not.toHaveBeenCalled();
 		});
 	});
 });

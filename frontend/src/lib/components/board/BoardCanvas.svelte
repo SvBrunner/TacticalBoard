@@ -16,6 +16,10 @@ presses are fed to the controller's arrow gestures (`pointerDown` from
 Konva, which knows the pressed element; moves and releases from the
 window, so a drag that leaves the stage still ends).
 
+While `readonly` (slideshow playback) the board only shows the elements:
+nothing is draggable, no handles or arrow preview are drawn, and no
+gesture is reported.
+
 Whenever the stage geometry changes (container resize, device rotation,
 window resize, another viewport), it asks the controller to re-anchor an
 open popover at the selected element's new on-screen position.
@@ -76,9 +80,19 @@ open popover at the selected element's new on-screen position.
 		viewport: BoardViewport;
 		/** The active arrow tool, or `null` when no arrow tool is active. */
 		arrowTool?: ArrowElementType | null;
+		/** Show only (during playback): no selection, handles, drags or gestures. */
+		readonly?: boolean;
 	}
 
-	let { elements, selectedId, selectedBend = null, controller, viewport, arrowTool = null }: Props = $props();
+	let {
+		elements,
+		selectedId,
+		selectedBend = null,
+		controller,
+		viewport,
+		arrowTool = null,
+		readonly = false,
+	}: Props = $props();
 
 	let size = $state<Size>({ width: 0, height: 0 });
 	const fit = $derived(viewport.fit(size.width, size.height));
@@ -89,7 +103,9 @@ open popover at the selected element's new on-screen position.
 
 	let arrowDraft = $state<ArrowDraft | null>(null);
 	$effect(() => controller.arrowDraft.subscribe((draft) => (arrowDraft = draft)));
-	const drawing = $derived(arrowTool !== null);
+	const drawing = $derived(arrowTool !== null && !readonly);
+	/** Elements can be dragged: not while drawing arrows, not while read-only. */
+	const draggable = $derived(!drawing && !readonly);
 
 	/** The handle being dragged and the arrow's shape with it (the model only changes on drop). */
 	let handleDrag = $state<{ id: string; handle: ArrowHandle; preview: ArrowGeometry } | null>(null);
@@ -97,6 +113,9 @@ open popover at the selected element's new on-screen position.
 	let draggedArrowId = $state<string | null>(null);
 
 	const selectedArrow = $derived.by(() => {
+		if (readonly) {
+			return null;
+		}
 		const element = elements.find((candidate) => candidate.id === selectedId);
 		return element instanceof ArrowElement ? element : null;
 	});
@@ -162,7 +181,7 @@ open popover at the selected element's new on-screen position.
 
 	// `pointerclick` covers mouse, touch and pen, and doesn't fire after a drag.
 	function handlePointerClick(e: KonvaEventObject<PointerEvent>) {
-		if (e.evt.button > 0) {
+		if (readonly || e.evt.button > 0) {
 			return; // secondary buttons are handled as contextmenu
 		}
 		const handle = handleOf(e.target);
@@ -188,6 +207,9 @@ open popover at the selected element's new on-screen position.
 	}
 
 	function handlePointerDblClick(e: KonvaEventObject<PointerEvent>) {
+		if (readonly) {
+			return;
+		}
 		const handle = handleOf(e.target);
 		if (handle) {
 			controller.doubleTapHandle(handle.arrow.id, handle.handle);
@@ -196,6 +218,9 @@ open popover at the selected element's new on-screen position.
 
 	function handleContextMenu(e: KonvaEventObject<MouseEvent>) {
 		e.evt.preventDefault();
+		if (readonly) {
+			return;
+		}
 		const id = elementIdOf(e.target);
 		const anchor = id === null ? null : anchorOfElement(id);
 		if (id !== null && anchor) {
@@ -293,7 +318,7 @@ open popover at the selected element's new on-screen position.
 				</Layer>
 				<FloorballFullField width={viewport.field.width} height={viewport.field.height} />
 
-				<Layer>
+				<Layer listening={!readonly}>
 					<Group name="arrows">
 						{#each elements as element (element.id)}
 							{#if element instanceof ArrowElement}
@@ -303,7 +328,7 @@ open popover at the selected element's new on-screen position.
 									color={element.color}
 									geometry={arrowGeometryOf(element)}
 									hitWidth={arrowHitWidth}
-									draggable={!drawing}
+									{draggable}
 									onDragStart={startArrowDrag}
 									onDragMove={(_id, delta) => moveArrow(element, delta)}
 									onDragEnd={(_id, delta) => endArrowDrag(element, delta)}
@@ -321,8 +346,8 @@ open popover at the selected element's new on-screen position.
 									color={element.color}
 									type={element.type}
 									hitRadius={viewport.hitRadius(visualRadius(element.type), fit.scale)}
-									selected={element.id === selectedId}
-									draggable={!drawing}
+									selected={!readonly && element.id === selectedId}
+									{draggable}
 									label={element.showsLabel ? element.label : ""}
 									labelRotation={0 - fit.rotation}
 									onDragStart={(id) => controller.dragStart(id)}
@@ -333,7 +358,7 @@ open popover at the selected element's new on-screen position.
 						{/each}
 					</Group>
 					<Group name="overlay">
-						{#if arrowDraft && arrowTool}
+						{#if arrowDraft && drawing && arrowTool}
 							<ArrowDraftPreview draft={arrowDraft} type={arrowTool} color={elementCatalog.arrowColor} scale={fit.scale} />
 						{/if}
 						{#if selectedArrow}

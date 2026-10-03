@@ -27,7 +27,7 @@ Next, in this order:
 5. [x] **Position labels** on players (C, F, V, G, …).
 6. [x] **Frames UI**: add frame (copy of the previous one), switch, delete, reorder; description per frame; situation details panel.
 7. [x] **Pass/run/shot arrows**: straight, bendable via any number of bend points.
-8. [ ] **Slideshow playback** of frames in the editor.
+8. [x] **Slideshow playback** of frames in the editor.
 9. [ ] **GIF/video export** (frames as slideshow), reusing the playback logic.
 
 ## Phase 2 — Backend, users, and teams

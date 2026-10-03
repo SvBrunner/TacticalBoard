@@ -4,7 +4,8 @@ The details panel: the situation's title and description (Markdown
 source), plus whatever the owner adds below (e.g. the frame description).
 A side panel on desktops, a panel below the field on portrait tablets; on
 phones it collapses to a "Details" disclosure button (collapsed by default)
-so the field keeps the space. Edits are reported on every input; they aren't undoable steps, so
+so the field keeps the space. `disabled` (during playback) makes the
+fields read-only (disabled). Edits are reported on every input; they aren't undoable steps, so
 the fields' own (browser) undo applies while typing.
 -->
 <script lang="ts">
@@ -17,10 +18,20 @@ the fields' own (browser) undo applies while typing.
 		onDescriptionChange: (description: string) => void;
 		/** Shown in the title field when the title is blank. */
 		titlePlaceholder?: string;
+		/** The fields can't be edited (e.g. during playback). */
+		disabled?: boolean;
 		children?: Snippet;
 	}
 
-	let { title, description, onTitleChange, onDescriptionChange, titlePlaceholder = "", children }: Props = $props();
+	let {
+		title,
+		description,
+		onTitleChange,
+		onDescriptionChange,
+		titlePlaceholder = "",
+		disabled = false,
+		children,
+	}: Props = $props();
 
 	const uid = $props.id();
 	/** Only matters on phones; on larger screens the content is always shown. */
@@ -50,6 +61,7 @@ the fields' own (browser) undo applies while typing.
 				autocomplete="off"
 				placeholder={titlePlaceholder}
 				value={title}
+				{disabled}
 				oninput={(event) => onTitleChange(event.currentTarget.value)}
 			/>
 		</div>
@@ -61,6 +73,7 @@ the fields' own (browser) undo applies while typing.
 				rows="5"
 				placeholder="What is this situation about? (Markdown)"
 				value={description}
+				{disabled}
 				oninput={(event) => onDescriptionChange(event.currentTarget.value)}
 			></textarea>
 		</div>

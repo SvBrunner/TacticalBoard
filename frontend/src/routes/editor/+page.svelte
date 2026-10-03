@@ -10,6 +10,7 @@
 	import SituationDetails from "$lib/components/details/SituationDetails.svelte";
 	import FrameDescriptionEditor from "$lib/components/frames/FrameDescriptionEditor.svelte";
 	import FrameStrip from "$lib/components/frames/FrameStrip.svelte";
+	import PlaybackControls from "$lib/components/playback/PlaybackControls.svelte";
 	import { elementCatalog } from "$lib/components/board/ElementCatalog";
 	import { isInsideModalDialog } from "$lib/actions/modalDialog";
 	import { BoardInteractionController } from "$lib/board/BoardInteractionController";
@@ -28,12 +29,19 @@
 	import { DEFAULT_SITUATION_TITLE } from "$lib/model/Situation";
 	import { notifications } from "$lib/debug/Notifications";
 	import { UndoRedoShortcuts } from "$lib/history/UndoRedoShortcuts";
+	import { PlaybackWorkflow } from "$lib/editor/PlaybackWorkflow";
+	import { WebKeyValueStorage } from "$lib/playback/KeyValueStorage";
+	import { PlaybackSettingsStore } from "$lib/playback/PlaybackSettings";
+	import { PlaybackShortcuts } from "$lib/playback/PlaybackShortcuts";
+	import { PlaybackTimeline } from "$lib/playback/PlaybackTimeline";
+	import { SlideshowPlayer } from "$lib/playback/SlideshowPlayer";
 
 	const elements = situationEditor.elements;
 	const situation = situationEditor.situation;
 	const history = situationEditor.history;
 	const activeFrame = situationEditor.activeFrame;
 	const activeFrameNumber = $derived($situation.indexOfFrame($activeFrame.id) + 1);
+	const frameCount = $derived($situation.frames.length);
 
 	// Recomputed only when the sport or field type changes (a new situation).
 	const sport = $derived($situation.sport);
@@ -90,11 +98,44 @@
 		isBlocked: () => Konva.isDragging(),
 	});
 
+	// Playback: settings are app-level (remembered in the browser), not part of the situation.
+	const playbackSettingsStore = new PlaybackSettingsStore(new WebKeyValueStorage());
+	const playbackSettings = playbackSettingsStore.settings;
+	const player = new SlideshowPlayer({
+		timeline: () => PlaybackTimeline.of(situationEditor.current().frames, playbackSettingsStore.current()),
+		loop: () => playbackSettingsStore.current().loop,
+	});
+	const playbackState = player.state;
+	const playback = new PlaybackWorkflow({
+		player,
+		situation,
+		// Leave editing cleanly: the board becomes read-only while the slideshow runs.
+		beforeStart: () => {
+			situationEditor.endGesture();
+			controller.toolChanged(); // drops an arrow being drawn
+			popover.close();
+			selection.clear();
+		},
+		log: notifications,
+	});
+	const playbackKeys = new PlaybackShortcuts(playback);
+	/** Playing or paused: the board shows the slideshow and editing is blocked. */
+	const playing = $derived($playbackState.status !== "stopped");
+	/** The frame on the board: the slideshow's during playback, otherwise the active frame. */
+	const shownFrame = $derived(
+		$playbackState.status === "stopped" ? $activeFrame : ($situation.findFrame($playbackState.frameId) ?? $activeFrame),
+	);
+	const shownFrameNumber = $derived($situation.indexOfFrame(shownFrame.id) + 1);
+
 	let dialogs: SituationDialogs;
 
 	function handleKeydown(event: KeyboardEvent) {
 		// While a modal dialog is open, its keys belong to it.
-		if (isInsideModalDialog(event.target)) {
+		if (isInsideModalDialog(event.target) || Konva.isDragging()) {
+			return;
+		}
+		if (playbackKeys.handle(event) || player.isActive()) {
+			// During playback the board is read-only: no undo/redo, Delete or Escape for it.
 			return;
 		}
 		if (!shortcuts.handle(event)) {
@@ -102,24 +143,45 @@
 		}
 	}
 
+	/** A tap on a frame of the strip: during playback the slideshow shows it, otherwise it becomes active. */
+	function handleSelectFrame(frameId: string) {
+		if (player.isActive()) {
+			playback.showFrame($situation.indexOfFrame(frameId));
+		} else {
+			frames.select(frameId);
+		}
+	}
+
 	function handleSelectTool(tool: Tool) {
+		if (player.isActive()) {
+			return;
+		}
 		tools.selectTool(tool);
 		controller.toolChanged();
 		notifications.notify(`Tool: ${tool}`);
 	}
 
 	function handleSelectPlayerColor(color: string) {
+		if (player.isActive()) {
+			return;
+		}
 		tools.selectPlayerColor(color);
 		notifications.notify(`Player color: ${elementCatalog.colorName(color)}`);
 	}
 
 	function handleUndo() {
+		if (player.isActive()) {
+			return;
+		}
 		// The popover may target an element the undo removes or changes.
 		popover.close();
 		workflow.undo();
 	}
 
 	function handleRedo() {
+		if (player.isActive()) {
+			return;
+		}
 		popover.close();
 		workflow.redo();
 	}
@@ -144,6 +206,7 @@
 	});
 
 	onDestroy(() => {
+		playback.destroy();
 		selection.destroy();
 	});
 </script>
@@ -161,8 +224,8 @@
 		onNew={() => dialogs.startNew()}
 		onExport={() => workflow.exportCurrent()}
 		onLoadFile={(file) => dialogs.importFile(file)}
-		canUndo={$history.canUndo}
-		canRedo={$history.canRedo}
+		canUndo={$history.canUndo && !playing}
+		canRedo={$history.canRedo && !playing}
 		onUndo={handleUndo}
 		onRedo={handleRedo}
 	/>
@@ -173,27 +236,44 @@
 			playerColor={$playerColor}
 			onSelectTool={handleSelectTool}
 			onSelectPlayerColor={handleSelectPlayerColor}
+			disabled={playing}
 		/>
 
 		<main class="workspace">
 			<div class="canvas-area">
 				<BoardCanvas
-					elements={$elements}
-					selectedId={$selectedId}
-					selectedBend={$selectedBend}
+					elements={shownFrame.elements}
+					selectedId={playing ? null : $selectedId}
+					selectedBend={playing ? null : $selectedBend}
 					{controller}
 					{viewport}
-					{arrowTool}
+					arrowTool={playing ? null : arrowTool}
+					readonly={playing}
 				/>
 			</div>
+			<PlaybackControls
+				status={$playbackState.status}
+				frameNumber={shownFrameNumber}
+				{frameCount}
+				canPlay={frameCount >= 2}
+				frameDurationMs={$playbackSettings.frameDurationMs}
+				loop={$playbackSettings.loop}
+				onTogglePlay={() => playback.toggle()}
+				onPrevious={() => playback.previous()}
+				onNext={() => playback.next()}
+				onStop={() => playback.stop()}
+				onFrameDurationChange={(ms) => playbackSettingsStore.setFrameDuration(ms)}
+				onLoopChange={(loop) => playbackSettingsStore.setLoop(loop)}
+			/>
 			<FrameStrip
 				frames={$situation.frames}
-				activeFrameId={$activeFrame.id}
+				activeFrameId={shownFrame.id}
 				{viewport}
-				onSelect={(id) => frames.select(id)}
-				onAdd={() => frames.add()}
-				onDelete={(id) => frames.delete(id)}
-				onMove={(id, toIndex) => frames.move(id, toIndex)}
+				{playing}
+				onSelect={handleSelectFrame}
+				onAdd={() => !player.isActive() && frames.add()}
+				onDelete={(id) => !player.isActive() && frames.delete(id)}
+				onMove={(id, toIndex) => !player.isActive() && frames.move(id, toIndex)}
 			/>
 		</main>
 
@@ -201,20 +281,24 @@
 			title={$situation.title}
 			description={$situation.description}
 			titlePlaceholder={DEFAULT_SITUATION_TITLE}
-			onTitleChange={(title) => situationEditor.changeTitle(title)}
-			onDescriptionChange={(description) => situationEditor.changeDescription(description)}
+			onTitleChange={(title) => !player.isActive() && situationEditor.changeTitle(title)}
+			onDescriptionChange={(description) => !player.isActive() && situationEditor.changeDescription(description)}
+			disabled={playing}
 		>
-			<FrameDescriptionEditor
-				frameNumber={activeFrameNumber}
-				description={$activeFrame.description}
-				onChange={(description) => situationEditor.changeFrameDescription(description)}
-				onCommit={() => situationEditor.endGesture()}
-			/>
+			<!-- Frame descriptions are not shown during playback. -->
+			{#if !playing}
+				<FrameDescriptionEditor
+					frameNumber={activeFrameNumber}
+					description={$activeFrame.description}
+					onChange={(description) => situationEditor.changeFrameDescription(description)}
+					onCommit={() => situationEditor.endGesture()}
+				/>
+			{/if}
 		</SituationDetails>
 	</div>
 
 	<ElementEditPopover
-		element={$popoverAnchor ? $selected : null}
+		element={$popoverAnchor && !playing ? $selected : null}
 		anchor={$popoverAnchor}
 		bendIndex={$selectedBend}
 		actions={situationEditor}
@@ -260,7 +344,7 @@
 		min-width: 0;
 		min-height: 0;
 		display: grid;
-		grid-template-rows: minmax(0, 1fr) auto;
+		grid-template-rows: minmax(0, 1fr) auto auto;
 		grid-template-columns: minmax(0, 1fr);
 	}
 
@@ -313,6 +397,19 @@
 
 		.canvas-area {
 			padding-right: env(safe-area-inset-right, 0px);
+		}
+	}
+
+	/* Wider landscape phones: height is scarce, so the playback controls sit next to the frame
+	   strip instead of above it (narrower ones need the whole width for the strip). */
+	@media (max-height: 499px) and (min-width: 780px) {
+		.workspace {
+			grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+			grid-template-rows: minmax(0, 1fr) auto;
+		}
+
+		.canvas-area {
+			grid-column: 1 / -1;
 		}
 	}
 </style>

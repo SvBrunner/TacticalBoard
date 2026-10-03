@@ -154,7 +154,7 @@ A press only turns into a drag after the pointer has moved 6 CSS px (Konva `drag
 
 **No pinch-zoom (MVP):** the board area disables browser touch gestures (`touch-action: none`), so pinching neither zooms the page nor the board. See [known limitations](../known-limitations.md).
 
-**Layout:** desktop (≥ 1024 px) has a side tool panel on the left and the details panel (8.9) on the right; tablets (600–1023 px) keep the side tool panel with tighter spacing and, in portrait (≥ 500 px tall), show the details panel below the board so the field keeps the width; portrait phones (≤ 599 px wide) get a compact header with icon-only buttons and the tools as a horizontally scrollable bottom bar; landscape phones (≤ 499 px tall) get a compact header and a narrow left tool rail. On phones the details panel collapses to a "Details" bar above the board (collapsed by default) and the edit popover becomes a bottom sheet. The frame strip (8.9) sits directly below the board on every layout; its action buttons become icon-only when the strip is narrower than 720 px (CSS container query). Interactive controls are at least 44 × 44 CSS px; icon-only buttons keep their text as accessible name. Safe-area insets (notches, home indicator) are respected.
+**Layout:** desktop (≥ 1024 px) has a side tool panel on the left and the details panel (8.9) on the right; tablets (600–1023 px) keep the side tool panel with tighter spacing and, in portrait (≥ 500 px tall), show the details panel below the board so the field keeps the width; portrait phones (≤ 599 px wide) get a compact header with icon-only buttons and the tools as a horizontally scrollable bottom bar; landscape phones (≤ 499 px tall) get a compact header and a narrow left tool rail. On phones the details panel collapses to a "Details" bar above the board (collapsed by default) and the edit popover becomes a bottom sheet. The playback controls (8.11) and the frame strip (8.9) sit directly below the board on every layout (on landscape phones at least 780 px wide side by side, to save height); its action buttons become icon-only when the strip is narrower than 720 px (CSS container query). Interactive controls are at least 44 × 44 CSS px; icon-only buttons keep their text as accessible name. Safe-area insets (notches, home indicator) are respected.
 
 Implementation: `frontend/src/lib/board/` (`BoardViewport`, `BoardInteractionController`, `ArrowGestures`, `ArrowHandle`, `Selection`, `ToolState`, `PopoverState`, `konvaSetup`), `frontend/src/lib/components/board/BoardCanvas.svelte` (translates Konva events into gestures), `frontend/src/lib/components/board/popover/`.
 
@@ -254,3 +254,34 @@ The arrow popover ("Edit arrow") offers Type (Pass/Run/Shot only — the type ca
 **Colors:** every element's color can be changed in its popover (Player color / Color), from one palette: the four player colors, grey (the initial color of markers and the ball) and black (the initial color of arrows). The point element popover lists only point types, the arrow popover only arrow types.
 
 Implementation: `frontend/src/lib/model/elements/` (`ArrowElement`, `ArrowGeometry`, `ElementType`), `frontend/src/lib/commands/ReshapeArrowCommand.ts`, `frontend/src/lib/board/` (`ArrowGestures`, `ArrowHandle`, `BoardInteractionController`, `Selection` with the active bend), `frontend/src/lib/components/board/` (`ArrowPainter`, `ArrowShape`, `ArrowHandleShape`, `ArrowDraftPreview`, `BoardCanvas`), `frontend/src/lib/components/frames/FrameThumbnailGeometry.ts`.
+
+## 8.11 Playback
+
+The frames of a situation can be played as a **slideshow** in the editor.
+
+**Rules:**
+
+| | |
+|---|---|
+| Start | Play always starts at **frame 1**, whatever frame is active. Play is disabled (and Space does nothing) with only one frame. |
+| Timing | Every frame is shown for the same **frame duration** — one global setting, 1 / 2 / 3 / 5 s, default 2 s. Hard cut between frames (no transition). |
+| End | After the last frame playback **stops**, or starts over at frame 1 when **Loop** is on (default off). |
+| Stop | Stop (or the natural end) shows the frame that was active **before** playback again. Playback never changes the model or the active frame: the board just shows the slideshow's frame while it runs. |
+| Pause | Keeps the shown frame; Play resumes it with the time it had left. |
+| Previous / Next | Show the neighbouring frame for its full duration, staying playing or paused; nothing happens before the first or after the last frame (also with Loop on). A tap on a frame in the strip shows that frame the same way. |
+| Settings | Frame duration and Loop are **app settings**, not part of the situation file; they are remembered in the browser (`localStorage`, key `tacticalboard.playbackSettings`). If the browser storage is unavailable or holds invalid data, the defaults are used. Changes apply right away, also during playback (a new duration from the next frame on). |
+
+**While playing or paused** the editor is read-only: the board shows the frame without selection, handles or popover and reports no taps, drags or arrow gestures; the tool panel, Undo/Redo (buttons and shortcuts), Delete/Backspace, adding/deleting/reordering frames and the details fields are disabled. Frame descriptions are **not** shown (the frame description field is hidden). Starting playback first ends the edit session, drops an arrow being drawn, clears the selection and closes the popover. New, Load and the badge stay available: when the situation is replaced (new, imported, closed) playback stops. Export works during playback and doesn't stop it.
+
+**Controls** (`PlaybackControls`, a region named "Playback" between the board and the frame strip): Play/Pause, Previous frame, Next frame, Stop (all ≥ 44 px), the status "Frame n / N" (the frame on the board), a "Frame duration" select and a Loop toggle button (`aria-pressed`). Below 640 px width (container query) the buttons are icon-only and the status is "n / N"; the texts stay the accessible names. The frame strip marks the frame being shown (`aria-current="step"`).
+
+**Keyboard** (`PlaybackShortcuts`): Space = Play/Pause (also starts playback); ← / → = previous / next frame and Escape = Stop, **only during playback** — outside playback ← / → do nothing (switching frames by keyboard is not part of the MVP) and Escape keeps its board meaning (8.5). Ignored while typing in a text field or select, during IME composition, with Ctrl/Cmd/Alt held, while an element is dragged, and inside modal dialogs. Space on a focused button or link is left to the browser, which activates that control (so it never triggers twice). Swipe gestures and a fullscreen/presentation mode are planned for later.
+
+**Building blocks** (`frontend/src/lib/playback/`, pure and reusable for the GIF export of step 9):
+
+- `PlaybackTimeline`: frames + settings → entries `{ frameId, index, startMs, durationMs }`, `totalMs`, `frameAt(ms)` (a frame covers `[startMs, startMs + durationMs)`; before the start the first frame, from the end on the last one).
+- `PlaybackSettings` (immutable value) and `PlaybackSettingsStore` (Svelte store, persisted through a `KeyValueStorage`; `WebKeyValueStorage` wraps `localStorage` and swallows every storage error).
+- `SlideshowPlayer`: states `stopped | playing | paused` with the shown index and frame id as a store; `play`/`pause`/`resume`/`toggle`/`stop`/`next`/`previous`/`seek`; reads the timeline and the loop setting from a source whenever it needs them; timers through an injected `Scheduler` (`TimeoutScheduler` in the browser, `FakeScheduler` in tests).
+- `PlaybackShortcuts`: the keyboard mapping above.
+
+`frontend/src/lib/editor/PlaybackWorkflow.ts` connects the player to the editor (leave editing before starting, stop when the situation changes); the editor page shows `playing ? the slideshow's frame : the active frame` and passes the read-only state to `BoardCanvas` (`readonly`), `ToolPanel` (`disabled`), `FrameStrip` (`playing`) and `SituationDetails` (`disabled`).

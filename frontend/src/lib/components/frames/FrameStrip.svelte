@@ -12,6 +12,11 @@ Reordering:
 - Keyboard (and anyone who prefers buttons): "Move frame left" / "Move
   frame right" move the active frame by one position.
 
+During playback (`playing`) the strip marks the frame being shown
+(pass it as `activeFrameId`); a tap on a frame still reports `onSelect`
+(the owner shows that frame of the slideshow), but frames can't be added,
+deleted or reordered.
+
 Horizontally scrollable when the frames don't fit (phones); while dragging
 near an edge the strip scrolls by itself.
 -->
@@ -36,9 +41,21 @@ near an edge the strip scrolls by itself.
 		onMove: (frameId: string, toIndex: number) => void;
 		/** Height of the thumbnails in CSS px. */
 		thumbnailHeight?: number;
+		/** Slideshow playback is running: frames can't be added, deleted or reordered. */
+		playing?: boolean;
 	}
 
-	let { frames, activeFrameId, viewport, onSelect, onAdd, onDelete, onMove, thumbnailHeight = 40 }: Props = $props();
+	let {
+		frames,
+		activeFrameId,
+		viewport,
+		onSelect,
+		onAdd,
+		onDelete,
+		onMove,
+		thumbnailHeight = 40,
+		playing = false,
+	}: Props = $props();
 
 	const activeIndex = $derived(frames.findIndex((frame) => frame.id === activeFrameId));
 
@@ -86,8 +103,8 @@ near an edge the strip scrolls by itself.
 	}
 
 	function handlePointerDown(event: PointerEvent, index: number) {
-		// Primary button only; a second finger while one gesture runs is ignored.
-		if (event.button !== 0 || gesture || !list) {
+		// Primary button only; a second finger while one gesture runs is ignored; no reordering during playback.
+		if (playing || event.button !== 0 || gesture || !list) {
 			return;
 		}
 		suppressClick = false;
@@ -234,13 +251,19 @@ near an edge the strip scrolls by itself.
 
 	function moveActive(delta: -1 | 1) {
 		const to = activeIndex + delta;
-		if (activeIndex !== -1 && to >= 0 && to < frames.length) {
+		if (!playing && activeIndex !== -1 && to >= 0 && to < frames.length) {
 			onMove(activeFrameId, to);
 		}
 	}
 
+	function addFrame() {
+		if (!playing) {
+			onAdd();
+		}
+	}
+
 	function deleteActive() {
-		if (frames.length > 1) {
+		if (!playing && frames.length > 1) {
 			onDelete(activeFrameId);
 		}
 	}
@@ -311,7 +334,7 @@ near an edge the strip scrolls by itself.
 			class="action-btn"
 			aria-label="Move frame left"
 			title="Move frame left"
-			disabled={activeIndex <= 0}
+			disabled={playing || activeIndex <= 0}
 			onclick={() => moveActive(-1)}
 		>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 6l-6 6 6 6" /></svg>
@@ -321,16 +344,16 @@ near an edge the strip scrolls by itself.
 			class="action-btn"
 			aria-label="Move frame right"
 			title="Move frame right"
-			disabled={activeIndex === -1 || activeIndex >= frames.length - 1}
+			disabled={playing || activeIndex === -1 || activeIndex >= frames.length - 1}
 			onclick={() => moveActive(1)}
 		>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" /></svg>
 		</button>
-		<button type="button" class="action-btn primary" title="Add frame (copy of the current frame)" onclick={onAdd}>
+		<button type="button" class="action-btn primary" title="Add frame (copy of the current frame)" disabled={playing} onclick={addFrame}>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg>
 			<span class="label">Add frame</span>
 		</button>
-		<button type="button" class="action-btn" title="Delete the current frame" disabled={frames.length <= 1} onclick={deleteActive}>
+		<button type="button" class="action-btn" title="Delete the current frame" disabled={playing || frames.length <= 1} onclick={deleteActive}>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
 			<span class="label">Delete frame</span>
 		</button>

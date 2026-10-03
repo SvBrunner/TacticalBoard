@@ -470,6 +470,86 @@ describe("BoardCanvas", () => {
 		});
 	});
 
+	describe("read-only (playback)", () => {
+		const pass = new ArrowElement("a1", "Pass", "black", new ArrowGeometry({ x: 200, y: 200 }, { x: 800, y: 200 }, []));
+
+		it("still shows every element", async () => {
+			renderCanvas({ elements: [player, ball, pass], readonly: true });
+			await resizeField(1000, 500);
+
+			expect(elementShapes().map((shape) => shape.id())).toEqual(["p1", "b1"]);
+			expect(stage().find(`.${ARROW_NODE_NAME}`).map((shape) => shape.id())).toEqual(["a1"]);
+		});
+
+		it("nothing is draggable or listening", async () => {
+			renderCanvas({ elements: [player, pass], readonly: true });
+			await resizeField(1000, 500);
+
+			expect(elementShapes()[0].draggable()).toBe(false);
+			expect(stage().findOne(`.${ARROW_NODE_NAME}`)!.draggable()).toBe(false);
+			expect(elementShapes()[0].getLayer()!.listening()).toBe(false);
+		});
+
+		it("shows no selection highlight, handles or arrow preview", async () => {
+			const controller = fakeController();
+			controller.arrowDraft.set({ start: { x: 100, y: 100 }, end: { x: 600, y: 300 } } as ArrowDraft);
+			render(BoardCanvas, {
+				props: {
+					elements: [player, pass] as readonly BoardElement[],
+					selectedId: "a1",
+					controller,
+					viewport: new BoardViewport(),
+					arrowTool: "Pass",
+					readonly: true,
+				},
+			});
+			await resizeField(1000, 500);
+
+			expect(stage().find(`.${ARROW_HANDLE_NODE_NAME}`)).toHaveLength(0);
+			expect(stage().find(`.${ARROW_DRAFT_NODE_NAME}`)).toHaveLength(0);
+			expect((elementShapes()[0] as Shape).strokeWidth()).toBe(0);
+		});
+
+		it("reports no taps, double taps, context menus or arrow presses", async () => {
+			const { controller } = renderCanvas({ elements: [player], readonly: true, arrowTool: "Pass" });
+			await resizeField(1000, 500);
+			const evt = pointerEvent({ clientX: 100, clientY: 60, pointerId: 1 });
+
+			stage().setPointersPositions({ clientX: 100, clientY: 60 } as unknown as PointerEvent);
+			stage().fire("pointerclick", { evt });
+			elementShapes()[0].fire("pointerclick", { evt }, true);
+			elementShapes()[0].fire("pointerdblclick", { evt }, true);
+			elementShapes()[0].fire("contextmenu", { evt }, true);
+			stage().fire("pointerdown", { evt });
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: 300, clientY: 100 }));
+			window.dispatchEvent(new MouseEvent("pointerup", { clientX: 300, clientY: 100 }));
+
+			expect(controller.tapField).not.toHaveBeenCalled();
+			expect(controller.tapElement).not.toHaveBeenCalled();
+			expect(controller.doubleTapHandle).not.toHaveBeenCalled();
+			expect(controller.contextMenu).not.toHaveBeenCalled();
+			expect(controller.pointerDown).not.toHaveBeenCalled();
+			expect(controller.pointerMove).not.toHaveBeenCalled();
+			expect(controller.pointerUp).not.toHaveBeenCalled();
+			// The browser menu stays suppressed on the board.
+			const menu = pointerEvent();
+			stage().fire("contextmenu", { evt: menu });
+			expect(menu.preventDefault).toHaveBeenCalled();
+		});
+
+		it("becomes editable again when no longer read-only", async () => {
+			const { rerender, controller } = renderCanvas({ elements: [player], readonly: true });
+			await resizeField(1000, 500);
+
+			await rerender({ readonly: false });
+
+			expect(elementShapes()[0].draggable()).toBe(true);
+			expect(elementShapes()[0].getLayer()!.listening()).toBe(true);
+			elementShapes()[0].fire("pointerclick", { evt: pointerEvent() }, true);
+			expect(controller.tapElement).toHaveBeenCalled();
+		});
+	});
+
 	describe("half field", () => {
 		const halfViewport = () => new BoardViewport(FieldDimensions.FLOORBALL, "half");
 		// In the visible (right) half, and one hidden in the left half.
