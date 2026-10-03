@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { SituationFileValidator } from "./SituationFileValidator";
-import fixture from "./__fixtures__/situation-v1.json";
+import fixture from "./__fixtures__/situation-v2.json";
 
 type Json = Record<string, any>;
 
 function minimalFile(): Json {
 	return {
 		format: "tacticalboard.situation",
-		formatVersion: 1,
+		formatVersion: 2,
 		situation: {
 			id: "s",
 			title: "",
@@ -16,7 +16,7 @@ function minimalFile(): Json {
 			fieldType: "full",
 			createdAt: "2026-01-01T00:00:00.000Z",
 			updatedAt: "2026-01-01T00:00:00.000Z",
-			frames: [{ id: "f1", description: "", elements: [{ id: "e1", type: "Player", color: "red", x: 0, y: 0 }] }],
+			frames: [{ id: "f1", description: "", elements: [{ id: "e1", type: "Player", color: "red", x: 0, y: 0, label: "" }] }],
 		},
 	};
 }
@@ -35,7 +35,7 @@ describe("SituationFileValidator", () => {
 		expect(validator.isValid(minimalFile())).toBe(true);
 	});
 
-	it("accepts the v1 fixture", () => {
+	it("accepts the v2 fixture", () => {
 		expect(validator.validate(fixture)).toEqual([]);
 	});
 
@@ -58,7 +58,7 @@ describe("SituationFileValidator", () => {
 				file.extra = true;
 				file.situation.extra = { nested: 1 };
 				file.situation.frames[0].extra = "x";
-				file.situation.frames[0].elements[0].label = "C";
+				file.situation.frames[0].elements[0].tag = "C";
 			}),
 		).toEqual([]);
 	});
@@ -69,7 +69,7 @@ describe("SituationFileValidator", () => {
 				file.situation.frames.push({
 					id: "f2",
 					description: "",
-					elements: [{ id: "e1", type: "Player", color: "red", x: 5, y: 5 }],
+					elements: [{ id: "e1", type: "Player", color: "red", x: 5, y: 5, label: "" }],
 				});
 			}),
 		).toEqual([]);
@@ -84,7 +84,21 @@ describe("SituationFileValidator", () => {
 					color: "red",
 					x: i,
 					y: i,
+					label: "",
 				}));
+			}),
+		).toEqual([]);
+	});
+
+	it.each([[""], ["C"], ["LV"], ["10"], ["c"], ["Ü"]])("accepts the label %j", (label) => {
+		expect(issuesFor((file) => (file.situation.frames[0].elements[0].label = label))).toEqual([]);
+	});
+
+	it("accepts a label on a non-player element (kept hidden)", () => {
+		expect(
+			issuesFor((file) => {
+				file.situation.frames[0].elements[0].type = "Circle";
+				file.situation.frames[0].elements[0].label = "C";
 			}),
 		).toEqual([]);
 	});
@@ -150,6 +164,20 @@ describe("SituationFileValidator", () => {
 			"situation.frames[0].elements[0].y: expected finite number",
 		],
 		["NaN y", (f) => (f.situation.frames[0].elements[0].y = NaN), "situation.frames[0].elements[0].y: expected finite number"],
+		...(
+			[
+				["missing label", (f: Json) => delete f.situation.frames[0].elements[0].label],
+				["non-string label", (f: Json) => (f.situation.frames[0].elements[0].label = 7)],
+				["null label", (f: Json) => (f.situation.frames[0].elements[0].label = null)],
+				["too long label", (f: Json) => (f.situation.frames[0].elements[0].label = "ABC")],
+				["label with a space", (f: Json) => (f.situation.frames[0].elements[0].label = "L V")],
+				["label with punctuation", (f: Json) => (f.situation.frames[0].elements[0].label = "#9")],
+			] as [string, (file: Json) => void][]
+		).map(([name, mutate]): [string, (file: Json) => void, string] => [
+			name,
+			mutate,
+			"situation.frames[0].elements[0].label: expected string of at most 2 letters or digits",
+		]),
 	])("rejects %s", (_name, mutate, expected) => {
 		expect(issuesFor(mutate)).toEqual([expected]);
 	});
@@ -165,7 +193,7 @@ describe("SituationFileValidator", () => {
 	it("rejects duplicate element ids within a frame", () => {
 		expect(
 			issuesFor((file) => {
-				file.situation.frames[0].elements.push({ id: "e1", type: "Ball", color: "black", x: 1, y: 1 });
+				file.situation.frames[0].elements.push({ id: "e1", type: "Ball", color: "black", x: 1, y: 1, label: "" });
 			}),
 		).toEqual(['situation.frames[0].elements[1].id: duplicate element id "e1" in frame']);
 	});
@@ -176,7 +204,7 @@ describe("SituationFileValidator", () => {
 				file.situation.title = 1;
 				file.situation.fieldType = "quarter";
 				file.situation.frames[0].elements[0].x = null;
-				file.situation.frames[0].elements.push({ id: "e2", type: "Unknown", color: "", x: 0, y: 0 });
+				file.situation.frames[0].elements.push({ id: "e2", type: "Unknown", color: "", x: 0, y: 0, label: "" });
 			}),
 		).toEqual([
 			"situation.title: expected string",

@@ -1,5 +1,6 @@
 import { isElementType } from "../elements/ElementType";
 import { isFieldType } from "../FieldType";
+import { PositionCatalog } from "../positions/PositionCatalog";
 import { isSportId } from "../Sport";
 import type { SituationFileDto } from "./SituationFileDto";
 import { SITUATION_FILE_FORMAT } from "./SituationFileDto";
@@ -114,6 +115,9 @@ export class SituationFileValidator {
 		checkNonEmptyString(element.color, `${path}.color`, report);
 		checkFiniteNumber(element.x, `${path}.x`, report);
 		checkFiniteNumber(element.y, `${path}.y`, report);
+		if (!PositionCatalog.isValidLabel(element.label)) {
+			report(`${path}.label`, "expected string of at most 2 letters or digits");
+		}
 	}
 }
 

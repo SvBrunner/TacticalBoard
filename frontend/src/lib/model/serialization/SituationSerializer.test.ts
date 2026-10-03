@@ -11,9 +11,10 @@ import {
 	UnsupportedFormatVersionError,
 } from "./SituationImportErrors";
 import { SituationSerializer } from "./SituationSerializer";
-import fixture from "./__fixtures__/situation-v1.json";
+import fixtureV1 from "./__fixtures__/situation-v1.json";
+import fixture from "./__fixtures__/situation-v2.json";
 
-const player = new PointElement("p1", 100, 200, "oklch(62% 0.16 230)", "Player");
+const player = new PointElement("p1", 100, 200, "oklch(62% 0.16 230)", "Player", "C");
 const ball = new PointElement("b1", 110, 210, "oklch(45% 0.01 260)", "Ball");
 
 const situation = new Situation({
@@ -49,12 +50,32 @@ describe("SituationSerializer", () => {
 		expect(text).toContain('\n  "format": "tacticalboard.situation"');
 	});
 
-	it("deserializes the v1 fixture", () => {
+	it("deserializes the v2 fixture with its labels", () => {
 		const restored = serializer.deserialize(JSON.stringify(fixture));
 
 		expect(restored.id).toBe("situation-1");
 		expect(restored.frames).toHaveLength(2);
 		expect(restored.frames[1].elements).toHaveLength(4);
+		expect(restored.frames[0].findElement("player-2")).toMatchObject({ label: "10" });
+		expect(restored.frames[1].findElement("player-2")).toMatchObject({ label: "LV" });
+	});
+
+	it("still imports v1 files: their elements have no label", () => {
+		const restored = serializer.deserialize(JSON.stringify(fixtureV1));
+
+		expect(restored.frames[1].elements).toHaveLength(4);
+		expect(restored.frames.flatMap((frame) => frame.elements.map((element) => (element as PointElement).label))).toEqual(
+			Array(7).fill(""),
+		);
+		expect(restored.frames[0].findElement("player-1")).toMatchObject({ x: 1200, y: 300, type: "Player" });
+	});
+
+	it("writes format version 2 with labels", () => {
+		const written = JSON.parse(serializer.serialize(situation));
+
+		expect(written.formatVersion).toBe(2);
+		expect(written.situation.frames[0].elements[0].label).toBe("C");
+		expect(written.situation.frames[0].elements[1].label).toBe("");
 	});
 
 	it.each<[string, string, new (...args: never[]) => SituationImportError]>([

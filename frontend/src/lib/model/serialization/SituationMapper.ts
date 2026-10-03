@@ -5,7 +5,7 @@ import type { FieldType } from "../FieldType";
 import { Frame } from "../Frame";
 import { Situation } from "../Situation";
 import type { SportId } from "../Sport";
-import type { ElementDtoV1, FrameDtoV1, SituationFileDto } from "./SituationFileDto";
+import type { ElementDto, FrameDto, SituationFileDto } from "./SituationFileDto";
 import { CURRENT_FORMAT_VERSION, SITUATION_FILE_FORMAT } from "./SituationFileDto";
 
 /** Converts between the domain model and the file DTO. Expects validated input in `fromDto`. */
@@ -41,7 +41,7 @@ export class SituationMapper {
 		});
 	}
 
-	private frameToDto(frame: Frame): FrameDtoV1 {
+	private frameToDto(frame: Frame): FrameDto {
 		return {
 			id: frame.id,
 			description: frame.description,
@@ -49,14 +49,21 @@ export class SituationMapper {
 		};
 	}
 
-	private elementToDto(element: BoardElement): ElementDtoV1 {
+	private elementToDto(element: BoardElement): ElementDto {
 		if (element instanceof PointElement) {
-			return { id: element.id, type: element.type, color: element.color, x: element.x, y: element.y };
+			return {
+				id: element.id,
+				type: element.type,
+				color: element.color,
+				x: element.x,
+				y: element.y,
+				label: element.label,
+			};
 		}
 		throw new Error(`Cannot serialize element ${element.id} of type ${element.type}`);
 	}
 
-	private frameFromDto(frame: FrameDtoV1): Frame {
+	private frameFromDto(frame: FrameDto): Frame {
 		return new Frame(
 			frame.id,
 			frame.description,
@@ -64,7 +71,14 @@ export class SituationMapper {
 		);
 	}
 
-	private elementFromDto(element: ElementDtoV1): BoardElement {
-		return new PointElement(element.id, element.x, element.y, element.color, element.type as PointElementType);
+	private elementFromDto(element: ElementDto): BoardElement {
+		return new PointElement(
+			element.id,
+			element.x,
+			element.y,
+			element.color,
+			element.type as PointElementType,
+			element.label,
+		);
 	}
 }

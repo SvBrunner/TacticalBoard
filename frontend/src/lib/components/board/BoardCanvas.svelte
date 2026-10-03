@@ -6,15 +6,20 @@ is visible: the whole field (landscape, unrotated) or the half field
 (portrait, stage rotated by 90°, the rest of the field cropped). Translates
 raw Konva pointer/drag events into board gestures (in scene units) for the
 controller.
+Whenever the stage geometry changes (container resize, device rotation,
+window resize, another viewport), it asks the controller to re-anchor an
+open popover at the selected element's new on-screen position.
 -->
 <script lang="ts">
+	import { untrack } from "svelte";
 	import { Stage, Layer, Rect } from "svelte-konva";
+	import type { Point } from "$lib/commands/Point";
 	import type { KonvaEventObject, Node } from "konva/lib/Node";
 	import { observeSize, type Size } from "$lib/actions/observeSize";
 	import type { BoardInteractionController } from "$lib/board/BoardInteractionController";
 	import type { BoardViewport, ScreenRect } from "$lib/board/BoardViewport";
 	import type { BoardElement } from "$lib/model/elements/BoardElement";
-	import { isElementType } from "$lib/model/elements/ElementType";
+	import { isElementType, type ElementType } from "$lib/model/elements/ElementType";
 	import { PointElement } from "$lib/model/elements/PointElement";
 	import BoardComponent from "./BoardComponent.svelte";
 	import FloorballFullField from "./background/FloorballFullField.svelte";
@@ -23,7 +28,7 @@ controller.
 	/** The gestures the canvas reports. */
 	type BoardGestures = Pick<
 		BoardInteractionController,
-		"tapElement" | "tapField" | "contextMenu" | "dragStart" | "dragMove" | "dragEnd"
+		"tapElement" | "tapField" | "contextMenu" | "dragStart" | "dragMove" | "dragEnd" | "relocatePopover"
 	>;
 
 	interface Props {
@@ -38,20 +43,41 @@ controller.
 	let size = $state<Size>({ width: 0, height: 0 });
 	const fit = $derived(viewport.fit(size.width, size.height));
 
+	let stageContainer: HTMLDivElement | undefined = $state();
+	/** Bumped on window resizes, which can move the stage without resizing it. */
+	let windowGeometry = $state(0);
+
 	function elementNode(target: Node): Node | null {
 		return target.name() === ELEMENT_NODE_NAME ? target : null;
 	}
 
+	function screenAnchor(center: Point, type: ElementType | undefined, current = fit): ScreenRect {
+		const container = stageContainer?.getBoundingClientRect();
+		return viewport.screenRect(center, type ? visualRadius(type) : 0, current, {
+			x: container?.left ?? 0,
+			y: container?.top ?? 0,
+		});
+	}
+
 	function anchorFor(node: Node): ScreenRect {
 		const type = node.getAttr("elementType");
-		const container = node.getStage()?.container().getBoundingClientRect();
-		return viewport.screenRect(
-			node.position(),
-			isElementType(type) ? visualRadius(type) : 0,
-			fit,
-			{ x: container?.left ?? 0, y: container?.top ?? 0 },
-		);
+		return screenAnchor(node.position(), isElementType(type) ? type : undefined);
 	}
+
+	function anchorOfElement(id: string, current: typeof fit): ScreenRect | null {
+		const element = elements.find((candidate) => candidate.id === id);
+		return element instanceof PointElement ? screenAnchor(element, element.type, current) : null;
+	}
+
+	// Re-anchor an open popover whenever the stage geometry changes.
+	$effect(() => {
+		const current = fit;
+		void windowGeometry;
+		if (!(current.width > 0) || !stageContainer) {
+			return;
+		}
+		untrack(() => controller.relocatePopover((id) => anchorOfElement(id, current)));
+	});
 
 	// `pointerclick` covers mouse, touch and pen, and doesn't fire after a drag.
 	function handlePointerClick(e: KonvaEventObject<PointerEvent>) {
@@ -78,9 +104,11 @@ controller.
 	}
 </script>
 
+<svelte:window onresize={() => windowGeometry++} />
+
 <section class="field-area" aria-label="Field" use:observeSize={(next) => (size = next)}>
 	{#if fit.width > 0}
-		<div class="stage-container" style:width="{fit.width}px" style:height="{fit.height}px">
+		<div bind:this={stageContainer} class="stage-container" style:width="{fit.width}px" style:height="{fit.height}px">
 			<Stage
 				width={fit.width}
 				height={fit.height}
@@ -108,6 +136,8 @@ controller.
 								type={element.type}
 								hitRadius={viewport.hitRadius(visualRadius(element.type), fit.scale)}
 								selected={element.id === selectedId}
+								label={element.showsLabel ? element.label : ""}
+								labelRotation={0 - fit.rotation}
 								onDragStart={(id) => controller.dragStart(id)}
 								onDragMove={(_id, position) => controller.dragMove(position)}
 								onDragEnd={(id, position) => controller.dragEnd(id, position)}

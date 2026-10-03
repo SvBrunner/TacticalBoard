@@ -702,6 +702,106 @@ describe("SituationEditor", () => {
 		});
 	});
 
+	describe("changeLabel", () => {
+		const labelOf = (id: string) => (get(editor.elements).find((e) => e.id === id) as PointElement).label;
+
+		it("newly placed players have no label", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+
+			expect(labelOf(id)).toBe("");
+		});
+
+		it("sets and clears the label of the matching element only", () => {
+			const first = editor.addElement(0, 0, "red", "Player");
+			const second = editor.addElement(1, 1, "red", "Player");
+
+			editor.changeLabel(first, "C");
+			expect(labelOf(first)).toBe("C");
+			expect(labelOf(second)).toBe("");
+
+			editor.changeLabel(first, "");
+			expect(labelOf(first)).toBe("");
+		});
+
+		it("is a no-op for an unknown id or an unchanged label", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+			const before = editor.current();
+
+			editor.changeLabel("missing", "C");
+			editor.changeLabel(id, "");
+
+			expect(editor.current()).toBe(before);
+			expect(get(editor.history).undoLabel).toBe("Add Player");
+		});
+
+		it("one edit session is one undo step; endGesture starts the next", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+			editor.endGesture();
+
+			editor.changeLabel(id, "1");
+			editor.changeLabel(id, "10");
+			editor.endGesture();
+			editor.changeLabel(id, "C");
+
+			expect(editor.undo()).toBe("Change Player label");
+			expect(labelOf(id)).toBe("10");
+			expect(editor.undo()).toBe("Change Player label");
+			expect(labelOf(id)).toBe("");
+			expect(get(editor.history).undoLabel).toBe("Add Player");
+			editor.redo();
+			expect(labelOf(id)).toBe("10");
+		});
+
+		it("label changes of different elements are separate undo steps", () => {
+			const first = editor.addElement(0, 0, "red", "Player");
+			const second = editor.addElement(1, 1, "red", "Player");
+
+			editor.changeLabel(first, "G");
+			editor.changeLabel(second, "C");
+			editor.undo();
+
+			expect(labelOf(first)).toBe("G");
+			expect(labelOf(second)).toBe("");
+		});
+
+		it("is per frame: other frames keep their labels and their own history", () => {
+			editor.load(twoFrameSituation());
+
+			editor.changeLabel("p1", "LV");
+			editor.selectFrame("f2");
+
+			expect(labelOf("p1")).toBe("");
+			expect(get(editor.history).canUndo).toBe(false);
+			editor.changeLabel("p1", "RV");
+			editor.selectFrame("f1");
+			expect(labelOf("p1")).toBe("LV");
+			editor.undo();
+			expect(labelOf("p1")).toBe("");
+			expect((editor.current().frames[1].findElement("p1") as PointElement).label).toBe("RV");
+		});
+
+		it("survives a type change and back", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+			editor.changeLabel(id, "F");
+
+			editor.changeType(id, "Circle");
+			expect(labelOf(id)).toBe("F");
+			editor.changeType(id, "Player");
+			expect(labelOf(id)).toBe("F");
+		});
+
+		it("marks the situation dirty and refreshes updatedAt", () => {
+			const id = editor.addElement(0, 0, "red", "Player");
+			editor.markSaved();
+			clock.set("2026-02-02T00:00:00.000Z");
+
+			editor.changeLabel(id, "C");
+
+			expect(editor.isDirty()).toBe(true);
+			expect(editor.current().updatedAt).toBe("2026-02-02T00:00:00.000Z");
+		});
+	});
+
 	it("exports a shared singleton instance", () => {
 		expect(situationEditor).toBeInstanceOf(SituationEditor);
 	});

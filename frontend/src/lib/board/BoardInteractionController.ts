@@ -23,6 +23,7 @@ export interface ToolSource {
 }
 
 export interface PopoverControl {
+	isOpen(): boolean;
 	open(anchor: ScreenRect): void;
 	close(): void;
 }
@@ -124,6 +125,32 @@ export class BoardInteractionController {
 		this.deps.editor.moveElement(id, position.x, position.y);
 		this.deps.editor.endGesture();
 		this.log(`Moved ${id} to (${Math.round(position.x)}, ${Math.round(position.y)})`);
+	}
+
+	/**
+	 * The popover was closed by the user (its Close button or Escape): the
+	 * selection is cleared as well, like Escape on the board.
+	 */
+	dismissPopover(): void {
+		this.deps.selection.clear();
+		this.deps.popover.close();
+	}
+
+	/**
+	 * The stage geometry changed (resize, device rotation, another viewport):
+	 * an open popover stays open and moves to the selected element's new
+	 * on-screen bounds, as computed by `anchorOf`. Nothing happens while the
+	 * popover is closed or when the element can't be located.
+	 */
+	relocatePopover(anchorOf: (id: string) => ScreenRect | null): void {
+		if (!this.deps.popover.isOpen()) {
+			return;
+		}
+		const id = this.deps.selection.current();
+		const anchor = id === null ? null : anchorOf(id);
+		if (anchor) {
+			this.deps.popover.open(anchor);
+		}
 	}
 
 	/**

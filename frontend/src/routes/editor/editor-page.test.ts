@@ -8,6 +8,8 @@ import { situationEditor } from "$lib/editor/SituationEditor";
 import { installDialogPolyfill } from "$lib/testing/dialogPolyfill";
 import { installFakeCanvasContext } from "$lib/testing/fakeCanvasContext";
 import { FakeResizeObserver } from "$lib/testing/FakeResizeObserver";
+import type { Shape } from "konva/lib/Shape";
+import type { PointElement } from "$lib/model/elements/PointElement";
 import EditorPage from "./+page.svelte";
 
 /** Lets pending promise continuations and the resulting DOM updates run. */
@@ -128,6 +130,102 @@ describe("editor page", () => {
 			await fireEvent.keyDown(document.body, { key: "z", ctrlKey: true, shiftKey: true });
 
 			expect(messages().filter((m) => /undo|redo/i.test(m))).toEqual([]);
+		});
+	});
+
+	describe("element popover", () => {
+		async function openPopoverFor(id: string) {
+			render(EditorPage);
+			FakeResizeObserver.resize(screen.getByRole("region", { name: "Field" }), 1000, 500);
+			await tick();
+			const stage = Konva.stages[Konva.stages.length - 1];
+			const shape = stage.findOne(`#${id}`)!;
+			shape.fire("pointerclick", { evt: { button: 0, shiftKey: false, pointerType: "touch", preventDefault: () => {} } }, true);
+			await tick();
+			return screen.getByRole("dialog", { name: "Edit marker" });
+		}
+
+		const labelOf = (id: string) => (get(situationEditor.elements).find((e) => e.id === id) as PointElement).label;
+		const selectedStroke = (id: string) => (Konva.stages.at(-1)!.findOne(`#${id}`) as Shape).strokeWidth();
+
+		it("Close closes the popover and clears the selection", async () => {
+			const id = situationEditor.addElement(500, 250, "red", "Player");
+			await openPopoverFor(id);
+			expect(selectedStroke(id)).toBeGreaterThan(0);
+
+			await fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+			expect(screen.queryByRole("dialog", { name: "Edit marker" })).not.toBeInTheDocument();
+			expect(selectedStroke(id)).toBe(0);
+		});
+
+		it("stays open when the tool changes", async () => {
+			const id = situationEditor.addElement(500, 250, "red", "Player");
+			await openPopoverFor(id);
+
+			await fireEvent.click(within(screen.getByRole("complementary", { name: "Tools" })).getByRole("button", { name: "Ball" }));
+
+			expect(screen.getByRole("dialog", { name: "Edit marker" })).toBeInTheDocument();
+		});
+
+		it("stays open on a resize and moves with the element", async () => {
+			const id = situationEditor.addElement(500, 250, "red", "Player");
+			const dialog = await openPopoverFor(id);
+			const before = dialog.style.getPropertyValue("--anchor-x");
+
+			FakeResizeObserver.resize(screen.getByRole("region", { name: "Field" }), 400, 600);
+			await tick();
+
+			expect(screen.getByRole("dialog", { name: "Edit marker" })).toBe(dialog);
+			expect(dialog.style.getPropertyValue("--anchor-x")).not.toBe(before);
+		});
+
+		it("sets a position label on the player and draws it", async () => {
+			const id = situationEditor.addElement(500, 250, "red", "Player");
+			await openPopoverFor(id);
+
+			await fireEvent.click(screen.getByRole("radio", { name: /^C\b/ }));
+			await tick();
+
+			expect(labelOf(id)).toBe("C");
+			expect((Konva.stages.at(-1)!.findOne(".ElementLabel") as Konva.Text).text()).toBe("C");
+		});
+
+		it("a typed label is one undo step", async () => {
+			const id = situationEditor.addElement(500, 250, "red", "Player");
+			await openPopoverFor(id);
+			const input = screen.getByRole("textbox", { name: "Custom" });
+
+			input.focus();
+			await fireEvent.input(input, { target: { value: "1" } });
+			await fireEvent.input(input, { target: { value: "10" } });
+			await fireEvent.blur(input);
+			expect(labelOf(id)).toBe("10");
+
+			situationEditor.undo();
+			expect(labelOf(id)).toBe("");
+			expect(get(situationEditor.elements)).toHaveLength(1);
+		});
+
+		it.each([["Delete"], ["Backspace"]])("%s inside the label field does not delete the element", async (key) => {
+			const id = situationEditor.addElement(500, 250, "red", "Player");
+			await openPopoverFor(id);
+			const input = screen.getByRole("textbox", { name: "Custom" });
+
+			input.focus();
+			await fireEvent.keyDown(input, { key });
+
+			expect(get(situationEditor.elements).map((e) => e.id)).toEqual([id]);
+			expect(screen.getByRole("dialog", { name: "Edit marker" })).toBeInTheDocument();
+		});
+
+		it("Delete outside text fields still deletes the selected element", async () => {
+			const id = situationEditor.addElement(500, 250, "red", "Player");
+			await openPopoverFor(id);
+
+			await fireEvent.keyDown(screen.getByRole("button", { name: "Close" }), { key: "Delete" });
+
+			expect(get(situationEditor.elements)).toEqual([]);
 		});
 	});
 

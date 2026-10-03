@@ -42,12 +42,12 @@ Example shape:
 
 Situations are exported and imported as JSON files named `<slug-of-title>.situation.json` (`situation.json` if the title yields no usable characters), pretty-printed with a 2-space indent.
 
-**Format version 1:**
+**Format version 2** (current):
 
 ```json
 {
   "format": "tacticalboard.situation",
-  "formatVersion": 1,
+  "formatVersion": 2,
   "situation": {
     "id": "…",
     "title": "Powerplay vs. 2-3-1",
@@ -61,7 +61,7 @@ Situations are exported and imported as JSON files named `<slug-of-title>.situat
         "id": "…",
         "description": "Markdown source",
         "elements": [
-          { "id": "…", "type": "Player", "color": "oklch(62% 0.16 230)", "x": 1200, "y": 300 }
+          { "id": "…", "type": "Player", "color": "oklch(62% 0.16 230)", "x": 1200, "y": 300, "label": "C" }
         ]
       }
     ]
@@ -76,7 +76,15 @@ Situations are exported and imported as JSON files named `<slug-of-title>.situat
 - There is at least one frame. Frame IDs are unique within the situation; element IDs are unique within a frame, and the same element ID in different frames denotes the same element.
 - Element `type`: `Player`, `Ball`, `Rectangle`, `Triangle`, `Circle`. There are no rules on how many of each a frame may contain.
 - **Coordinates** (`x`, `y`) are always in full-field scene units of the sport (floorball: 2000 × 1000, origin top-left), also for half-field situations. A half-field situation uses the right half, `x ∈ [1000, 2000]` (see 8.6).
+- Element `label`: the **position label**, `""` (no label) or 1–2 characters, each a letter or a digit (e.g. `C`, `LV`, `10`). Stored per element **per frame**, like the color; duplicates within a frame are allowed. Every element type carries it, but only players show it: changing a player to another type hides the label, changing it back shows it again. The UI upper-cases typed letters; the importer also accepts lower case and keeps it as is.
 - Unknown extra properties are ignored on import.
+
+**Format history:**
+
+| Version | Change | Migration from the previous version |
+|---|---|---|
+| 1 | Initial situation format | – |
+| 2 | Elements get `label` | `MigrationV1ToV2`: every element gets `"label": ""` (a `label` property in a v1 file was an ignored extra property and is replaced) |
 
 **Versioning and migration policy:** every change to the file format bumps `formatVersion` and comes with a migration from the previous version, so files exported by older app versions keep importing. Import runs parse → migrate (chained, one version step at a time) → validate → map to the domain model. Files with a newer version than the app supports are rejected with a request to update the app. The validator reports all problems at once, with paths such as `situation.frames[0].elements[2].x: expected finite number`.
 
@@ -84,7 +92,7 @@ Situations are exported and imported as JSON files named `<slug-of-title>.situat
 
 **Import creates a new situation:** the imported situation gets a fresh situation ID, and `createdAt` and `updatedAt` are both set to the import time; frame and element IDs are kept. It replaces the content of the editor (after "Discard changes?" if there are unsaved changes, see 8.7). A file that fails to import changes nothing and is not followed by that question.
 
-Implementation: `frontend/src/lib/model/serialization/` (`SituationSerializer` facade, `SituationFileMigrator`, `SituationFileValidator`, `SituationMapper`).
+Implementation: `frontend/src/lib/model/serialization/` (`SituationSerializer` facade, `SituationFileMigrator` with one `Migration` per version step, e.g. `MigrationV1ToV2`, `SituationFileValidator`, `SituationMapper`); label rules and the predefined positions per sport in `frontend/src/lib/model/positions/PositionCatalog.ts`. Test fixtures for every format version live in `__fixtures__/`, so older files keep being tested.
 
 ## 8.4 Editing via commands (undo/redo)
 
@@ -94,7 +102,7 @@ Every change to the model goes **`SituationEditor` → command → the active fr
 - **One history per frame**, keyed by frame id: undo/redo always act on the active frame's history. Switching frames is not an undo step.
 - **Limit:** 200 steps per frame; the oldest steps are dropped. Histories live in memory only and do not survive a page reload.
 - **Loading/importing or creating a situation is not undoable** and clears all histories.
-- **Edit sessions:** until the history is sealed (`SituationEditor.endGesture()`, called at the end of a drag and — once text fields exist — on blur), a new command may merge into the previous one (`Command.mergeWith`). So consecutive moves of one element during a gesture, or all keystrokes of one text-field focus, become a single undo step. Undo, redo, and switching frames also seal.
+- **Edit sessions:** until the history is sealed (`SituationEditor.endGesture()`, called at the end of a drag, when a text field loses focus or Enter is pressed in it, and when the popover closes), a new command may merge into the previous one (`Command.mergeWith`). So consecutive moves of one element during a gesture, or all keystrokes of one text-field focus (e.g. the free-text position label), become a single undo step. Picking a position chip is one step of its own. Undo, redo, and switching frames also seal.
 - **Not undoable:** selection and tool changes. After undo, nothing is selected automatically.
 - **Feedback:** undo/redo is shown only via the enabled state of the Undo/Redo buttons; what was undone/redone is logged to the debug notification log, not shown as user-facing UI. Undo/redo with nothing to undo/redo (e.g. via the keyboard shortcut) does nothing and logs nothing.
 - **Shortcuts:** Ctrl/Cmd+Z undo; Ctrl/Cmd+Shift+Z and Ctrl+Y redo. Ignored while typing in text fields, during IME composition, with Alt held, and while an element is being dragged.
@@ -109,15 +117,20 @@ The board editor is fully usable by touch on phones (portrait and landscape) and
 
 | Gesture | Effect |
 |---|---|
-| Tap/click on an element | Selects it **and** opens the edit popover (type, player color, Delete). Same with any tool active: a tap on an element never places a new element on top of it. |
+| Tap/click on an element | Selects it **and** opens the edit popover (type; for players also color and position label; Delete). Same with any tool active: a tap on an element never places a new element on top of it. |
 | Tap/click on the empty field, placement tool active | Places an element there (Player in the selected player color, everything else neutral). The tool stays active; the new element is **not** selected. Clears the selection. |
 | Tap/click on the empty field, Move tool | Clears the selection and closes the popover. |
 | Drag an element | Moves it; one drag = one undo step. The popover closes while dragging, the selection stays. Elements can't be dragged out of the visible area (the field, or the visible half — see 8.6). |
 | Right-click / long-press on an element | Same as a tap. |
 | Delete button in the popover | Deletes the element. |
-| Desktop only: Shift+click, Delete/Backspace, Escape | Shift+click deletes the clicked element; Delete/Backspace deletes the selected element; Escape clears the selection and closes the popover. Ignored while typing in a text field. |
+| Close button in the popover | Closes the popover **and** clears the selection (like Escape). |
+| Desktop only: Shift+click, Delete/Backspace, Escape | Shift+click deletes the clicked element; Delete/Backspace deletes the selected element; Escape clears the selection and closes the popover. Ignored while typing in a text field (e.g. the position label field), so Delete/Backspace there edits the text and never deletes the element. |
 
 A press only turns into a drag after the pointer has moved 6 CSS px (Konva `dragDistance`), so finger jitter doesn't move elements. Taps use Konva's `pointerclick`, which fires for mouse, touch, and pen alike and not after a drag.
+
+**Popover lifetime:** the popover stays open when the tool changes and when the device is rotated or the window resized. Whenever the stage geometry changes (refit, window resize), `BoardCanvas` asks `BoardInteractionController.relocatePopover` to re-anchor it at the selected element's new on-screen position, so it never floats at a stale place. It closes on a tap on the empty field, Escape, Close, undo/redo, the start of a drag, and deleting the element.
+
+**Position labels on the board:** a player's label is drawn centered on it in black or white, whichever contrasts more with the fill (`LabelContrast`, WCAG luminance; oklch, hex and rgb fills understood, others fall back to black). The text node does not listen to pointer events, so taps and drags hit the player beneath; it follows the player while dragged and is counter-rotated against the stage, so it stays upright on the rotated half field.
 
 **Hit-area rule:** elements are drawn in scene units and scale with the field, so they look the same (proportional) on every device. Their invisible hit area is a solid circle of radius `max(visual radius, 22 CSS px / scale)`, i.e. at least 44 CSS px across on screen. Where hit areas of nearby elements overlap, the topmost element wins; a tap inside an element's enlarged hit area selects it rather than placing a new element.
 

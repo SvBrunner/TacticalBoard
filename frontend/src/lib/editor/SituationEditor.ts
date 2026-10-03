@@ -1,6 +1,7 @@
 import { derived, get, writable, type Readable, type Writable } from "svelte/store";
 import { AddElementCommand } from "$lib/commands/AddElementCommand";
 import { ChangeElementColorCommand } from "$lib/commands/ChangeElementColorCommand";
+import { ChangeElementLabelCommand } from "$lib/commands/ChangeElementLabelCommand";
 import { ChangeElementTypeCommand } from "$lib/commands/ChangeElementTypeCommand";
 import type { FrameCommand } from "$lib/commands/FrameCommand";
 import { MoveElementCommand } from "$lib/commands/MoveElementCommand";
@@ -177,6 +178,18 @@ export class SituationEditor {
 		const element = this.findPointElement(id);
 		if (element) {
 			this.execute(ChangeElementTypeCommand.of(element, type));
+		}
+	}
+
+	/**
+	 * Changes a point element's position label ("" removes it). Consecutive
+	 * label changes of the same element merge into one undo step until
+	 * `endGesture()` is called (e.g. on blur of the text field).
+	 */
+	changeLabel(id: string, label: string): void {
+		const element = this.findPointElement(id);
+		if (element) {
+			this.execute(ChangeElementLabelCommand.of(element, label));
 		}
 	}
 

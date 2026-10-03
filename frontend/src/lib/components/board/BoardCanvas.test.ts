@@ -18,7 +18,9 @@ import { PointElement } from "$lib/model/elements/PointElement";
 import type { BoardElement } from "$lib/model/elements/BoardElement";
 import { FakeResizeObserver } from "$lib/testing/FakeResizeObserver";
 import { installFakeCanvasContext } from "$lib/testing/fakeCanvasContext";
-import { ELEMENT_NODE_NAME } from "./Shapes";
+import type { Text as KonvaText } from "konva/lib/shapes/Text";
+import type { ScreenRect } from "$lib/board/BoardViewport";
+import { ELEMENT_NODE_NAME, LABEL_NODE_NAME, LABEL_STYLE } from "./Shapes";
 
 const player = new PointElement("p1", 500, 250, "red", "Player");
 const ball = new PointElement("b1", 1000, 500, "grey", "Ball");
@@ -31,6 +33,7 @@ function fakeController() {
 		dragStart: vi.fn(),
 		dragMove: vi.fn((point: { x: number; y: number }) => point),
 		dragEnd: vi.fn(),
+		relocatePopover: vi.fn(),
 	};
 }
 
@@ -59,6 +62,10 @@ function stage(): Konva.Stage {
 
 function elementShapes(): Shape[] {
 	return stage().find(`.${ELEMENT_NODE_NAME}`) as Shape[];
+}
+
+function labelNodes(): KonvaText[] {
+	return stage().find(`.${LABEL_NODE_NAME}`) as KonvaText[];
 }
 
 function pointerEvent(overrides: Record<string, unknown> = {}) {
@@ -173,6 +180,190 @@ describe("BoardCanvas", () => {
 		const elementLayer = layers[layers.length - 1];
 		expect(layers.slice(0, -1).every((layer) => !layer.listening())).toBe(true);
 		expect(elementLayer.listening()).toBe(true);
+	});
+
+	describe("position labels", () => {
+		const labeled = new PointElement("p2", 800, 400, "oklch(62% 0.16 230)", "Player", "LV");
+		const darkLabeled = new PointElement("p3", 900, 400, "oklch(30% 0.05 260)", "Player", "10");
+		const hiddenLabel = new PointElement("c1", 600, 600, "grey", "Circle", "C");
+
+		it("draws a text only for players with a label", async () => {
+			renderCanvas({ elements: [player, labeled, hiddenLabel, darkLabeled] });
+			await resizeField(1000, 500);
+
+			expect(labelNodes().map((node) => node.text())).toEqual(["LV", "10"]);
+		});
+
+		it("centers the text on the element", async () => {
+			renderCanvas({ elements: [labeled] });
+			await resizeField(1000, 500);
+
+			const [text] = labelNodes();
+			expect(text.position()).toEqual({ x: 800, y: 400 });
+			expect(text.width()).toBe(LABEL_STYLE.box);
+			expect(text.height()).toBe(LABEL_STYLE.box);
+			expect(text.offsetX()).toBe(LABEL_STYLE.box / 2);
+			expect(text.offsetY()).toBe(LABEL_STYLE.box / 2);
+			expect(text.align()).toBe("center");
+			expect(text.verticalAlign()).toBe("middle");
+			expect(text.fontStyle()).toBe("bold");
+			expect(text.fontSize()).toBe(LABEL_STYLE.fontSize);
+		});
+
+		it("uses a contrasting text color for the fill", async () => {
+			renderCanvas({ elements: [labeled, darkLabeled] });
+			await resizeField(1000, 500);
+
+			expect(labelNodes().map((node) => node.fill())).toEqual(["black", "white"]);
+		});
+
+		it("does not intercept pointer events: taps and drags go to the element", async () => {
+			renderCanvas({ elements: [labeled] });
+			await resizeField(1000, 500);
+
+			const [text] = labelNodes();
+			expect(text.listening()).toBe(false);
+			expect(text.isListening()).toBe(false);
+			expect(text.draggable()).toBe(false);
+			expect(elementShapes()[0].listening()).toBe(true);
+		});
+
+		it("is drawn above its own element (right after it in the layer)", async () => {
+			renderCanvas({ elements: [labeled, player] });
+			await resizeField(1000, 500);
+
+			const [text] = labelNodes();
+			const [shape] = elementShapes();
+			expect(text.zIndex()).toBe(shape.zIndex() + 1);
+		});
+
+		it("stays upright on the full field", async () => {
+			renderCanvas({ elements: [labeled] });
+			await resizeField(1000, 500);
+
+			expect(labelNodes()[0].rotation()).toBe(0);
+			expect(labelNodes()[0].getAbsoluteRotation()).toBeCloseTo(0);
+		});
+
+		it("stays upright on the rotated half field", async () => {
+			renderCanvas({ elements: [labeled.withPosition(1500, 400)], viewport: new BoardViewport(FieldDimensions.FLOORBALL, "half") });
+			await resizeField(1000, 500);
+
+			const [text] = labelNodes();
+			expect(stage().rotation()).toBe(90);
+			expect(text.rotation()).toBe(-90);
+			expect(text.getAbsoluteRotation()).toBeCloseTo(0);
+		});
+
+		it("follows the element while it is dragged and settles on the model position after the drop", async () => {
+			const { rerender } = renderCanvas({ elements: [labeled] });
+			await resizeField(1000, 500);
+			const [shape] = elementShapes();
+
+			shape.fire("dragstart", {});
+			shape.position({ x: 1200, y: 300 });
+			shape.fire("dragmove", {});
+			await tick();
+			expect(labelNodes()[0].position()).toEqual({ x: 1200, y: 300 });
+
+			shape.fire("dragend", {});
+			await rerender({ elements: [labeled.withPosition(1200, 300)] });
+			expect(labelNodes()[0].position()).toEqual({ x: 1200, y: 300 });
+		});
+
+		it("appears, changes and disappears with the label and the type", async () => {
+			const { rerender } = renderCanvas({ elements: [player] });
+			await resizeField(1000, 500);
+			expect(labelNodes()).toHaveLength(0);
+
+			await rerender({ elements: [player.withLabel("C")] });
+			expect(labelNodes().map((node) => node.text())).toEqual(["C"]);
+
+			await rerender({ elements: [player.withLabel("C").withType("Triangle")] });
+			expect(labelNodes()).toHaveLength(0);
+
+			await rerender({ elements: [player.withLabel("C").withType("Triangle").withType("Player")] });
+			expect(labelNodes().map((node) => node.text())).toEqual(["C"]);
+		});
+	});
+
+	describe("popover anchor on geometry changes", () => {
+		function lastLocator(controller: ReturnType<typeof fakeController>): (id: string) => ScreenRect | null {
+			return controller.relocatePopover.mock.calls.at(-1)![0];
+		}
+
+		it("asks the controller to re-anchor when the stage is first fitted and on every refit", async () => {
+			const { controller } = renderCanvas();
+			expect(controller.relocatePopover).not.toHaveBeenCalled();
+
+			await resizeField(1000, 500);
+			expect(controller.relocatePopover).toHaveBeenCalledTimes(1);
+
+			await resizeField(400, 600);
+			expect(controller.relocatePopover).toHaveBeenCalledTimes(2);
+		});
+
+		it("locates elements at their on-screen position for the new fit", async () => {
+			const { controller } = renderCanvas();
+			await resizeField(1000, 500); // scale 0.5
+			expect(lastLocator(controller)("p1")).toEqual({ x: 250 - 10, y: 125 - 10, width: 20, height: 20 });
+
+			await resizeField(400, 600); // scale 0.2
+			expect(lastLocator(controller)("p1")).toEqual({ x: 100 - 4, y: 50 - 4, width: 8, height: 8 });
+			expect(lastLocator(controller)("missing")).toBeNull();
+		});
+
+		it("locates on the rotated half field", async () => {
+			const { controller } = renderCanvas({
+				viewport: new BoardViewport(FieldDimensions.FLOORBALL, "half"),
+				elements: [new PointElement("f1", 1800, 500, "red", "Player")],
+			});
+			await resizeField(1000, 500);
+
+			expect(lastLocator(controller)("f1")).toEqual({ x: 240, y: 390, width: 20, height: 20 });
+		});
+
+		it("re-anchors on window resizes too (the stage can move without changing size)", async () => {
+			const { controller } = renderCanvas();
+			await resizeField(1000, 500);
+			controller.relocatePopover.mockClear();
+
+			window.dispatchEvent(new Event("resize"));
+			await tick();
+
+			expect(controller.relocatePopover).toHaveBeenCalledOnce();
+		});
+
+		it("moves an open popover with its element and leaves a closed one closed (integration)", async () => {
+			const editor = new SituationEditor(new SequentialIdGenerator(), new FixedClock());
+			const id = editor.addElement(500, 250, "red", "Player");
+			const selection = new Selection(editor.elements);
+			const popover = new PopoverState();
+			const controller = new BoardInteractionController({
+				editor,
+				selection,
+				tools: new ToolState(),
+				popover,
+				bounds: new BoardViewport(),
+				neutralColor: "grey",
+			});
+			const { rerender } = render(BoardCanvas, {
+				props: { elements: get(editor.elements), selectedId: null, controller, viewport: new BoardViewport() },
+			});
+			await resizeField(1000, 500);
+			elementShapes()[0].fire("pointerclick", { evt: pointerEvent() }, true);
+			await rerender({ selectedId: id });
+			expect(get(popover.anchor)).toEqual({ x: 240, y: 115, width: 20, height: 20 });
+
+			await resizeField(400, 600);
+			expect(popover.isOpen()).toBe(true);
+			expect(get(popover.anchor)).toEqual({ x: 96, y: 46, width: 8, height: 8 });
+
+			popover.close();
+			await resizeField(1000, 500);
+			expect(popover.isOpen()).toBe(false);
+			selection.destroy();
+		});
 	});
 
 	describe("gestures", () => {

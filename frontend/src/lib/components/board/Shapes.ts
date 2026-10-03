@@ -3,6 +3,19 @@ import type { ElementType } from "$lib/model/elements/ElementType";
 /** Konva node name identifying board elements (as opposed to the field) in hit tests. */
 export const ELEMENT_NODE_NAME = "Component";
 
+/** Konva node name of the label text drawn on an element. */
+export const LABEL_NODE_NAME = "ElementLabel";
+
+/**
+ * Label text on a player (scene units): a box centered on the element, as
+ * wide as the player circle, with a bold font sized so two characters fit.
+ */
+export const LABEL_STYLE = {
+	box: 40,
+	fontSize: 20,
+	fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
+} as const;
+
 /** Draws a shape centered on its origin (scene units). */
 export type DrawFunction = (context: any, shape: any) => void;
 

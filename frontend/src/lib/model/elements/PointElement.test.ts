@@ -47,3 +47,37 @@ describe("PointElement", () => {
 		expect(original.type).toBe("Player");
 	});
 });
+
+describe("PointElement label", () => {
+	it("defaults to no label, also for newly created elements", () => {
+		expect(new PointElement("e", 0, 0, "red", "Player").label).toBe("");
+		expect(PointElement.create(new SequentialIdGenerator(), 0, 0, "red", "Player").label).toBe("");
+	});
+
+	it("withLabel returns a relabeled copy with everything else kept and leaves the original unchanged", () => {
+		const original = new PointElement("e", 1, 2, "red", "Player");
+
+		const labeled = original.withLabel("C");
+
+		expect(labeled).not.toBe(original);
+		expect(labeled).toMatchObject({ id: "e", x: 1, y: 2, color: "red", type: "Player", label: "C" });
+		expect(original.label).toBe("");
+	});
+
+	it("withPosition, withColor and withType keep the label", () => {
+		const labeled = new PointElement("e", 1, 2, "red", "Player", "LV");
+
+		expect(labeled.withPosition(5, 6).label).toBe("LV");
+		expect(labeled.withColor("blue").label).toBe("LV");
+		expect(labeled.withType("Circle").label).toBe("LV");
+	});
+
+	it("only a labelled player shows its label; another type hides it and changing back shows it again", () => {
+		const player = new PointElement("e", 0, 0, "red", "Player", "G");
+
+		expect(player.showsLabel).toBe(true);
+		expect(player.withType("Ball").showsLabel).toBe(false);
+		expect(player.withType("Ball").withType("Player").showsLabel).toBe(true);
+		expect(player.withLabel("").showsLabel).toBe(false);
+	});
+});

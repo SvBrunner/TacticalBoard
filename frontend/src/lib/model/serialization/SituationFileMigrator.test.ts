@@ -6,15 +6,38 @@ import {
 	UnrecognizedFileError,
 	UnsupportedFormatVersionError,
 } from "./SituationImportErrors";
-import fixture from "./__fixtures__/situation-v1.json";
+import { MigrationV1ToV2 } from "./MigrationV1ToV2";
+import { SituationFileValidator } from "./SituationFileValidator";
+import fixtureV1 from "./__fixtures__/situation-v1.json";
+import fixture from "./__fixtures__/situation-v2.json";
 
 function file(formatVersion: unknown, extra: Record<string, unknown> = {}) {
 	return { format: "tacticalboard.situation", formatVersion, ...extra };
 }
 
 describe("SituationFileMigrator", () => {
-	it("has no migrations registered yet", () => {
-		expect(SITUATION_FILE_MIGRATIONS).toEqual([]);
+	it("registers the v1 → v2 migration", () => {
+		expect(SITUATION_FILE_MIGRATIONS).toHaveLength(1);
+		expect(SITUATION_FILE_MIGRATIONS[0]).toBeInstanceOf(MigrationV1ToV2);
+	});
+
+	it("upgrades a v1 file to v2: every element gets an empty label", () => {
+		const migrated = new SituationFileMigrator().migrate(fixtureV1);
+
+		expect(migrated.formatVersion).toBe(2);
+		const frames = (migrated.situation as { frames: { elements: { label: unknown }[] }[] }).frames;
+		expect(frames.flatMap((frame) => frame.elements.map((element) => element.label))).toEqual(
+			Array(7).fill(""),
+		);
+		expect(new SituationFileValidator().validate(migrated)).toEqual([]);
+	});
+
+	it("leaves the v1 input untouched", () => {
+		const copy = structuredClone(fixtureV1);
+
+		new SituationFileMigrator().migrate(fixtureV1);
+
+		expect(fixtureV1).toEqual(copy);
 	});
 
 	it("passes a current-version file through unchanged", () => {
@@ -22,10 +45,10 @@ describe("SituationFileMigrator", () => {
 	});
 
 	it("rejects a newer format version", () => {
-		const migrate = () => new SituationFileMigrator().migrate(file(2));
+		const migrate = () => new SituationFileMigrator().migrate(file(3));
 
 		expect(migrate).toThrow(UnsupportedFormatVersionError);
-		expect(migrate).toThrow(/version 2/);
+		expect(migrate).toThrow(/version 3/);
 	});
 
 	it.each([[undefined], [0], [-1], [1.5], ["1"], [null]])("rejects a missing or invalid version %j", (version) => {

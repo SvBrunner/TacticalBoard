@@ -1,16 +1,19 @@
 <!--
 @component
-Edit popover for one board element: change its type, its color (players
-only), or delete it. A non-modal dialog anchored next to the element on
+Edit popover for one board element: change its type, its color and
+position label (players only), or delete it. A non-modal dialog anchored next to the element on
 larger screens; a bottom sheet on phones (pure CSS, see the media query).
 -->
 <script lang="ts">
 	import type { ScreenRect } from "$lib/board/BoardViewport";
 	import type { BoardElement } from "$lib/model/elements/BoardElement";
+	import { PointElement } from "$lib/model/elements/PointElement";
+	import { PositionCatalog } from "$lib/model/positions/PositionCatalog";
 	import { elementCatalog, type ElementKind } from "../ElementCatalog";
 	import ElementIcon from "../ElementIcon.svelte";
 	import type { ElementEditActions } from "./ElementEditActions";
 	import { PopoverPlacement } from "./PopoverPlacement";
+	import PositionPicker from "./PositionPicker.svelte";
 
 	interface Props {
 		/** The element being edited; `null` hides the popover. */
@@ -20,9 +23,18 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 		actions: ElementEditActions;
 		onClose: () => void;
 		placement?: PopoverPlacement;
+		/** Predefined position labels offered for players (the situation's sport). */
+		positions?: PositionCatalog;
 	}
 
-	let { element, anchor, actions, onClose, placement = new PopoverPlacement() }: Props = $props();
+	let {
+		element,
+		anchor,
+		actions,
+		onClose,
+		placement = new PopoverPlacement(),
+		positions = PositionCatalog.forSport("floorball"),
+	}: Props = $props();
 
 	const headingId = "element-edit-popover-heading";
 
@@ -143,6 +155,10 @@ larger screens; a bottom sheet on phones (pure CSS, see the media query).
 					{/each}
 				</ul>
 			</fieldset>
+
+			{#if element instanceof PointElement}
+				<PositionPicker {element} {positions} {actions} />
+			{/if}
 		{/if}
 
 		<button type="button" class="delete-btn" onclick={remove}>

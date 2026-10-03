@@ -165,6 +165,18 @@ describe("Frame", () => {
 			expect(copy.elements.map((element) => element.id)).toEqual(["p1", "b1"]);
 		});
 
+		it("keeps the elements' labels, and relabeling the copy leaves the original's labels unchanged", () => {
+			const labeled = new PointElement("p1", 0, 0, "red", "Player", "C");
+			const frame = new Frame("f", "", [labeled, ball]);
+
+			const copy = frame.copy(new SequentialIdGenerator());
+			expect((copy.findElement("p1") as PointElement).label).toBe("C");
+
+			const relabeled = copy.updateElement("p1", (element) => (element as PointElement).withLabel("F"));
+			expect((relabeled.findElement("p1") as PointElement).label).toBe("F");
+			expect((frame.findElement("p1") as PointElement).label).toBe("C");
+		});
+
 		it("is independent of the original", () => {
 			const frame = new Frame("f", "d", [player]);
 			const copy = frame.copy(new SequentialIdGenerator());

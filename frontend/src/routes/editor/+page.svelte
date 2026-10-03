@@ -14,6 +14,7 @@
 	import { PopoverState } from "$lib/board/PopoverState";
 	import { Selection } from "$lib/board/Selection";
 	import { ToolState, type Tool } from "$lib/board/ToolState";
+	import { PositionCatalog } from "$lib/model/positions/PositionCatalog";
 	import { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
 	import { situationEditor } from "$lib/editor/SituationEditor";
 	import { SituationFileTransfer } from "$lib/editor/SituationFileTransfer";
@@ -29,6 +30,7 @@
 	const sport = $derived($situation.sport);
 	const fieldType = $derived($situation.fieldType);
 	const viewport = $derived(BoardViewport.forSituation({ sport, fieldType }));
+	const positions = $derived(PositionCatalog.forSport(sport));
 
 	const tools = new ToolState();
 	const activeTool = tools.activeTool;
@@ -144,7 +146,8 @@
 		element={$popoverAnchor ? $selected : null}
 		anchor={$popoverAnchor}
 		actions={situationEditor}
-		onClose={() => popover.close()}
+		{positions}
+		onClose={() => controller.dismissPopover()}
 	/>
 </div>
 

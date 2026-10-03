@@ -5,6 +5,7 @@ import { PointElement } from "$lib/model/elements/PointElement";
 import type { BoardElement } from "$lib/model/elements/BoardElement";
 import type { ScreenRect } from "$lib/board/BoardViewport";
 import { PopoverPlacement } from "./PopoverPlacement";
+import { PositionCatalog } from "$lib/model/positions/PositionCatalog";
 
 const TEAM_A = "oklch(62% 0.16 230)";
 const TEAM_B = "oklch(64% 0.16 32)";
@@ -13,7 +14,13 @@ const circle = new PointElement("el-2", 10, 20, "grey", "Circle");
 const anchor: ScreenRect = { x: 100, y: 50, width: 40, height: 40 };
 
 function fakeActions() {
-	return { changeType: vi.fn(), changeColor: vi.fn(), removeElement: vi.fn() };
+	return {
+		changeType: vi.fn(),
+		changeColor: vi.fn(),
+		changeLabel: vi.fn(),
+		removeElement: vi.fn(),
+		endGesture: vi.fn(),
+	};
 }
 
 function props(overrides: Record<string, unknown> = {}) {
@@ -143,6 +150,46 @@ describe("ElementEditPopover", () => {
 			await fireEvent.click(screen.getByRole("button", { name: "Team B" }));
 
 			expect(actions.changeColor).toHaveBeenCalledWith("el-1", TEAM_B);
+		});
+	});
+
+	describe("Position", () => {
+		it("is shown for a Player", () => {
+			render(ElementEditPopover, { props: props() });
+
+			expect(screen.getByRole("group", { name: "Position" })).toBeInTheDocument();
+		});
+
+		it.each([["Ball"], ["Circle"], ["Rectangle"], ["Triangle"]] as const)("is not shown for a %s", (type) => {
+			render(ElementEditPopover, { props: props({ element: player.withLabel("C").withType(type) }) });
+
+			expect(screen.queryByRole("group", { name: "Position" })).not.toBeInTheDocument();
+			expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+		});
+
+		it("appears again with the kept label when the element changes back to a Player", async () => {
+			const labeled = player.withLabel("LV");
+			const { rerender } = render(ElementEditPopover, { props: props({ element: labeled.withType("Circle") }) });
+
+			await rerender(props({ element: labeled.withType("Circle").withType("Player") }));
+
+			expect(screen.getByRole("radio", { name: /^LV\b/ })).toBeChecked();
+			expect(screen.getByRole("textbox", { name: "Custom" })).toHaveValue("LV");
+		});
+
+		it("picking a position changes the label through the actions", async () => {
+			const actions = fakeActions();
+			render(ElementEditPopover, { props: props({ actions }) });
+
+			await fireEvent.click(screen.getByRole("radio", { name: /^G\b/ }));
+
+			expect(actions.changeLabel).toHaveBeenCalledWith("el-1", "G");
+		});
+
+		it("offers the positions of the given catalog", () => {
+			render(ElementEditPopover, { props: props({ positions: PositionCatalog.forSport("floorball") }) });
+
+			expect(within(screen.getByRole("group", { name: "Position" })).getAllByRole("radio")).toHaveLength(9);
 		});
 	});
 

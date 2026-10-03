@@ -46,6 +46,9 @@ class FakeTools implements ToolSource {
 
 class FakePopover implements PopoverControl {
 	anchor: ScreenRect | null = null;
+	isOpen() {
+		return this.anchor !== null;
+	}
 	open(anchor: ScreenRect) {
 		this.anchor = anchor;
 	}
@@ -310,6 +313,67 @@ describe("BoardInteractionController", () => {
 			expect(controller.keyDown(key("a"))).toBe(false);
 
 			expect(selection.id).toBe("el-1");
+		});
+	});
+
+	describe("dismissPopover (the popover's Close button / Escape)", () => {
+		it("closes the popover and clears the selection", () => {
+			controller.tapElement("el-1", anchor);
+
+			controller.dismissPopover();
+
+			expect(popover.anchor).toBeNull();
+			expect(selection.id).toBeNull();
+		});
+
+		it("edits nothing", () => {
+			controller.tapElement("el-1", anchor);
+
+			controller.dismissPopover();
+
+			expect(editor.removeElement).not.toHaveBeenCalled();
+			expect(editor.addElement).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("relocatePopover (stage geometry changed)", () => {
+		const moved: ScreenRect = { x: 300, y: 400, width: 30, height: 30 };
+
+		it("keeps an open popover open and re-anchors it at the selected element", () => {
+			controller.tapElement("el-1", anchor);
+			const anchorOf = vi.fn((_id: string): ScreenRect | null => moved);
+
+			controller.relocatePopover(anchorOf);
+
+			expect(anchorOf).toHaveBeenCalledWith("el-1");
+			expect(popover.anchor).toEqual(moved);
+			expect(selection.id).toBe("el-1");
+		});
+
+		it("does not open a closed popover", () => {
+			selection.select("el-1");
+			const anchorOf = vi.fn((_id: string): ScreenRect | null => moved);
+
+			controller.relocatePopover(anchorOf);
+
+			expect(popover.anchor).toBeNull();
+			expect(anchorOf).not.toHaveBeenCalled();
+		});
+
+		it("keeps the old anchor when the element can't be located", () => {
+			controller.tapElement("el-1", anchor);
+
+			controller.relocatePopover(() => null);
+
+			expect(popover.anchor).toEqual(anchor);
+		});
+
+		it("keeps the old anchor without a selection", () => {
+			popover.open(anchor);
+
+			controller.relocatePopover(() => moved);
+
+			expect(popover.anchor).toEqual(anchor);
 		});
 	});
 

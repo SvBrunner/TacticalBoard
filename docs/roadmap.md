@@ -24,7 +24,7 @@ Next, in this order:
 3. [x] **Touch baseline**: place, move, select, and color popover by touch; responsive layout for phones and tablets.
    *Settles the interaction pattern before arrows. From here on, touch usability is a requirement for every step.*
 4. [x] **Create a new situation** with title and full/half field; **half field** rendering.
-5. [ ] **Position labels** on players (C, F, V, G, …).
+5. [x] **Position labels** on players (C, F, V, G, …).
 6. [ ] **Frames UI**: add frame (copy of the previous one), switch, delete; description per frame.
 7. [ ] **Pass/run/shot arrows**: straight, bendable via a control point.
 8. [ ] **Slideshow playback** of frames in the editor.
