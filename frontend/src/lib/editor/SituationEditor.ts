@@ -3,6 +3,7 @@ import { AddElementCommand } from "$lib/commands/AddElementCommand";
 import { ChangeElementColorCommand } from "$lib/commands/ChangeElementColorCommand";
 import { ChangeElementLabelCommand } from "$lib/commands/ChangeElementLabelCommand";
 import { ChangeElementTypeCommand } from "$lib/commands/ChangeElementTypeCommand";
+import { ChangeFrameDescriptionCommand } from "$lib/commands/ChangeFrameDescriptionCommand";
 import type { FrameCommand } from "$lib/commands/FrameCommand";
 import { MoveElementCommand } from "$lib/commands/MoveElementCommand";
 import { RemoveElementCommand } from "$lib/commands/RemoveElementCommand";
@@ -38,10 +39,19 @@ export interface NewSituationInput {
 
 /**
  * Application service holding the situation being edited and the active
- * frame. It is the UI's only entry point for changing the model: every edit
- * becomes a command executed through the active frame's undo/redo history
- * (one independent history per frame). Loading or creating a situation is
- * not undoable and clears all histories.
+ * frame. It is the UI's only entry point for changing the model. There are
+ * two mutation paths:
+ *
+ * - Frame content (elements, the frame description) changes through
+ *   commands executed in the active frame's undo/redo history (one
+ *   independent history per frame).
+ * - Situation-level changes (adding, deleting and reordering frames; the
+ *   situation's title and description) are applied directly and are NOT
+ *   undoable; they don't touch the frames' histories, except that a
+ *   deleted frame's history is dropped and a new frame starts with an
+ *   empty one.
+ *
+ * Loading or creating a situation is not undoable and clears all histories.
  *
  * Unsaved changes: any edit (undo/redo included) marks the situation dirty
  * until it is marked saved (in the MVP: exported) or replaced. It is a plain
@@ -132,6 +142,11 @@ export class SituationEditor {
 		return situation;
 	}
 
+	/** The active frame right now. */
+	currentFrame(): Frame {
+		return this.activeFrameNow();
+	}
+
 	/** Makes another frame the active one. Not an undo step; ends the current edit session. */
 	selectFrame(frameId: string): void {
 		const state = get(this.state);
@@ -140,6 +155,71 @@ export class SituationEditor {
 		}
 		this.activeHistory().seal();
 		this.state.set({ ...state, activeFrameId: frameId });
+	}
+
+	/**
+	 * Adds a copy of the active frame (same elements with the same ids, same
+	 * description) right after it and makes the copy active; returns its id.
+	 * The copy starts with an empty history; the source frame's edit session
+	 * ends. Not undoable.
+	 */
+	addFrame(): string {
+		this.activeHistory().seal();
+		const state = get(this.state);
+		const source = SituationEditor.activeFrameOf(state);
+		const copy = source.copy(this.ids);
+		const index = state.situation.indexOfFrame(source.id) + 1;
+		this.updateSituation((situation) => situation.insertFrame(copy, index), copy.id);
+		return copy.id;
+	}
+
+	/**
+	 * Deletes a frame and its history. The last remaining frame can't be
+	 * deleted (returns false). If the active frame is deleted, the previous
+	 * frame becomes active (the next one if it was the first); otherwise the
+	 * active frame stays. Not undoable. Throws for an unknown frame id.
+	 */
+	deleteFrame(frameId: string): boolean {
+		const state = get(this.state);
+		const index = this.requireFrameIndex(state.situation, frameId);
+		if (state.situation.frames.length === 1) {
+			return false;
+		}
+		this.activeHistory().seal();
+		const active = SituationEditor.activeFrameOf(state).id;
+		const neighbour = state.situation.frames[index === 0 ? 1 : index - 1].id;
+		this.histories.remove(frameId);
+		this.updateSituation((situation) => situation.removeFrame(frameId), active === frameId ? neighbour : active);
+		return true;
+	}
+
+	/**
+	 * Moves a frame to another position (`toIndex` is its index afterwards,
+	 * clamped). The active frame stays the same frame. Not undoable. Throws
+	 * for an unknown frame id.
+	 */
+	moveFrame(frameId: string, toIndex: number): void {
+		this.requireFrameIndex(get(this.state).situation, frameId);
+		this.updateSituation((situation) => situation.moveFrame(frameId, toIndex));
+	}
+
+	/** Changes the situation's title (stored as typed, also blank). Not undoable. */
+	changeTitle(title: string): void {
+		this.updateSituation((situation) => situation.withTitle(title));
+	}
+
+	/** Changes the situation's description (Markdown source). Not undoable. */
+	changeDescription(description: string): void {
+		this.updateSituation((situation) => situation.withDescription(description));
+	}
+
+	/**
+	 * Changes the active frame's description (Markdown source). Undoable in
+	 * the frame's history: consecutive changes merge into one undo step until
+	 * `endGesture()` is called (e.g. on blur of the text field).
+	 */
+	changeFrameDescription(description: string): void {
+		this.execute(ChangeFrameDescriptionCommand.of(this.activeFrameNow(), description));
 	}
 
 	/** Adds a point element to the active frame and returns its id. */
@@ -226,6 +306,34 @@ export class SituationEditor {
 			return;
 		}
 		this.state.set({ ...state, situation: changed.withUpdatedAt(this.clock.now().toISOString()), dirty: true });
+	}
+
+	/**
+	 * The mutation seam for situation-level changes, which bypass the
+	 * histories: refreshes `updatedAt` and marks the situation dirty if
+	 * anything changed, and makes `activeFrameId` (default: the current
+	 * active frame) the active frame.
+	 */
+	private updateSituation(update: (situation: Situation) => Situation, activeFrameId?: string): void {
+		const state = get(this.state);
+		const changed = update(state.situation);
+		if (changed === state.situation) {
+			return;
+		}
+		const nextActive = activeFrameId ?? state.activeFrameId;
+		this.state.set({
+			situation: changed.withUpdatedAt(this.clock.now().toISOString()),
+			activeFrameId: changed.findFrame(nextActive) ? nextActive : changed.frames[0].id,
+			dirty: true,
+		});
+	}
+
+	private requireFrameIndex(situation: Situation, frameId: string): number {
+		const index = situation.indexOfFrame(frameId);
+		if (index === -1) {
+			throw new Error(`Situation ${situation.id} has no frame with id ${frameId}`);
+		}
+		return index;
 	}
 
 	private activeHistory(): CommandHistory<Frame> {

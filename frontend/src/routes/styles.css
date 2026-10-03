@@ -187,3 +187,39 @@ button {
 	color: var(--text);
 	box-shadow: inset 0 0 0 1px var(--border);
 }
+
+/* Labelled text fields in panels (SituationDetails, FrameDescriptionEditor). */
+.text-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.text-label {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.text-input {
+	width: 100%;
+	min-height: var(--touch-target);
+	padding: 10px 12px;
+	font: inherit;
+	/* 16px keeps iOS Safari from zooming in on focus. */
+	font-size: 16px;
+	color: var(--text);
+	background: var(--bg-app);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+}
+
+textarea.text-input {
+	resize: vertical;
+	line-height: 1.4;
+}
+
+.text-input:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}

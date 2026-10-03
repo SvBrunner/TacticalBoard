@@ -47,4 +47,25 @@ describe("FrameHistories", () => {
 		expect(histories.for("f1")).not.toBe(old);
 		expect(histories.for("f1").canUndo).toBe(false);
 	});
+
+	it("remove forgets and empties one frame's history only", () => {
+		const histories = new FrameHistories();
+		const removed = histories.for("f1");
+		removed.execute(add, new Frame("f1", "", []));
+		histories.for("f2").execute(add, new Frame("f2", "", []));
+
+		histories.remove("f1");
+
+		expect(histories.has("f1")).toBe(false);
+		expect(get(removed.status).canUndo).toBe(false);
+		expect(histories.has("f2")).toBe(true);
+		expect(histories.for("f2").canUndo).toBe(true);
+	});
+
+	it("remove ignores an unknown frame id", () => {
+		const histories = new FrameHistories();
+
+		expect(() => histories.remove("missing")).not.toThrow();
+		expect(histories.has("missing")).toBe(false);
+	});
 });

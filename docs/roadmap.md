@@ -25,7 +25,7 @@ Next, in this order:
    *Settles the interaction pattern before arrows. From here on, touch usability is a requirement for every step.*
 4. [x] **Create a new situation** with title and full/half field; **half field** rendering.
 5. [x] **Position labels** on players (C, F, V, G, …).
-6. [ ] **Frames UI**: add frame (copy of the previous one), switch, delete; description per frame.
+6. [x] **Frames UI**: add frame (copy of the previous one), switch, delete, reorder; description per frame; situation details panel.
 7. [ ] **Pass/run/shot arrows**: straight, bendable via a control point.
 8. [ ] **Slideshow playback** of frames in the editor.
 9. [ ] **GIF/video export** (frames as slideshow), reusing the playback logic.

@@ -20,6 +20,12 @@ export class FrameHistories {
 		return this.histories.has(frameId);
 	}
 
+	/** Forgets one frame's history (e.g. when the frame is deleted) and empties it. */
+	remove(frameId: string): void {
+		this.histories.get(frameId)?.clear();
+		this.histories.delete(frameId);
+	}
+
 	/** Forgets every frame's history (e.g. when another situation is loaded). */
 	clear(): void {
 		this.histories.forEach((history) => history.clear());

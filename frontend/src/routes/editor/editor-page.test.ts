@@ -229,6 +229,186 @@ describe("editor page", () => {
 		});
 	});
 
+	describe("frames", () => {
+		const strip = () => screen.getByRole("navigation", { name: "Frames" });
+		const frameIds = () => situationEditor.current().frames.map((frame) => frame.id);
+
+		async function openPopoverFor(id: string) {
+			FakeResizeObserver.resize(screen.getByRole("region", { name: "Field" }), 1000, 500);
+			await tick();
+			const shape = Konva.stages[Konva.stages.length - 1].findOne(`#${id}`)!;
+			shape.fire("pointerclick", { evt: { button: 0, shiftKey: false, pointerType: "touch", preventDefault: () => {} } }, true);
+			await tick();
+		}
+
+		it("shows the frame strip with the first frame active", () => {
+			render(EditorPage);
+
+			expect(within(strip()).getByRole("button", { name: "Frame 1" })).toHaveAttribute("aria-current", "step");
+			expect(within(strip()).getByRole("button", { name: "Delete frame" })).toBeDisabled();
+		});
+
+		it("Add frame adds a copy after the current frame and switches to it", async () => {
+			situationEditor.addElement(500, 250, "red", "Player");
+			render(EditorPage);
+
+			await fireEvent.click(within(strip()).getByRole("button", { name: "Add frame" }));
+
+			expect(frameIds()).toHaveLength(2);
+			expect(within(strip()).getByRole("button", { name: "Frame 2" })).toHaveAttribute("aria-current", "step");
+			expect(get(situationEditor.elements)).toHaveLength(1);
+			expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+		});
+
+		it("switching frames closes the popover and clears the selection", async () => {
+			const id = situationEditor.addElement(500, 250, "red", "Player");
+			situationEditor.addFrame();
+			situationEditor.selectFrame(frameIds()[0]);
+			render(EditorPage);
+			await openPopoverFor(id);
+			expect(screen.getByRole("dialog", { name: "Edit marker" })).toBeInTheDocument();
+
+			await fireEvent.click(within(strip()).getByRole("button", { name: "Frame 2" }));
+
+			expect(get(situationEditor.activeFrame).id).toBe(frameIds()[1]);
+			expect(screen.queryByRole("dialog", { name: "Edit marker" })).not.toBeInTheDocument();
+			expect((Konva.stages.at(-1)!.findOne(`#${id}`) as Shape).strokeWidth()).toBe(0);
+		});
+
+		it("Delete frame asks for confirmation; Delete removes the frame", async () => {
+			situationEditor.addFrame();
+			render(EditorPage);
+
+			await fireEvent.click(within(strip()).getByRole("button", { name: "Delete frame" }));
+			await settle();
+			expect(screen.getByRole("alertdialog", { name: "Delete frame?" })).toHaveAttribute("open");
+
+			await fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+			await settle();
+
+			expect(frameIds()).toHaveLength(1);
+			expect(within(strip()).getAllByRole("listitem")).toHaveLength(1);
+			expect(within(strip()).getByRole("button", { name: "Frame 1" })).toHaveAttribute("aria-current", "step");
+		});
+
+		it("cancelling the confirmation keeps the frame", async () => {
+			situationEditor.addFrame();
+			render(EditorPage);
+
+			await fireEvent.click(within(strip()).getByRole("button", { name: "Delete frame" }));
+			await settle();
+			await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+			await settle();
+
+			expect(frameIds()).toHaveLength(2);
+		});
+
+		it("Move frame left reorders and keeps the moved frame active", async () => {
+			situationEditor.addFrame();
+			const moved = get(situationEditor.activeFrame).id;
+			render(EditorPage);
+
+			await fireEvent.click(within(strip()).getByRole("button", { name: "Move frame left" }));
+
+			expect(frameIds()[0]).toBe(moved);
+			expect(within(strip()).getByRole("button", { name: "Frame 1" })).toHaveAttribute("aria-current", "step");
+		});
+
+		it("the thumbnails show the frames' elements", () => {
+			situationEditor.addElement(500, 250, "red", "Player");
+			render(EditorPage);
+
+			const thumbnail = within(strip()).getByRole("button", { name: "Frame 1" }).querySelector("svg")!;
+			expect(thumbnail.querySelectorAll("[data-element-id]")).toHaveLength(1);
+		});
+	});
+
+	describe("details panel", () => {
+		const panel = () => screen.getByRole("complementary", { name: "Details" });
+
+		it("edits the title; the header and document title follow; not undoable", async () => {
+			render(EditorPage);
+			const input = within(panel()).getByRole("textbox", { name: "Title" });
+
+			await fireEvent.input(input, { target: { value: "Powerplay" } });
+
+			expect(situationEditor.current().title).toBe("Powerplay");
+			expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Powerplay");
+			expect(document.title).toContain("Powerplay");
+			expect(situationEditor.isDirty()).toBe(true);
+			expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+		});
+
+		it("a blank title shows the default title in the header", async () => {
+			render(EditorPage);
+
+			await fireEvent.input(within(panel()).getByRole("textbox", { name: "Title" }), { target: { value: "" } });
+
+			expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Untitled Situation");
+		});
+
+		it("edits the situation description", async () => {
+			render(EditorPage);
+
+			await fireEvent.input(within(panel()).getByRole("textbox", { name: "Description" }), { target: { value: "# Notes" } });
+
+			expect(situationEditor.current().description).toBe("# Notes");
+		});
+
+		it("the frame description is one undo step per edit session", async () => {
+			render(EditorPage);
+			const field = within(panel()).getByRole("textbox", { name: "Frame 1 description" }) as HTMLTextAreaElement;
+
+			field.focus();
+			await fireEvent.input(field, { target: { value: "P" } });
+			await fireEvent.input(field, { target: { value: "Press" } });
+			await fireEvent.blur(field);
+			expect(situationEditor.currentFrame().description).toBe("Press");
+
+			await fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+			expect(situationEditor.currentFrame().description).toBe("");
+			expect(field.value).toBe("");
+		});
+
+		it("the frame description follows the active frame", async () => {
+			situationEditor.changeFrameDescription("one");
+			situationEditor.addFrame();
+			situationEditor.changeFrameDescription("two");
+			render(EditorPage);
+
+			await fireEvent.click(within(screen.getByRole("navigation", { name: "Frames" })).getByRole("button", { name: "Frame 1" }));
+
+			const field = within(panel()).getByRole("textbox", { name: "Frame 1 description" }) as HTMLTextAreaElement;
+			expect(field.value).toBe("one");
+		});
+
+		it("Ctrl+Z inside a text field is left to the browser", async () => {
+			situationEditor.addElement(1, 1, "red", "Player");
+			render(EditorPage);
+
+			for (const name of ["Title", "Description", "Frame 1 description"]) {
+				await fireEvent.keyDown(within(panel()).getByRole("textbox", { name }), { key: "z", ctrlKey: true });
+			}
+
+			expect(get(situationEditor.elements)).toHaveLength(1);
+		});
+
+		it.each([["Delete"], ["Backspace"]])("%s in the title field does not delete the selected element", async (key) => {
+			const id = situationEditor.addElement(500, 250, "red", "Player");
+			render(EditorPage);
+			FakeResizeObserver.resize(screen.getByRole("region", { name: "Field" }), 1000, 500);
+			await tick();
+			Konva.stages.at(-1)!.findOne(`#${id}`)!.fire("pointerclick", { evt: { button: 0, shiftKey: false, pointerType: "mouse", preventDefault: () => {} } }, true);
+			await tick();
+
+			await fireEvent.keyDown(within(panel()).getByRole("textbox", { name: "Title" }), { key });
+			await fireEvent.keyDown(within(panel()).getByRole("textbox", { name: "Frame 1 description" }), { key });
+
+			expect(get(situationEditor.elements).map((element) => element.id)).toEqual([id]);
+		});
+	});
+
 	it("Export downloads the situation and clears the unsaved-changes flag", async () => {
 		const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 		situationEditor.addElement(1, 1, "red", "Player");

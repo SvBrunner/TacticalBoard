@@ -4,7 +4,9 @@
 |---|---|
 | Board | The drawable canvas showing one frame of a situation: players, ball, markers, and arrows. |
 | Situation | The core saveable unit: a game scenario made of one or more frames, with title and description. A standard situation (e.g. a recorded free hit) is just a situation. Exportable/storable as JSON. |
-| Frame | One step of a situation. A new frame starts as a copy of the previous one; elements keep their identity across frames. |
+| Frame | One step of a situation. A new frame starts as a copy of the current one (inserted after it); elements keep their identity across frames. |
+| Frame strip | The numbered row of frame thumbnails below the board, used to switch, add, delete, and reorder frames. |
+| Details panel | The panel next to (desktop), below (portrait tablet) or above (phones, collapsible) the board with the situation's title and description and the current frame's description. |
 | Element | An item on a frame: a player, the ball, a marker, or (later) an arrow. Has a stable ID that stays the same across the frames of a situation, so the same player in two frames is the same element. |
 | Position label | Short text (at most 2 letters or digits) shown on a player, e.g. a position code like C (Center), LV (Linker Verteidiger), or a jersey number. Chosen from a predefined list per sport or typed freely; set per frame. |
 | Marker | A generic shape (rectangle, triangle, circle) with no fixed meaning. |

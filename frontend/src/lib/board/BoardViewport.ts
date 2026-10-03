@@ -65,11 +65,19 @@ export class BoardViewport {
 	}
 
 	/** Largest stage that fits into the container without changing the visible rect's aspect ratio. */
+	/**
+	 * Size of the visible rect as it appears on screen, in scene units:
+	 * width and height swap for the rotated (half-field) view.
+	 */
+	get contentSize(): { readonly width: number; readonly height: number } {
+		const rect = this.visibleRect;
+		return this.rotation === 90 ? { width: rect.height, height: rect.width } : { width: rect.width, height: rect.height };
+	}
+
 	fit(containerWidth: number, containerHeight: number): StageFit {
 		const rect = this.visibleRect;
 		const rotated = this.rotation === 90;
-		const contentWidth = rotated ? rect.height : rect.width;
-		const contentHeight = rotated ? rect.width : rect.height;
+		const { width: contentWidth, height: contentHeight } = this.contentSize;
 		if (!(containerWidth > 0) || !(containerHeight > 0)) {
 			return { width: 0, height: 0, scale: 0, rotation: this.rotation, x: 0, y: 0 };
 		}

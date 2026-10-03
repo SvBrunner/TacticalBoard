@@ -26,3 +26,7 @@ Until there is storage (Phase 2), the situation being edited exists only in the 
 ## Hidden-half elements of half-field situations
 
 A half-field situation shows only one half of the field (see [ch. 8](arc42/08_crosscutting_concepts.md)). Elements from an imported file that lie in the other half stay in the data but are not visible and cannot be reached. An element right at the center line can be partly visible; its enlarged hit area can reach into the visible half.
+
+## Little room for the field on landscape phones with the details panel open
+
+On phones the details panel (title, descriptions) is a collapsible bar above the board. Opened on a phone in landscape orientation, it takes up to about half of the already small height, so the field becomes very small until the panel is collapsed again. Portrait phones and larger screens are much less affected.

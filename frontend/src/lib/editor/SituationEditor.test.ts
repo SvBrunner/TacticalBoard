@@ -6,6 +6,7 @@ import { Frame } from "$lib/model/Frame";
 import { SequentialIdGenerator } from "$lib/model/ids/IdGenerator";
 import { DEFAULT_SITUATION_TITLE, Situation } from "$lib/model/Situation";
 import { EMPTY_HISTORY_STATUS, type HistoryStatus } from "$lib/history/HistoryStatus";
+import { SituationSerializer } from "$lib/model/serialization/SituationSerializer";
 import { SituationEditor, situationEditor } from "./SituationEditor";
 
 const START = "2026-01-01T00:00:00.000Z";
@@ -799,6 +800,395 @@ describe("SituationEditor", () => {
 
 			expect(editor.isDirty()).toBe(true);
 			expect(editor.current().updatedAt).toBe("2026-02-02T00:00:00.000Z");
+		});
+	});
+
+	describe("frames (situation-level, not undoable)", () => {
+		const LATER = "2026-03-03T00:00:00.000Z";
+
+		function threeFrameSituation(): Situation {
+			return new Situation({
+				id: "s3",
+				title: "Three",
+				description: "",
+				sport: "floorball",
+				fieldType: "full",
+				createdAt: START,
+				updatedAt: START,
+				frames: [
+					new Frame("f1", "first", [new PointElement("p1", 10, 10, "red", "Player", "C")]),
+					new Frame("f2", "second", [new PointElement("p1", 20, 20, "red", "Player", "C")]),
+					new Frame("f3", "third", [new PointElement("p1", 30, 30, "red", "Player", "C")]),
+				],
+			});
+		}
+
+		const order = () => editor.current().frames.map((frame) => frame.id);
+		const activeId = () => get(editor.activeFrame).id;
+
+		beforeEach(() => {
+			editor.load(threeFrameSituation());
+		});
+
+		describe("addFrame", () => {
+			it("inserts a copy of the active frame right after it and makes it active", () => {
+				editor.selectFrame("f2");
+
+				const id = editor.addFrame();
+
+				expect(order()).toEqual(["f1", "f2", id, "f3"]);
+				expect(activeId()).toBe(id);
+				expect(editor.currentFrame().id).toBe(id);
+			});
+
+			it("appends after the last frame when the last frame is active", () => {
+				editor.selectFrame("f3");
+
+				const id = editor.addFrame();
+
+				expect(order()).toEqual(["f1", "f2", "f3", id]);
+			});
+
+			it("copies elements (same ids) and the description under a new frame id", () => {
+				editor.selectFrame("f2");
+				const source = editor.currentFrame();
+
+				const id = editor.addFrame();
+
+				const copy = editor.current().findFrame(id)!;
+				expect(id).not.toBe("f2");
+				expect(copy.description).toBe("second");
+				expect(copy.elements).toEqual(source.elements);
+				expect(copy.elements.map((element) => element.id)).toEqual(["p1"]);
+			});
+
+			it("starts the new frame with an empty history and leaves the source history as it was", () => {
+				editor.moveElement("p1", 50, 50);
+				editor.endGesture();
+
+				editor.addFrame();
+
+				expect(get(editor.history)).toEqual(EMPTY_HISTORY_STATUS);
+				editor.selectFrame("f1");
+				expect(get(editor.history).canUndo).toBe(true);
+				editor.undo();
+				expect(editor.currentFrame().findElement("p1")).toMatchObject({ x: 10, y: 10 });
+			});
+
+			it("is not an undo step: undo in the new frame does not remove it", () => {
+				const id = editor.addFrame();
+
+				editor.undo();
+
+				expect(order()).toContain(id);
+			});
+
+			it("later changes to the copy don't change the source frame and vice versa", () => {
+				const id = editor.addFrame();
+
+				editor.moveElement("p1", 99, 99);
+				editor.changeLabel("p1", "F");
+				editor.changeFrameDescription("changed copy");
+
+				const source = editor.current().findFrame("f1")!;
+				expect(source.findElement("p1")).toMatchObject({ x: 10, y: 10, label: "C" });
+				expect(source.description).toBe("first");
+
+				editor.selectFrame("f1");
+				editor.moveElement("p1", 1, 1);
+				expect(editor.current().findFrame(id)!.findElement("p1")).toMatchObject({ x: 99, y: 99 });
+			});
+
+			it("seals the source frame's edit session", () => {
+				editor.changeFrameDescription("a");
+				editor.addFrame();
+				editor.selectFrame("f1");
+
+				editor.changeFrameDescription("ab");
+				editor.undo();
+
+				expect(editor.currentFrame().description).toBe("a");
+			});
+
+			it("marks the situation dirty and refreshes updatedAt", () => {
+				clock.set(LATER);
+
+				editor.addFrame();
+
+				expect(editor.isDirty()).toBe(true);
+				expect(editor.current().updatedAt).toBe(LATER);
+			});
+		});
+
+		describe("deleteFrame", () => {
+			it("removes the frame", () => {
+				expect(editor.deleteFrame("f2")).toBe(true);
+
+				expect(order()).toEqual(["f1", "f3"]);
+			});
+
+			it("makes the previous frame active when the active frame is deleted", () => {
+				editor.selectFrame("f3");
+
+				editor.deleteFrame("f3");
+
+				expect(activeId()).toBe("f2");
+			});
+
+			it("makes the next frame active when the first frame is deleted while active", () => {
+				editor.deleteFrame("f1");
+
+				expect(activeId()).toBe("f2");
+			});
+
+			it("keeps the active frame when another frame is deleted", () => {
+				editor.selectFrame("f3");
+
+				editor.deleteFrame("f1");
+
+				expect(activeId()).toBe("f3");
+			});
+
+			it("refuses to delete the last remaining frame", () => {
+				editor.deleteFrame("f1");
+				editor.deleteFrame("f2");
+				const before = editor.current();
+				editor.markSaved();
+
+				expect(editor.deleteFrame("f3")).toBe(false);
+
+				expect(editor.current()).toBe(before);
+				expect(editor.isDirty()).toBe(false);
+			});
+
+			it("throws for an unknown frame id", () => {
+				expect(() => editor.deleteFrame("missing")).toThrow(/no frame/);
+			});
+
+			it("drops the deleted frame's history", () => {
+				editor.selectFrame("f2");
+				editor.moveElement("p1", 1, 1);
+				editor.selectFrame("f1");
+
+				editor.deleteFrame("f2");
+
+				expect(editor["histories"].has("f2")).toBe(false);
+			});
+
+			it("keeps the remaining frames' histories and shows the new active frame's history", () => {
+				editor.moveElement("p1", 1, 1);
+				editor.selectFrame("f2");
+
+				editor.deleteFrame("f2");
+
+				expect(activeId()).toBe("f1");
+				expect(get(editor.history).canUndo).toBe(true);
+			});
+
+			it("is not undoable", () => {
+				editor.moveElement("p1", 1, 1);
+				editor.deleteFrame("f2");
+
+				editor.undo();
+				editor.undo();
+
+				expect(order()).toEqual(["f1", "f3"]);
+			});
+
+			it("marks the situation dirty and refreshes updatedAt", () => {
+				clock.set(LATER);
+
+				editor.deleteFrame("f2");
+
+				expect(editor.isDirty()).toBe(true);
+				expect(editor.current().updatedAt).toBe(LATER);
+			});
+		});
+
+		describe("moveFrame", () => {
+			it("reorders the frames and keeps the same frame active", () => {
+				editor.selectFrame("f1");
+
+				editor.moveFrame("f1", 2);
+
+				expect(order()).toEqual(["f2", "f3", "f1"]);
+				expect(activeId()).toBe("f1");
+			});
+
+			it("keeps the active frame when another frame is moved past it", () => {
+				editor.selectFrame("f2");
+
+				editor.moveFrame("f3", 0);
+
+				expect(order()).toEqual(["f3", "f1", "f2"]);
+				expect(activeId()).toBe("f2");
+			});
+
+			it("is not an undo step and keeps the histories", () => {
+				editor.moveElement("p1", 1, 1);
+
+				editor.moveFrame("f1", 1);
+
+				expect(get(editor.history)).toMatchObject({ canUndo: true, undoLabel: "Move Player" });
+			});
+
+			it("marks dirty and refreshes updatedAt only when the order changes", () => {
+				clock.set(LATER);
+
+				editor.moveFrame("f2", 1);
+				expect(editor.isDirty()).toBe(false);
+				expect(editor.current().updatedAt).toBe(START);
+
+				editor.moveFrame("f2", 0);
+				expect(editor.isDirty()).toBe(true);
+				expect(editor.current().updatedAt).toBe(LATER);
+			});
+
+			it("throws for an unknown frame id", () => {
+				expect(() => editor.moveFrame("missing", 0)).toThrow(/no frame/);
+			});
+		});
+
+		describe("changeTitle / changeDescription", () => {
+			it("change the situation's title and description", () => {
+				editor.changeTitle("Powerplay");
+				editor.changeDescription("**Notes**");
+
+				expect(editor.current()).toMatchObject({ title: "Powerplay", description: "**Notes**" });
+			});
+
+			it("store a blank title as typed (the UI shows the default title)", () => {
+				editor.changeTitle("");
+
+				expect(editor.current().title).toBe("");
+				expect(editor.current().displayTitle).toBe(DEFAULT_SITUATION_TITLE);
+			});
+
+			it("are not undoable and don't touch any history", () => {
+				editor.changeTitle("Powerplay");
+				editor.changeDescription("Notes");
+
+				expect(get(editor.history)).toEqual(EMPTY_HISTORY_STATUS);
+				editor.undo();
+				expect(editor.current()).toMatchObject({ title: "Powerplay", description: "Notes" });
+			});
+
+			it("mark the situation dirty and refresh updatedAt", () => {
+				clock.set(LATER);
+
+				editor.changeTitle("Powerplay");
+
+				expect(editor.isDirty()).toBe(true);
+				expect(editor.current().updatedAt).toBe(LATER);
+
+				editor.markSaved();
+				editor.changeDescription("Notes");
+				expect(editor.isDirty()).toBe(true);
+			});
+
+			it("change nothing when the text is the same", () => {
+				const before = editor.current();
+
+				editor.changeTitle("Three");
+				editor.changeDescription("");
+
+				expect(editor.current()).toBe(before);
+				expect(editor.isDirty()).toBe(false);
+			});
+
+			it("keep the active frame", () => {
+				editor.selectFrame("f2");
+
+				editor.changeTitle("Powerplay");
+
+				expect(activeId()).toBe("f2");
+			});
+		});
+
+		describe("changeFrameDescription", () => {
+			it("changes only the active frame's description", () => {
+				editor.selectFrame("f2");
+
+				editor.changeFrameDescription("new");
+
+				expect(editor.current().frames.map((frame) => frame.description)).toEqual(["first", "new", "third"]);
+			});
+
+			it("one edit session (until endGesture) is one undo step", () => {
+				editor.changeFrameDescription("f");
+				editor.changeFrameDescription("fi");
+				editor.changeFrameDescription("fir");
+				editor.endGesture();
+				editor.changeFrameDescription("fire");
+
+				editor.undo();
+				expect(editor.currentFrame().description).toBe("fir");
+				editor.undo();
+				expect(editor.currentFrame().description).toBe("first");
+				expect(get(editor.history).canUndo).toBe(false);
+			});
+
+			it("switching frames seals the edit session", () => {
+				editor.changeFrameDescription("a");
+				editor.selectFrame("f2");
+				editor.selectFrame("f1");
+
+				editor.changeFrameDescription("ab");
+				editor.undo();
+
+				expect(editor.currentFrame().description).toBe("a");
+			});
+
+			it("goes into the active frame's history only", () => {
+				editor.changeFrameDescription("x");
+
+				editor.selectFrame("f2");
+				expect(get(editor.history).canUndo).toBe(false);
+				editor.selectFrame("f1");
+				expect(get(editor.history)).toMatchObject({ canUndo: true, undoLabel: "Change frame description" });
+			});
+
+			it("marks dirty and refreshes updatedAt; the same text is no change", () => {
+				editor.changeFrameDescription("first");
+				expect(editor.isDirty()).toBe(false);
+
+				clock.set(LATER);
+				editor.changeFrameDescription("other");
+				expect(editor.isDirty()).toBe(true);
+				expect(editor.current().updatedAt).toBe(LATER);
+			});
+		});
+
+		it("the export contains the title, descriptions and frame order", () => {
+			editor.changeTitle("Breakout");
+			editor.changeDescription("Situation *notes*");
+			editor.selectFrame("f2");
+			editor.changeFrameDescription("Frame two notes");
+			const added = editor.addFrame();
+			editor.moveFrame("f1", 3);
+
+			const file = JSON.parse(new SituationSerializer().serialize(editor.current()));
+
+			expect(file.situation.title).toBe("Breakout");
+			expect(file.situation.description).toBe("Situation *notes*");
+			expect(file.situation.frames.map((frame: { id: string }) => frame.id)).toEqual(["f2", added, "f3", "f1"]);
+			expect(file.situation.frames.map((frame: { description: string }) => frame.description)).toEqual([
+				"Frame two notes",
+				"Frame two notes",
+				"third",
+				"first",
+			]);
+		});
+
+		it("the export round-trips through import with order and descriptions", () => {
+			editor.addFrame();
+			editor.changeFrameDescription("copy");
+			const serializer = new SituationSerializer();
+
+			const imported = serializer.deserialize(serializer.serialize(editor.current()));
+
+			expect(imported.frames.map((frame) => frame.id)).toEqual(editor.current().frames.map((frame) => frame.id));
+			expect(imported.frames.map((frame) => frame.description)).toEqual(["first", "copy", "second", "third"]);
 		});
 	});
 

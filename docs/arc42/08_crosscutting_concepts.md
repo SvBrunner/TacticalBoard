@@ -96,14 +96,24 @@ Implementation: `frontend/src/lib/model/serialization/` (`SituationSerializer` f
 
 ## 8.4 Editing via commands (undo/redo)
 
-Every change to the model goes **`SituationEditor` → command → the active frame's `CommandHistory`**. UI components never construct commands or change the model themselves; they call the editor's public methods (`addElement`, `moveElement`, `undo`, `redo`, …).
+Every change to a **frame's content** (its elements and its description) goes **`SituationEditor` → command → the active frame's `CommandHistory`**. UI components never construct commands or change the model themselves; they call the editor's public methods (`addElement`, `moveElement`, `changeFrameDescription`, `undo`, `redo`, …).
+
+**Situation-level changes** take a second, non-undoable path (`SituationEditor.updateSituation`): adding, deleting, and reordering frames (`addFrame`, `deleteFrame`, `moveFrame`) and the situation's title and description (`changeTitle`, `changeDescription`). Like commands, they refresh `updatedAt` and mark the situation as unsaved (8.7), but they are not recorded in any history; inside the text fields the browser's own undo works while typing. See 8.9 for the frame operations.
 
 - **Commands** work on the immutable model: `execute(frame)` / `undo(frame)` return a new frame and address elements by id, never by reference or index. A command records what it needs to revert itself (e.g. the removed element and its z-order index, a move's start position). Commands that would change nothing (same position/color/type, unknown id) are not recorded. Several commands can be grouped into one undo step with `CompositeCommand`.
-- **One history per frame**, keyed by frame id: undo/redo always act on the active frame's history. Switching frames is not an undo step.
+- **One history per frame**, keyed by frame id: undo/redo always act on the active frame's history. Switching frames is not an undo step. A new frame starts with an empty history; a deleted frame's history is dropped.
 - **Limit:** 200 steps per frame; the oldest steps are dropped. Histories live in memory only and do not survive a page reload.
 - **Loading/importing or creating a situation is not undoable** and clears all histories.
-- **Edit sessions:** until the history is sealed (`SituationEditor.endGesture()`, called at the end of a drag, when a text field loses focus or Enter is pressed in it, and when the popover closes), a new command may merge into the previous one (`Command.mergeWith`). So consecutive moves of one element during a gesture, or all keystrokes of one text-field focus (e.g. the free-text position label), become a single undo step. Picking a position chip is one step of its own. Undo, redo, and switching frames also seal.
-- **Not undoable:** selection and tool changes. After undo, nothing is selected automatically.
+- **Edit sessions:** until the history is sealed (`SituationEditor.endGesture()`, called at the end of a drag, when a text field loses focus or Enter is pressed in it, and when the popover closes), a new command may merge into the previous one (`Command.mergeWith`). So consecutive moves of one element during a gesture, or all keystrokes of one text-field focus (e.g. the free-text position label or the frame description), become a single undo step. Picking a position chip is one step of its own. Undo, redo, and switching frames also seal.
+- **Undoable vs. not undoable:**
+
+  | Undoable (in the active frame's history) | Not undoable |
+  |---|---|
+  | Place, move, delete an element; change its type, color, position label | Add, delete, reorder frames |
+  | Change the frame description (one step per focus of the field) | Change the situation's title or description |
+  | | Switch frames, selection, tool changes; create/load/import a situation |
+
+  After undo, nothing is selected automatically.
 - **Feedback:** undo/redo is shown only via the enabled state of the Undo/Redo buttons; what was undone/redone is logged to the debug notification log, not shown as user-facing UI. Undo/redo with nothing to undo/redo (e.g. via the keyboard shortcut) does nothing and logs nothing.
 - **Shortcuts:** Ctrl/Cmd+Z undo; Ctrl/Cmd+Shift+Z and Ctrl+Y redo. Ignored while typing in text fields, during IME composition, with Alt held, and while an element is being dragged.
 
@@ -138,7 +148,7 @@ A press only turns into a drag after the pointer has moved 6 CSS px (Konva `drag
 
 **No pinch-zoom (MVP):** the board area disables browser touch gestures (`touch-action: none`), so pinching neither zooms the page nor the board. See [known limitations](../known-limitations.md).
 
-**Layout:** desktop (≥ 1024 px) has a side tool panel; tablets (600–1023 px) keep the side panel with tighter spacing; portrait phones (≤ 599 px wide) get a compact header with icon-only buttons and the tools as a horizontally scrollable bottom bar; landscape phones (≤ 499 px tall) get a compact header and a narrow left tool rail. On phones the edit popover becomes a bottom sheet. Interactive controls are at least 44 × 44 CSS px; icon-only buttons keep their text as accessible name. Safe-area insets (notches, home indicator) are respected.
+**Layout:** desktop (≥ 1024 px) has a side tool panel on the left and the details panel (8.9) on the right; tablets (600–1023 px) keep the side tool panel with tighter spacing and, in portrait (≥ 500 px tall), show the details panel below the board so the field keeps the width; portrait phones (≤ 599 px wide) get a compact header with icon-only buttons and the tools as a horizontally scrollable bottom bar; landscape phones (≤ 499 px tall) get a compact header and a narrow left tool rail. On phones the details panel collapses to a "Details" bar above the board (collapsed by default) and the edit popover becomes a bottom sheet. The frame strip (8.9) sits directly below the board on every layout; its action buttons become icon-only when the strip is narrower than 720 px (CSS container query). Interactive controls are at least 44 × 44 CSS px; icon-only buttons keep their text as accessible name. Safe-area insets (notches, home indicator) are respected.
 
 Implementation: `frontend/src/lib/board/` (`BoardViewport`, `BoardInteractionController`, `Selection`, `ToolState`, `PopoverState`, `konvaSetup`), `frontend/src/lib/components/board/BoardCanvas.svelte` (translates Konva events into gestures), `frontend/src/lib/components/board/popover/`.
 
@@ -177,3 +187,26 @@ Until there is server-side storage, "saved" means **exported**.
 - Dialogs are native `<dialog>` elements opened modally (`modalDialog` action): focus moves into the dialog on open and back to the opener on close, Escape cancels, and page-wide keyboard shortcuts (undo/redo, Delete) are ignored while focus is inside a modal dialog.
 
 Implementation: `frontend/src/routes/` (`+page.svelte` start page, `editor/`), `frontend/src/lib/editor/` (`SituationWorkflow`, `NewSituationForm`, `UnsavedChangesGuard`), `frontend/src/lib/dialogs/ConfirmationPrompt.ts`, `frontend/src/lib/components/dialogs/`, `frontend/src/lib/actions/modalDialog.ts`.
+
+## 8.9 Frames and the details panel
+
+**Frame operations** (all through `SituationEditor`, none undoable, all refresh `updatedAt` and mark the situation unsaved):
+
+| Operation | Rule |
+|---|---|
+| Add | Inserts a copy of the **active** frame right after it — same elements with the same element ids, same description, new frame id — and makes the copy active. The copy starts with an empty undo history; the source frame's edit session ends (its history is sealed, its steps stay). From then on the frames are independent: a change in one frame never propagates to another. No limit on the number of frames. |
+| Delete | After the confirmation "Delete frame?" (Delete / Cancel, the shared `ConfirmDialog`). The last remaining frame can't be deleted (the button is disabled). If the active frame is deleted, the previous frame becomes active (the next one if it was the first); deleting another frame keeps the active one. The deleted frame's undo history is dropped. The strip's Delete button always deletes the active frame. |
+| Reorder | Moves a frame to another position; the active frame stays the same frame (it may get a new number). |
+| Switch | Not an undo step; seals the edit session. The edit popover closes and the selection is cleared, because element ids repeat across frames. |
+
+Frame numbers are 1-based positions and change with the order; frames have no names. The file format needs no change for this: frame order and descriptions were already part of format version 2 (8.3).
+
+**Frame strip** (`FrameStrip`): a `<nav aria-label="Frames">` with an ordered list; each frame is a button showing its number and a thumbnail, the active one with `aria-current="step"`. It scrolls horizontally when the frames don't fit and keeps the active frame in view. Actions: Move frame left/right, Add frame, Delete frame.
+
+- **Thumbnails** (`FrameThumbnail`, geometry in `FrameThumbnailGeometry`): a small inline SVG rendering of the field markings and the frame's elements from the model, oriented like the board (full field landscape; half field portrait with its goal at the bottom, via `BoardViewport`). Elements are drawn 2.5× their board size so they stay visible; labels are not drawn. SVG (instead of an offscreen Konva stage) keeps thumbnails cheap, crisp at any size, re-rendered reactively when the frame changes, and testable in jsdom.
+- **Reorder by drag and drop** (`FrameReorderGesture`, a pure state machine fed by Pointer Events, so it works for mouse, pen, and touch, unlike HTML5 drag and drop): with mouse/pen a drag starts after the pointer moved 8 CSS px (less is a tap, which selects the frame); with touch the finger has to rest for 400 ms first (a long press), so a quick swipe still scrolls the strip. While dragging, the frame follows the pointer, the others make room, and the strip auto-scrolls near its edges; the target position is the number of other frames whose center lies before the dragged frame's center. pointercancel, lost pointer capture, and Escape cancel without reordering; the click that follows a drag doesn't select.
+- **Keyboard alternative:** the "Move frame left" / "Move frame right" buttons move the active frame by one position (also usable by touch). Keyboard/swipe frame *switching* is not part of the MVP.
+
+**Details panel** (`SituationDetails`): an `<aside>` named "Details" with the situation's title (`<input>`) and description (`<textarea>`), plus the active frame's description (`FrameDescriptionEditor`, labelled "Frame N description"). Descriptions are edited as Markdown source; nothing is rendered yet. Title and situation description are stored on every input and are not undoable (a blank title is stored as is and shown as "Untitled Situation"); the frame description is one undo step per focus of the field (blur ends the session). Keyboard shortcuts (undo/redo, Delete/Backspace) are ignored while typing in these fields (8.4, 8.5). The header keeps showing the title.
+
+Implementation: `frontend/src/lib/editor/SituationEditor.ts`, `frontend/src/lib/editor/FrameWorkflow.ts` (confirmation, popover/selection reset), `frontend/src/lib/commands/ChangeFrameDescriptionCommand.ts`, `frontend/src/lib/components/frames/`, `frontend/src/lib/components/details/SituationDetails.svelte`.

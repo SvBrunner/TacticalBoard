@@ -14,8 +14,9 @@ Delivery order: the board editor is the MVP and ships first, with local JSON exp
 - A situation records when it was created and last updated (`createdAt`/`updatedAt`); both are part of the exported file. Every edit refreshes `updatedAt`.
 - A situation uses either the full field or half the field. This is chosen when the situation is created and applies to all its frames. The full field is shown in landscape; the half field in portrait, with its goal at the bottom. Which half is used doesn't matter to the user.
 - Creating a new situation asks only for the title and full/half field (no description).
-- A situation consists of one or more ordered **frames**. A new frame starts as a copy of the previous one, including its description; elements keep their identity (same ID) across frames.
-- Each frame has its own description text.
+- A situation consists of one or more ordered **frames**. A new frame is inserted right after the current frame as a copy of it, including its description, and becomes the current frame; elements keep their identity (same ID) across frames. After that the frames are independent: a change in one frame never propagates to another. There is no limit on the number of frames.
+- Frames are shown numbered, with a thumbnail preview, and can be switched, added, deleted (after a confirmation; the last remaining frame can't be deleted), and reordered by drag and drop (also by touch). Adding, deleting and reordering frames are not undoable.
+- Each frame has its own description text. The situation's title and description are edited in a details panel (collapsible on phones). Descriptions are edited as Markdown source; rendering them comes later.
 - Frames can be played back as a slideshow (one after another, no interpolated movement) in the editor.
 
 *Board editor (MVP)*

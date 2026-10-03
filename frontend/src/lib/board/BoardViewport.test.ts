@@ -13,6 +13,10 @@ describe("BoardViewport", () => {
 			expect(viewport.rotation).toBe(0);
 		});
 
+		it("has the field's size on screen (contentSize)", () => {
+			expect(viewport.contentSize).toEqual({ width: 2000, height: 1000 });
+		});
+
 		describe("fit", () => {
 			it("fits by width when the container is relatively taller than the scene", () => {
 				expect(viewport.fit(1000, 800)).toEqual({ width: 1000, height: 500, scale: 0.5, rotation: 0, x: 0, y: 0 });
@@ -90,6 +94,14 @@ describe("BoardViewport", () => {
 			it("keeps the edges themselves", () => {
 				expect(viewport.clamp({ x: 2000, y: 0 })).toEqual({ x: 2000, y: 0 });
 			});
+		});
+	});
+
+	describe("contentSize", () => {
+		it("swaps width and height for the rotated half field", () => {
+			const viewport = new BoardViewport(new FieldDimensions(2000, 800), "half");
+
+			expect(viewport.contentSize).toEqual({ width: 800, height: 1000 });
 		});
 	});
 

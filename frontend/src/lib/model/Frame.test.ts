@@ -154,6 +154,12 @@ describe("Frame", () => {
 		expect(frame.description).toBe("old");
 	});
 
+	it("withDescription returns the same frame when the description doesn't change", () => {
+		const frame = new Frame("f", "same", [player]);
+
+		expect(frame.withDescription("same")).toBe(frame);
+	});
+
 	describe("copy", () => {
 		it("gets a new frame id but keeps element ids and the description", () => {
 			const frame = new Frame("f", "Starting positions", [player, ball]);

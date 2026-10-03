@@ -87,6 +87,56 @@ export class Situation implements SituationProps {
 		return this.frames.find((frame) => frame.id === id);
 	}
 
+	/** Position of the frame in the frame order, or -1 when the situation does not contain it. */
+	indexOfFrame(id: string): number {
+		return this.frames.findIndex((frame) => frame.id === id);
+	}
+
+	/**
+	 * Inserts a frame at the given position (0 = first). The index is clamped
+	 * to the valid range; a frame id that is already used throws.
+	 */
+	insertFrame(frame: Frame, index: number): Situation {
+		if (this.findFrame(frame.id)) {
+			throw new Error(`Situation ${this.id} already contains a frame with id ${frame.id}`);
+		}
+		const position = Situation.clampIndex(index, this.frames.length);
+		return this.with({ frames: [...this.frames.slice(0, position), frame, ...this.frames.slice(position)] });
+	}
+
+	/**
+	 * Removes a frame; an unknown id changes nothing. The last remaining
+	 * frame can't be removed (a situation always has at least one frame).
+	 */
+	removeFrame(id: string): Situation {
+		if (!this.findFrame(id)) {
+			return this;
+		}
+		if (this.frames.length === 1) {
+			throw new Error(`The last frame of situation ${this.id} can't be removed`);
+		}
+		return this.with({ frames: this.frames.filter((frame) => frame.id !== id) });
+	}
+
+	/**
+	 * Moves a frame to another position in the frame order; `toIndex` is its
+	 * index afterwards, clamped to the valid range. An unknown id or the same
+	 * position changes nothing.
+	 */
+	moveFrame(id: string, toIndex: number): Situation {
+		const from = this.indexOfFrame(id);
+		if (from === -1) {
+			return this;
+		}
+		const to = Situation.clampIndex(toIndex, this.frames.length - 1);
+		if (to === from) {
+			return this;
+		}
+		const frames = this.frames.filter((frame) => frame.id !== id);
+		frames.splice(to, 0, this.frames[from]);
+		return this.with({ frames });
+	}
+
 	updateFrame(id: string, update: (frame: Frame) => Frame): Situation {
 		const existing = this.findFrame(id);
 		if (!existing) {
@@ -103,11 +153,11 @@ export class Situation implements SituationProps {
 	}
 
 	withTitle(title: string): Situation {
-		return this.with({ title });
+		return title === this.title ? this : this.with({ title });
 	}
 
 	withDescription(description: string): Situation {
-		return this.with({ description });
+		return description === this.description ? this : this.with({ description });
 	}
 
 	/** Same content under a different identity (used when importing a file as a new situation). */
@@ -122,6 +172,10 @@ export class Situation implements SituationProps {
 	/** Sets both timestamps (used when importing a file as a new situation). */
 	withTimestamps(createdAt: string, updatedAt: string): Situation {
 		return this.with({ createdAt, updatedAt });
+	}
+
+	private static clampIndex(index: number, max: number): number {
+		return Math.min(Math.max(Math.trunc(index), 0), max);
 	}
 
 	private with(changes: Partial<Omit<SituationProps, "sport" | "fieldType">>): Situation {

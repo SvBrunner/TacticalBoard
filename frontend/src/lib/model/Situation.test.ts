@@ -105,6 +105,11 @@ describe("Situation", () => {
 			expect(situation.description).toBe("Description");
 		});
 
+		it("withTitle and withDescription return the same situation when nothing changes", () => {
+			expect(situation.withTitle("Title")).toBe(situation);
+			expect(situation.withDescription("Description")).toBe(situation);
+		});
+
 		it("withUpdatedAt only changes updatedAt", () => {
 			const result = situation.withUpdatedAt("2026-09-09T09:09:09.000Z");
 
@@ -162,6 +167,111 @@ describe("Situation", () => {
 
 		it("findFrame returns undefined for an unknown id", () => {
 			expect(situation.findFrame("missing")).toBeUndefined();
+		});
+	});
+
+	describe("frame order", () => {
+		const f1 = new Frame("f1", "", []);
+		const f2 = new Frame("f2", "", []);
+		const f3 = new Frame("f3", "", []);
+		const three = () => new Situation(props({ frames: [f1, f2, f3] }));
+		const order = (situation: Situation) => situation.frames.map((frame) => frame.id);
+
+		it("indexOfFrame returns the position, or -1 for an unknown id", () => {
+			const situation = three();
+
+			expect(situation.indexOfFrame("f1")).toBe(0);
+			expect(situation.indexOfFrame("f3")).toBe(2);
+			expect(situation.indexOfFrame("missing")).toBe(-1);
+		});
+
+		describe("insertFrame", () => {
+			const added = new Frame("new", "", []);
+
+			it.each([
+				[0, ["new", "f1", "f2", "f3"]],
+				[1, ["f1", "new", "f2", "f3"]],
+				[3, ["f1", "f2", "f3", "new"]],
+			])("inserts at index %i", (index, expected) => {
+				expect(order(three().insertFrame(added, index))).toEqual(expected);
+			});
+
+			it.each([
+				[-5, ["new", "f1", "f2", "f3"]],
+				[99, ["f1", "f2", "f3", "new"]],
+				[1.7, ["f1", "new", "f2", "f3"]],
+			])("clamps the index %d", (index, expected) => {
+				expect(order(three().insertFrame(added, index))).toEqual(expected);
+			});
+
+			it("keeps everything else and leaves the original unchanged", () => {
+				const situation = three();
+
+				const result = situation.insertFrame(added, 1);
+
+				expect(result).toMatchObject({ id: "s", title: "Title", updatedAt: situation.updatedAt });
+				expect(result.findFrame("new")).toBe(added);
+				expect(order(situation)).toEqual(["f1", "f2", "f3"]);
+			});
+
+			it("throws for a frame id that is already used", () => {
+				expect(() => three().insertFrame(new Frame("f2", "", []), 0)).toThrow(/already contains a frame/);
+			});
+		});
+
+		describe("removeFrame", () => {
+			it("removes the frame and keeps the order of the others", () => {
+				const situation = three();
+
+				const result = situation.removeFrame("f2");
+
+				expect(order(result)).toEqual(["f1", "f3"]);
+				expect(result.frames[0]).toBe(f1);
+				expect(order(situation)).toEqual(["f1", "f2", "f3"]);
+			});
+
+			it("returns the same situation for an unknown id", () => {
+				const situation = three();
+
+				expect(situation.removeFrame("missing")).toBe(situation);
+			});
+
+			it("refuses to remove the last remaining frame", () => {
+				const single = new Situation(props({ frames: [f1] }));
+
+				expect(() => single.removeFrame("f1")).toThrow(/last frame/);
+			});
+		});
+
+		describe("moveFrame", () => {
+			it.each([
+				["f1", 2, ["f2", "f3", "f1"]],
+				["f1", 1, ["f2", "f1", "f3"]],
+				["f3", 0, ["f3", "f1", "f2"]],
+				["f2", 0, ["f2", "f1", "f3"]],
+				["f2", 2, ["f1", "f3", "f2"]],
+			])("moves %s to index %i", (id, toIndex, expected) => {
+				expect(order(three().moveFrame(id, toIndex))).toEqual(expected);
+			});
+
+			it("clamps the target index", () => {
+				expect(order(three().moveFrame("f2", 99))).toEqual(["f1", "f3", "f2"]);
+				expect(order(three().moveFrame("f2", -3))).toEqual(["f2", "f1", "f3"]);
+			});
+
+			it("keeps the frame instances", () => {
+				const result = three().moveFrame("f1", 2);
+
+				expect(result.frames).toEqual([f2, f3, f1]);
+				expect(result.frames[2]).toBe(f1);
+			});
+
+			it("returns the same situation for the same position or an unknown id", () => {
+				const situation = three();
+
+				expect(situation.moveFrame("f2", 1)).toBe(situation);
+				expect(situation.moveFrame("missing", 0)).toBe(situation);
+			});
 		});
 	});
 

@@ -80,6 +80,9 @@ export class Frame {
 	}
 
 	withDescription(description: string): Frame {
+		if (description === this.description) {
+			return this;
+		}
 		return new Frame(this.id, description, this.elements);
 	}
 
