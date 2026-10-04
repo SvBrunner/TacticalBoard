@@ -6,6 +6,8 @@ export interface ProblemDetails {
 	readonly detail?: string;
 	/** Validation errors per field (problem type `validation-failed`). */
 	readonly errors?: Readonly<Record<string, readonly string[]>>;
+	/** Error-specific extension members, e.g. `currentRevision` of a save conflict. */
+	readonly [extension: string]: unknown;
 }
 
 /** The backend answered with an error (a Problem Details body, if it sent one). */
@@ -26,6 +28,13 @@ export class ApiError extends Error {
 	/** The first validation message for `field`, if any. */
 	fieldError(field: string): string | undefined {
 		return this.problem?.errors?.[field]?.[0];
+	}
+
+	/** All validation messages, as `field: message`. */
+	fieldErrors(): string[] {
+		return Object.entries(this.problem?.errors ?? {}).flatMap(([field, messages]) =>
+			messages.map((message) => `${field}: ${message}`),
+		);
 	}
 }
 
@@ -72,16 +81,19 @@ export class ApiClient {
 		return this.request<T>(path, { method: "GET" });
 	}
 
-	/** A state-changing request with a JSON body and the antiforgery header. */
-	async send<T>(method: MutatingMethod, path: string, body?: unknown): Promise<T> {
+	/**
+	 * A state-changing request with a JSON body and the antiforgery header,
+	 * plus optional extra `headers` (e.g. `If-Match`).
+	 */
+	async send<T>(method: MutatingMethod, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
 		try {
-			return await this.sendOnce<T>(method, path, body);
+			return await this.sendOnce<T>(method, path, body, headers);
 		} catch (error) {
 			if (!(error instanceof ApiError && error.type === ApiClient.INVALID_ANTIFORGERY_TOKEN)) {
 				throw error;
 			}
 			this.forgetAntiforgeryToken();
-			return this.sendOnce<T>(method, path, body);
+			return this.sendOnce<T>(method, path, body, headers);
 		}
 	}
 
@@ -104,9 +116,9 @@ export class ApiClient {
 		this.antiforgery = null;
 	}
 
-	private async sendOnce<T>(method: MutatingMethod, path: string, body: unknown): Promise<T> {
+	private async sendOnce<T>(method: MutatingMethod, path: string, body: unknown, extraHeaders: Record<string, string>): Promise<T> {
 		const { token, headerName } = await this.antiforgeryToken();
-		const headers: Record<string, string> = { [headerName]: token };
+		const headers: Record<string, string> = { ...extraHeaders, [headerName]: token };
 		const init: RequestInit = { method, headers };
 		if (body !== undefined) {
 			headers["Content-Type"] = "application/json";

@@ -66,9 +66,10 @@ describe("AuthSession", () => {
 		});
 
 		it("knows when the last login failed", () => {
-			expect(AuthSession.loginFailed("?login=failed")).toBe(true);
-			expect(AuthSession.loginFailed("?login=other")).toBe(false);
-			expect(AuthSession.loginFailed("")).toBe(false);
+			expect(AuthSession.loginNotice("?login=failed")).toBe("failed");
+			expect(AuthSession.loginNotice("?login=blocked")).toBe("blocked");
+			expect(AuthSession.loginNotice("?login=other")).toBeNull();
+			expect(AuthSession.loginNotice("")).toBeNull();
 		});
 
 		it("provides the antiforgery field for the logout form", async () => {

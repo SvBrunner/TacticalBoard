@@ -30,6 +30,7 @@ public sealed class UsersModule : IModule
         services.AddScoped<ICurrentUser>(provider => provider.GetRequiredService<CurrentUserState>());
         services.AddScoped<IUserAuthentication, UserAuthenticationService>();
         services.AddScoped<UserProfileService>();
+        services.AddScoped<IUserDirectory, UserDirectory>();
     }
 
     /// <inheritdoc />

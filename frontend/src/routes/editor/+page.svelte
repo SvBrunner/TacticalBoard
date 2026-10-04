@@ -42,6 +42,16 @@
 	import { SlideshowExporter } from "$lib/export/SlideshowExporter";
 	import { BrowserFileDownloader } from "$lib/files/FileDownloader";
 	import { WebFileShare } from "$lib/files/FileShare";
+	import { authSession } from "$lib/auth/AuthSession";
+	import SaveConflictDialog from "$lib/components/storage/SaveConflictDialog.svelte";
+	import SaveStatus from "$lib/components/storage/SaveStatus.svelte";
+	import SavedSituationInfo from "$lib/components/storage/SavedSituationInfo.svelte";
+	import { ChoicePrompt } from "$lib/dialogs/ChoicePrompt";
+	import { EditorRoute } from "$lib/editor/EditorRoute";
+	import { SaveShortcut } from "$lib/storage/SaveShortcut";
+	import { situationLink } from "$lib/storage/SituationLink";
+	import { SituationSaver, type ConflictChoice } from "$lib/storage/SituationSaver";
+	import { situationApi, situationSerializer } from "$lib/storage/situationStorage";
 
 	const elements = situationEditor.elements;
 	const situation = situationEditor.situation;
@@ -86,8 +96,32 @@
 	const workflow = new SituationWorkflow({
 		editor: situationEditor,
 		files: new SituationFileTransfer(),
+		link: situationLink,
 		confirm: (request) => prompt.request(request),
 		log: notifications,
+	});
+
+	// Saving on the server (logged in only): Save button, Ctrl/Cmd+S, the conflict question.
+	const sessionState = authSession.state;
+	const canSave = $derived($sessionState.status === "authenticated");
+	const linkState = situationLink.state;
+	const conflictPrompt = new ChoicePrompt<true, ConflictChoice>("cancel");
+	const conflictPending = conflictPrompt.pending;
+	const saver = new SituationSaver({
+		editor: situationEditor,
+		link: situationLink,
+		api: situationApi,
+		serializer: situationSerializer,
+		chooseOnConflict: () => conflictPrompt.request(true),
+		onSessionEnded: () => void authSession.refresh(),
+		// The URL names the saved situation, so a reload restores it.
+		onSaved: (saved) => void goto(EditorRoute.forSaved(saved.id), { replaceState: true, keepFocus: true, noScroll: true }),
+		log: notifications,
+	});
+	const saveState = saver.state;
+	const saveShortcut = new SaveShortcut({
+		save: handleSave,
+		canSave: () => authSession.current().status === "authenticated",
 	});
 	const frames = new FrameWorkflow({
 		editor: situationEditor,
@@ -157,7 +191,15 @@
 		exportAnimationOpen = true;
 	}
 
+	function handleSave() {
+		void saver.save();
+	}
+
 	function handleKeydown(event: KeyboardEvent) {
+		// Ctrl/Cmd+S saves from anywhere, text fields included (not inside modal dialogs).
+		if (saveShortcut.handle(event)) {
+			return;
+		}
 		// While a modal dialog is open, its keys belong to it.
 		if (isInsideModalDialog(event.target) || Konva.isDragging()) {
 			return;
@@ -227,6 +269,9 @@
 	function handleOpened() {
 		popover.close();
 		selection.clear();
+		// A save message belongs to the replaced situation; a new one has no saved URL.
+		saver.dismiss();
+		void goto(EditorRoute.PATH, { replaceState: true, keepFocus: true, noScroll: true });
 	}
 
 	onMount(() => {
@@ -258,7 +303,14 @@
 		canRedo={$history.canRedo && !playing}
 		onUndo={handleUndo}
 		onRedo={handleRedo}
-	/>
+		onSave={canSave ? handleSave : undefined}
+		loginReturnTo={$linkState.kind === "saved" ? EditorRoute.forSaved($linkState.summary.id) : "/"}
+		saving={$saveState.status === "saving"}
+	>
+		{#snippet status()}
+			<SaveStatus state={$saveState} onDismiss={() => saver.dismiss()} />
+		{/snippet}
+	</TopBar>
 
 	<div class="body">
 		<ToolPanel
@@ -315,6 +367,9 @@
 			onDescriptionChange={(description) => !player.isActive() && situationEditor.changeDescription(description)}
 			disabled={playing}
 		>
+			{#if $linkState.kind === "saved"}
+				<SavedSituationInfo summary={$linkState.summary} />
+			{/if}
 			<!-- Frame descriptions are not shown during playback. -->
 			{#if !playing}
 				<FrameDescriptionEditor
@@ -339,6 +394,8 @@
 </div>
 
 <SituationDialogs bind:this={dialogs} {workflow} {prompt} onOpened={handleOpened} />
+
+<SaveConflictDialog open={$conflictPending !== null} onChoose={(choice) => conflictPrompt.answer(choice)} />
 
 <ExportAnimationDialog open={exportAnimationOpen} flow={animationExport} onClose={() => (exportAnimationOpen = false)} />
 

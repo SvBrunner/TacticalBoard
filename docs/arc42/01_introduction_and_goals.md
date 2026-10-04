@@ -9,7 +9,7 @@ Delivery order: the board editor is the MVP and ships first, with local JSON exp
 *Situations (MVP)*
 - A situation is the single core unit. A "standard situation" (e.g. a free hit recorded once and recalled later) is not a separate concept; technically it is an ordinary situation.
 - Only floorball is supported for now. The data model stays sport-agnostic so other sports can be added later.
-- A situation has a title and a description. The title is optional: a new situation created with a blank title gets the default title "Untitled Situation" as its real title, and a blank title (e.g. from an imported file) is shown as that default. (Incrementing default titles — "Untitled Situation (2)", … — follows in Phase 2.)
+- A situation has a title and a description. The title is optional: a new situation created with a blank title gets the default title "Untitled Situation" as its real title, and a blank title (e.g. from an imported file) is shown as that default. When it is saved on the server, default titles are incremented within the area ("Untitled Situation (2)", …, see *Server-side storage*).
 - Situation and frame descriptions are Markdown source text.
 - A situation records when it was created and last updated (`createdAt`/`updatedAt`); both are part of the exported file. Every edit refreshes `updatedAt`.
 - A situation uses either the full field or half the field. This is chosen when the situation is created and applies to all its frames. The full field is shown in landscape; the half field in portrait, with its goal at the bottom. Which half is used doesn't matter to the user.
@@ -26,19 +26,22 @@ Delivery order: the board editor is the MVP and ships first, with local JSON exp
 - Pass, run, and shot arrows: drawn as straight arrows (start + end, by press-and-drag or by tapping start and end) and can afterwards be bent into a smooth curve through any number of bend points, which can be moved and removed again. The three types differ in line style (pass dashed, run wavy, shot thick); all have the same arrowhead at the end. Arrows are free (not attached to players), have no label, are always drawn below players and markers, and are copied into a new frame like every other element.
 - Undo/redo.
 - Export a situation as JSON, and import it again. Importing always creates a new situation (new situation ID, `createdAt`/`updatedAt` set to the import time; frame and element IDs are kept) and replaces the editor content.
-- The app opens on a start page offering "New situation" and "Import"; both lead into the editor. (Listing saved situations and teams there follows with storage in Phase 2.)
-- Unsaved changes (in the MVP: not exported since the last edit) are protected: starting a new situation, importing, or going back to the start page (the badge in the editor header) asks "Discard changes?" first, and leaving or reloading the page triggers the browser's warning.
+- The app opens on a start page offering "New situation" and "Import"; both lead into the editor. When logged in, the start page also lists the saved situations of the personal area (open, delete); listing teams follows with teams.
+- Both the start page and the editor have the app's navigation bar: the app badge (back to the start page), the page title, and the account corner ("Log in", or the user's menu).
+- Unsaved changes (in local mode: not exported since the last edit; for a situation saved on the server: not saved there since the last edit) are protected: starting a new situation, importing, or going back to the start page (the badge in the editor header) asks "Discard changes?" first, and leaving or reloading the page triggers the browser's warning.
 - Export a situation as an animated GIF (frames as a slideshow, looping), at a selectable resolution, with the playback frame duration; on phones also shareable through the native share sheet.
 - Fully usable by touch on phones and tablets, not only on desktop.
 
 *Accounts (after MVP)*
 - Login goes through any OpenID Connect Identity Provider. The system accepts every valid login from the configured IdP and creates a **normal user** on the first login; who may register is decided in the IdP, not in the app.
 - Without login the app stays usable locally, exactly as in the MVP: create, edit, JSON export/import, GIF export. Saving on the server needs a login.
-- The display name is taken from the IdP on the first login and can then be changed in the app. Later logins never overwrite it.
+- The display name is taken from the IdP on the first login and can then be changed in the app. Later logins never overwrite it. If the IdP sends no name at all (no `name`, `preferred_username` or `email`), the display name is "User".
+- A blocked user who logs in gets no session and sees "Account blocked." (any other failed login only shows "Login failed.").
+- After an account was deleted, the same IdP identity may log in again: it then gets a **new, empty** account (nothing of the deleted account comes back).
 - Deleting an account deletes everything that cannot exist without it: the personal area with its folders and situations, the team memberships and pending join requests. While the user is the **last Admin of a team that has other members**, the account can't be deleted; they have to make someone else Admin first (or delete the team). A team in which they are the only member is deleted with the account.
 
 *Server-side storage (after MVP)*
-- Save, load, edit, and delete situations on the server. Saving is explicit: a Save button and Ctrl+S (Cmd+S); there is no autosave.
+- Save, load, edit, and delete situations on the server. Saving is explicit: a Save button and Ctrl+S (Cmd+S); there is no autosave. Saved situations are opened from (and deleted in, after a confirmation) the start page's list.
 - Every user has a personal area for situations, in addition to the teams they belong to.
 - Both the personal area and teams group their situations into folders. Folders are flat (one level, no subfolders). A situation does not have to be in a folder; it can also sit at the top level of its area, and it can be moved between the folders (and the top level) of its area. Folder names are unique within an area. A folder that still contains situations can't be deleted.
 - A new or imported situation is saved where it was started: in the area and folder (or top level) from which "New situation" or "Import" was chosen. Started from the start page, it is saved at the top level of the personal area (without login it can only be exported, as in local mode).

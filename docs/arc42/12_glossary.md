@@ -16,7 +16,11 @@
 | Team | A group of users who share access to situations and folders, with per-member roles. Has a unique name, an optional logo and a team code. |
 | Area | Where saved situations live: a user's personal area or a team. Situation titles are unique within an area. |
 | Personal area | A user's own area for situations and folders; only the user can access it. |
-| Revision | One saved state of a situation on the server. Every save creates a new revision; the newest is the current one. |
+| Revision | One saved state of a situation on the server. Every save creates a new revision; the newest is the current one. Its number is the situation's ETag. |
+| Saved situation (server situation) | A situation saved on the server, in an area. For it, "saved" means saved on the server, not exported. Shown in the editor at `/editor?situation=<id>`. |
+| Save conflict | A save based on an older revision than the current one (someone else saved in between). The user chooses Overwrite, Save as copy or Cancel. |
+| Default title | "Untitled Situation": the title of a situation created with a blank title. Saved on the server, it is numbered within the area ("Untitled Situation (2)", …). |
+| Navbar | The app's navigation bar at the top of the start page and the editor: badge (link to the start page), page title, the page's tools, and the account corner (Log in / the user's menu). |
 | Soft delete | Deleting by marking an item as deleted instead of removing it from the database. |
 | Local mode | Using the app without login: editing plus JSON/GIF export and import, nothing stored on the server. |
 | Folder | Groups situations in a team or in a user's personal area. One level only, no subfolders. |

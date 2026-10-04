@@ -24,18 +24,21 @@ internal sealed class UserAuthenticationService(
 
         var identity = new ExternalIdentity(login.Issuer, login.Subject);
 
-        var existing = await users.FindByIdentityIncludingDeletedAsync(identity, cancellationToken);
+        var existing = await users.FindByIdentityAsync(identity, cancellationToken);
         if (existing is not null)
         {
             return await SignInExistingAsync(existing, cancellationToken);
         }
 
+        // No account (any more): a new, empty one, also after the identity's account was deleted.
+        // "First login" for the bootstrap (ch. 8.14) means: the identity never had an account.
+        var isFirstLogin = !await users.AnyAccountIncludingDeletedAsync(identity, cancellationToken);
         var user = User.Register(
             ids.NewId(),
             identity,
             DisplayName.FromIdentityProvider(login.Name, login.PreferredUsername, login.Email),
             clock.UtcNow);
-        await bootstrap.ApplyAsync(user, isFirstLogin: true, cancellationToken);
+        await bootstrap.ApplyAsync(user, isFirstLogin, cancellationToken);
         try
         {
             await users.AddAsync(user, cancellationToken);
@@ -44,7 +47,7 @@ internal sealed class UserAuthenticationService(
         catch (DuplicateUserIdentityException)
         {
             // A parallel first login of the same identity won; continue with its user.
-            var winner = await users.FindByIdentityIncludingDeletedAsync(identity, cancellationToken)
+            var winner = await users.FindByIdentityAsync(identity, cancellationToken)
                 ?? throw new InvalidOperationException("The user disappeared after a duplicate first login.");
             return await SignInExistingAsync(winner, cancellationToken);
         }
@@ -65,11 +68,6 @@ internal sealed class UserAuthenticationService(
 
     private async Task<UserSignInResult> SignInExistingAsync(User user, CancellationToken cancellationToken)
     {
-        if (user.IsDeleted)
-        {
-            return UserSignInResult.Rejected(SignInRejection.Deleted);
-        }
-
         if (user.IsBlocked)
         {
             return UserSignInResult.Rejected(SignInRejection.Blocked);

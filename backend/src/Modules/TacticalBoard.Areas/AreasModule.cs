@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using TacticalBoard.Areas.Application;
+using TacticalBoard.Areas.Contracts;
 using TacticalBoard.Infrastructure;
 using TacticalBoard.Infrastructure.Modularity;
 
@@ -18,6 +20,9 @@ public sealed class AreasModule : IModule
     public void RegisterServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddModelConfigurationFrom(typeof(AreasModule).Assembly);
+        services.AddScoped<IAreaAccessRule, PersonalAreaAccessRule>();
+        services.AddScoped<IAreaAccess, AreaAccess>();
+        services.AddScoped<IActorDirectory, ActorDirectory>();
     }
 
     /// <inheritdoc />

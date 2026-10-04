@@ -28,7 +28,7 @@ graph TB
 
 **Configuration** (environment variables): database connection, OIDC authority/client ID/client secret, the public base URL, the bootstrap system administrators (ch. 8.14), and a key store for the session/data-protection keys (a volume, so sessions survive a restart). The full list is below.
 
-The database schema is created and updated by EF Core migrations when the backend starts.
+The database schema is created and updated by EF Core migrations when the backend starts. Saving situations (Phase 2 step 3) added the tables `situations` and `situation_revisions` (migration `AddSituations`) and made the users' identity index partial (`AllowNewAccountAfterDeletion`); it needs no new configuration.
 
 ### Implementation
 

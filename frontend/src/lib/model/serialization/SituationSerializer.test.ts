@@ -136,4 +136,31 @@ describe("SituationSerializer", () => {
 		expect(caught).toBeInstanceOf(errorType);
 		expect(caught).toBeInstanceOf(SituationImportError);
 	});
+
+	describe("documents (the server's form)", () => {
+		it("turns a situation into the current-format document and back", () => {
+			const document = serializer.toDocument(situation);
+
+			expect(document).toMatchObject({ format: "tacticalboard.situation", formatVersion: 3 });
+			expect(document.situation.id).toBe("s");
+			expect(serializer.fromDocument(document)).toEqual(situation);
+		});
+
+		it("keeps the id and timestamps of a document (unlike an import)", () => {
+			const restored = serializer.fromDocument(fixture);
+
+			expect(restored.id).toBe("situation-3");
+			expect(restored.createdAt).toBe("2026-10-01T10:00:00.000Z");
+		});
+
+		it("migrates an older document", () => {
+			expect(serializer.fromDocument(fixtureV2).frames[0].elements.length).toBeGreaterThan(0);
+		});
+
+		it("rejects an invalid document", () => {
+			expect(() => serializer.fromDocument({ ...fixture, situation: { ...fixture.situation, frames: [] } })).toThrow(
+				InvalidSituationFileError,
+			);
+		});
+	});
 });

@@ -49,6 +49,15 @@ public class UsersModuleTests
     }
 
     [Fact]
+    public void Provides_the_user_directory_for_other_modules()
+    {
+        using var services = Build();
+        using var scope = services.CreateScope();
+
+        Assert.IsType<UserDirectory>(scope.ServiceProvider.GetRequiredService<IUserDirectory>());
+    }
+
+    [Fact]
     public void Reads_the_bootstrap_administrators()
     {
         using var services = Build(new() { ["Bootstrap:SystemAdministrators"] = TestUsers.Issuer + "|alice" });
@@ -69,6 +78,7 @@ public class UsersModuleTests
         var index = Assert.Single(entity.GetIndexes());
         Assert.True(index.IsUnique);
         Assert.Equal(UserConfiguration.IdentityIndexName, index.GetDatabaseName());
+        Assert.Equal("deleted_at IS NULL", index.GetFilter());
         Assert.Equal(["Issuer", "Subject"], index.Properties.Select(property => property.Name));
         Assert.Equal("display_name", entity.FindProperty(nameof(User.DisplayNameValue))!.GetColumnName());
         Assert.Equal(DisplayName.MaxLength, entity.FindProperty(nameof(User.DisplayNameValue))!.GetMaxLength());

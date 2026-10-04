@@ -1,15 +1,20 @@
 <!--
 @component
-The editor header: the app badge (a link back to the start page), situation
-title, undo/redo, new/load, the export choice and theme toggle. On phones
-the buttons become icon-only; their text stays as accessible name.
+The editor header: the shared app navbar (`AppNavbar`: the badge as a link
+back to the start page, the situation title, the account corner) with the
+editor's tools: undo/redo, Save (only when saving on the server is possible, i.e.
+logged in), new/load, the export choice and theme toggle. On phones the
+buttons become icon-only; their text stays as accessible name. `status` is
+rendered at the end of the header (e.g. save feedback hanging below it).
 
 Export is a disclosure button with two choices below it: "Situation file
 (JSON)" and "Animated GIF". The choices close again after a choice, with
 Escape (focus back on Export), or when focus or a press goes elsewhere.
 -->
 <script lang="ts">
+	import type { Snippet } from "svelte";
 	import { theme, toggleTheme } from "$lib/theme";
+	import AppNavbar from "$lib/components/navigation/AppNavbar.svelte";
 	import { notifications } from "$lib/debug/Notifications";
 
 	interface Props {
@@ -27,10 +32,32 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 		canRedo: boolean;
 		onUndo: () => void;
 		onRedo: () => void;
+		/** Save on the server; without it (not logged in) there is no Save button. */
+		onSave?: () => void;
+		/** A save is running: the Save button is disabled and says "Saving…". */
+		saving?: boolean;
+		/** Extra content at the end of the header (e.g. save feedback). */
+		status?: Snippet;
+		/** Where a login started from the navbar returns to. */
+		loginReturnTo?: string;
 	}
 
-	let { title, onHome, onNew, onExportJson, onExportAnimation, onLoadFile, canUndo, canRedo, onUndo, onRedo }: Props =
-		$props();
+	let {
+		title,
+		onHome,
+		onNew,
+		onExportJson,
+		onExportAnimation,
+		onLoadFile,
+		canUndo,
+		canRedo,
+		onUndo,
+		onRedo,
+		onSave,
+		saving = false,
+		status,
+		loginReturnTo = "/",
+	}: Props = $props();
 
 	const uid = $props.id();
 	let fileInput: HTMLInputElement;
@@ -88,16 +115,6 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 		if (canRedo) onRedo();
 	}
 
-	// A real link (works without the handler, e.g. opened in a new tab); a
-	// plain activation goes through `onHome`, which asks about unsaved changes.
-	function handleHome(event: MouseEvent) {
-		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-			return;
-		}
-		event.preventDefault();
-		onHome();
-	}
-
 	function openFilePicker() {
 		notifications.notify("Opening file picker…");
 		fileInput.click();
@@ -115,17 +132,9 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 
 <svelte:window onpointerdown={handleWindowPointerDown} />
 
-<header class="topbar">
-	<a class="badge" href="/" aria-label="Start page" title="Start page" onclick={handleHome}>
-		<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--accent-contrast)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-			<circle cx="12" cy="12" r="9" />
-			<path d="M12 3v18M3 12h18" />
-		</svg>
-	</a>
-
-	<h1 class="title">{title}</h1>
-
-	<div class="actions">
+<AppNavbar {title} {onHome} {loginReturnTo} {status}>
+	{#snippet actions()}
+		<div class="tools">
 		<div class="history" role="group" aria-label="History">
 			<button type="button" class="btn icon" onclick={handleUndo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -142,6 +151,16 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 		</div>
 
 		<div class="divider" aria-hidden="true"></div>
+
+		{#if onSave}
+			<button type="button" class="btn ghost" title="Save (Ctrl+S)" disabled={saving} onclick={() => !saving && onSave()}>
+				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+					<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" />
+					<path d="M8 3v5h7V3M8 21v-7h8v7" />
+				</svg>
+				<span class="label">{saving ? "Saving…" : "Save"}</span>
+			</button>
+		{/if}
 
 		<button type="button" class="btn ghost" title="New situation" onclick={onNew}>
 			<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -202,61 +221,11 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 			{/if}
 		</button>
 	</div>
-</header>
+	{/snippet}
+</AppNavbar>
 
 <style>
-	.topbar {
-		height: 64px;
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		gap: 16px;
-		padding: 0 20px;
-		padding-left: calc(20px + env(safe-area-inset-left, 0px));
-		padding-right: calc(20px + env(safe-area-inset-right, 0px));
-		background: var(--bg-surface);
-		position: relative;
-		z-index: 2;
-		box-shadow:
-			0 1px 0 var(--border),
-			0 6px 16px -10px oklch(20% 0.02 260 / 0.35);
-	}
-
-	/* The visible badge stays 34 px; the link's hit area is the 44 px touch target around it. */
-	.badge {
-		width: var(--touch-target);
-		height: var(--touch-target);
-		margin: -5px;
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		background: var(--accent);
-		background-clip: content-box;
-		padding: 5px;
-		box-sizing: border-box;
-	}
-
-	.badge:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-	}
-
-	.title {
-		flex: 1;
-		min-width: 0;
-		margin: 0;
-		font-size: 15px;
-		font-weight: 600;
-		line-height: 1.2;
-		color: var(--text);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.actions {
+	.tools {
 		display: flex;
 		align-items: center;
 		gap: 16px;
@@ -366,36 +335,14 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 	}
 
 	@media (max-width: 1023px) {
-		.topbar,
-		.actions {
+		.tools {
 			gap: 8px;
-		}
-
-		.topbar {
-			padding-left: calc(16px + env(safe-area-inset-left, 0px));
-			padding-right: calc(16px + env(safe-area-inset-right, 0px));
 		}
 	}
 
 	/* Phones: compact header, icon-only buttons (the label stays the accessible name). */
 	@media (max-width: 599px), (max-height: 499px) {
-		.topbar {
-			height: 48px;
-			gap: 8px;
-			padding-left: calc(8px + env(safe-area-inset-left, 0px));
-			padding-right: calc(8px + env(safe-area-inset-right, 0px));
-		}
-
-		.badge {
-			padding: 8px;
-			margin: -8px -2px;
-		}
-
-		.title {
-			font-size: 14px;
-		}
-
-		.actions,
+		.tools,
 		.history {
 			gap: 4px;
 		}

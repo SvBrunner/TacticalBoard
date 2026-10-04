@@ -34,6 +34,20 @@ interface EditorState {
 	readonly dirty: boolean;
 }
 
+/** What the server decided when a situation was saved: its identity, title and timestamps (arc42 ch. 8.15). */
+export interface SavedIdentity {
+	readonly id: string;
+	readonly title: string;
+	readonly createdAt: string;
+	readonly updatedAt: string;
+}
+
+/** The state a save was started from: the situation sent and the editor's change count then. */
+export interface SaveBasis {
+	readonly situation: Situation;
+	readonly changeCount: number;
+}
+
 /** What the user chooses when creating a new situation. */
 export interface NewSituationInput {
 	readonly title: string;
@@ -73,6 +87,8 @@ export class SituationEditor {
 	readonly hasUnsavedChanges: Readable<boolean>;
 
 	private situationOpened: boolean;
+	/** Counts the edits that made the situation dirty, so a finished save knows whether more edits followed. */
+	private changes = 0;
 
 	/**
 	 * Without an `initial` situation the editor starts with a blank
@@ -119,6 +135,30 @@ export class SituationEditor {
 	/** Records that the current state has been saved (in the MVP: exported). */
 	markSaved(): void {
 		this.state.update((state) => (state.dirty ? { ...state, dirty: false } : state));
+	}
+
+	/** How many edits there have been; compare two counts to see whether the situation changed in between. */
+	changeCount(): number {
+		return this.changes;
+	}
+
+	/**
+	 * Takes over what the server decided when it saved `basis.situation`
+	 * (id, title, timestamps) without touching the frames or the undo
+	 * histories. Without edits since the save started, the situation is
+	 * clean afterwards; otherwise it stays dirty and keeps the newer edits
+	 * (a title typed meanwhile wins over the saved one).
+	 */
+	acknowledgeSave(saved: SavedIdentity, basis: SaveBasis): void {
+		const state = get(this.state);
+		const editedSince = this.changes !== basis.changeCount;
+		const current = state.situation;
+		const title = current.title === basis.situation.title ? saved.title : current.title;
+		const situation = current
+			.withId(saved.id)
+			.withTitle(title)
+			.withTimestamps(saved.createdAt, editedSince ? current.updatedAt : saved.updatedAt);
+		this.state.set({ ...state, situation, dirty: editedSince ? state.dirty : false });
 	}
 
 	/**
@@ -371,6 +411,7 @@ export class SituationEditor {
 		if (changed === state.situation) {
 			return;
 		}
+		this.changes++;
 		this.state.set({ ...state, situation: changed.withUpdatedAt(this.clock.now().toISOString()), dirty: true });
 	}
 
@@ -387,6 +428,7 @@ export class SituationEditor {
 			return;
 		}
 		const nextActive = activeFrameId ?? state.activeFrameId;
+		this.changes++;
 		this.state.set({
 			situation: changed.withUpdatedAt(this.clock.now().toISOString()),
 			activeFrameId: changed.findFrame(nextActive) ? nextActive : changed.frames[0].id,

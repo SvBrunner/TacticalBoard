@@ -64,6 +64,36 @@ describe("TopBar", () => {
 		});
 	});
 
+	describe("Save", () => {
+		it("is not offered without onSave (not logged in)", () => {
+			render(TopBar, { props: props() });
+
+			expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+		});
+
+		it("saves with a click and explains the shortcut", async () => {
+			const onSave = vi.fn();
+			render(TopBar, { props: props({ onSave }) });
+
+			const save = screen.getByRole("button", { name: "Save" });
+			expect(save).toHaveAttribute("title", "Save (Ctrl+S)");
+			await fireEvent.click(save);
+
+			expect(onSave).toHaveBeenCalledOnce();
+		});
+
+		it("is disabled and says Saving… while a save runs", async () => {
+			const onSave = vi.fn();
+			render(TopBar, { props: props({ onSave, saving: true }) });
+
+			const save = screen.getByRole("button", { name: "Saving…" });
+			expect(save).toBeDisabled();
+			await fireEvent.click(save);
+
+			expect(onSave).not.toHaveBeenCalled();
+		});
+	});
+
 	it("clicking New calls onNew only", async () => {
 		const onNew = vi.fn();
 		const onLoadFile = vi.fn();

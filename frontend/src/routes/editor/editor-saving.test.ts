@@ -1,0 +1,298 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { cleanup, render, screen, fireEvent, within } from "@testing-library/svelte";
+import { tick } from "svelte";
+import { goto } from "$app/navigation";
+import { authSession } from "$lib/auth/AuthSession";
+import { situationEditor } from "$lib/editor/SituationEditor";
+import { SituationApi, type SituationSummary } from "$lib/storage/SituationApi";
+import { situationLink } from "$lib/storage/SituationLink";
+import { SavedSituationFormat } from "$lib/storage/SavedSituationFormat";
+import { installDialogPolyfill } from "$lib/testing/dialogPolyfill";
+import { installFakeCanvasContext } from "$lib/testing/fakeCanvasContext";
+import { FakeResizeObserver } from "$lib/testing/FakeResizeObserver";
+import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse, type RecordedRequest } from "$lib/testing/fakeFetch";
+import { summaryOf } from "$lib/testing/storageFakes";
+import EditorPage from "./+page.svelte";
+
+vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
+
+async function settle() {
+	for (let i = 0; i < 10; i++) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	await tick();
+}
+
+/** What the backend answers to a save: the sent document with the server-owned values stamped in. */
+function echo(request: RecordedRequest, status: number, overrides: Partial<SituationSummary> = {}): Response {
+	const { document } = JSON.parse(request.body!) as { document: { situation: Record<string, unknown> } };
+	const summary = summaryOf({
+		title: String(document.situation.title).trim(),
+		fieldType: String(document.situation.fieldType),
+		createdBy: { id: "u1", displayName: "Alice" },
+		updatedBy: { id: "u1", displayName: "Alice" },
+		...overrides,
+	});
+	return jsonResponse(status, {
+		...summary,
+		document: {
+			...document,
+			situation: { ...document.situation, id: summary.id, title: summary.title, createdAt: summary.createdAt, updatedAt: summary.updatedAt },
+		},
+	});
+}
+
+describe("editor page: saving on the server", () => {
+	let restoreDialog: () => void;
+	let restoreCanvas: () => void;
+	let server: FakeFetch;
+
+	async function logIn() {
+		server.on("GET", "/api/me", jsonResponse(200, { id: "u1", displayName: "Alice", isSystemAdministrator: false }));
+		await authSession.refresh();
+	}
+
+	const saveButton = () => screen.getByRole("button", { name: "Save" });
+	const posts = () => server.requestsTo(SituationApi.PERSONAL_AREA_PATH).filter((request) => request.method === "POST");
+
+	beforeEach(() => {
+		restoreDialog = installDialogPolyfill();
+		restoreCanvas = installFakeCanvasContext();
+		FakeResizeObserver.reset();
+		vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+		vi.mocked(goto).mockClear();
+		server = new FakeFetch()
+			.on("GET", "/api/antiforgery", jsonResponse(200, ANTIFORGERY))
+			.on("POST", SituationApi.PERSONAL_AREA_PATH, (request) => echo(request, 201, { id: "s1", revision: 1 }));
+		vi.stubGlobal("fetch", server.fetch);
+		situationEditor.createNew({ title: "Breakout", fieldType: "full" });
+		situationLink.startNew();
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.unstubAllGlobals();
+		restoreCanvas();
+		restoreDialog();
+		situationLink.reset();
+	});
+
+	describe("not logged in", () => {
+		beforeEach(async () => {
+			server.on("GET", "/api/me", problemResponse(401, {}));
+			await authSession.refresh();
+		});
+
+		it("offers no Save button", () => {
+			render(EditorPage);
+
+			expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+		});
+
+		it("leaves Ctrl+S to the browser", async () => {
+			render(EditorPage);
+
+			const notPrevented = await fireEvent.keyDown(document.body, { key: "s", ctrlKey: true });
+
+			expect(notPrevented).toBe(true);
+			expect(posts()).toHaveLength(0);
+		});
+	});
+
+	describe("logged in", () => {
+		beforeEach(logIn);
+
+		it("has the account menu in the shared navbar", () => {
+			render(EditorPage);
+
+			const account = within(screen.getByRole("banner")).getByRole("navigation", { name: "Account" });
+			expect(within(account).getByRole("button", { name: "Alice" })).toBeInTheDocument();
+		});
+
+		it("a login from the editor of a saved situation returns to it", async () => {
+			situationLink.attach(summaryOf({ id: "s1" }));
+			server.on("GET", "/api/me", problemResponse(401, {}));
+			await authSession.refresh();
+			render(EditorPage);
+
+			expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/auth/login?returnUrl=%2Feditor%3Fsituation%3Ds1");
+		});
+
+		it("the first save creates the situation and shows the server's state", async () => {
+			situationEditor.addElement(100, 100, "red", "Player");
+			render(EditorPage);
+
+			await fireEvent.click(saveButton());
+			await settle();
+
+			expect(JSON.parse(posts()[0].body!)).toMatchObject({ origin: "new", document: { situation: { title: "Breakout" } } });
+			expect(situationEditor.current().id).toBe("s1");
+			expect(situationEditor.isDirty()).toBe(false);
+			expect(goto).toHaveBeenCalledWith("/editor?situation=s1", { replaceState: true, keepFocus: true, noScroll: true });
+		});
+
+		it("an imported situation is saved as imported", async () => {
+			situationLink.startImported();
+			render(EditorPage);
+
+			await fireEvent.click(saveButton());
+			await settle();
+
+			expect(JSON.parse(posts()[0].body!).origin).toBe("imported");
+		});
+
+		it("shows who created and changed a saved situation in the details panel", async () => {
+			render(EditorPage);
+
+			await fireEvent.click(saveButton());
+			await settle();
+
+			const info = within(screen.getByRole("complementary", { name: "Details" })).getAllByRole("definition");
+			expect(info[0]).toHaveTextContent(`by Alice, ${SavedSituationFormat.dateTime("2026-10-04T08:00:00.000Z")}`);
+			expect(info[1]).toHaveTextContent("by Alice,");
+		});
+
+		it("Ctrl+S saves, also from a text field, and prevents the browser's Save page", async () => {
+			render(EditorPage);
+
+			const notPrevented = await fireEvent.keyDown(screen.getByRole("textbox", { name: "Title" }), { key: "s", ctrlKey: true });
+			await settle();
+
+			expect(notPrevented).toBe(false);
+			expect(posts()).toHaveLength(1);
+		});
+
+		it("Cmd+S saves too", async () => {
+			render(EditorPage);
+
+			await fireEvent.keyDown(document.body, { key: "s", metaKey: true });
+			await settle();
+
+			expect(posts()).toHaveLength(1);
+		});
+
+		it("a later save updates with If-Match of the known revision", async () => {
+			server.on("PUT", "/api/situations/s1", (request) => echo(request, 200, { id: "s1", revision: 2 }));
+			render(EditorPage);
+			await fireEvent.click(saveButton());
+			await settle();
+			situationEditor.addElement(5, 5, "red", "Player");
+
+			await fireEvent.click(saveButton());
+			await settle();
+
+			const [update] = server.requestsTo("/api/situations/s1");
+			expect(update.method).toBe("PUT");
+			expect(update.headers["If-Match"]).toBe('"1"');
+			expect(situationLink.saved()?.revision).toBe(2);
+			expect(situationEditor.isDirty()).toBe(false);
+		});
+
+		it("shows a taken title as an error in the editor", async () => {
+			server.on("POST", SituationApi.PERSONAL_AREA_PATH, problemResponse(409, { type: SituationApi.DUPLICATE_TITLE }));
+			situationEditor.addElement(5, 5, "red", "Player");
+			render(EditorPage);
+
+			await fireEvent.click(saveButton());
+			await settle();
+
+			const alert = within(screen.getByRole("banner")).getByRole("alert");
+			expect(alert).toHaveTextContent('A situation titled "Breakout" already exists. Choose another title and save again.');
+			expect(situationEditor.isDirty()).toBe(true);
+
+			await fireEvent.click(within(alert).getByRole("button", { name: "Dismiss" }));
+			expect(screen.queryByRole("alert")).toBeNull();
+		});
+
+		describe("when someone else saved in the meantime", () => {
+			beforeEach(async () => {
+				situationLink.attach(summaryOf({ id: "s1", revision: 1, title: "Breakout" }));
+				server.on("PUT", "/api/situations/s1", (request) =>
+					request.headers["If-Match"] === '"1"'
+						? problemResponse(412, { type: SituationApi.SAVE_CONFLICT, currentRevision: 4 })
+						: echo(request, 200, { id: "s1", revision: 5 }),
+				);
+			});
+
+			async function saveIntoConflict() {
+				render(EditorPage);
+				await fireEvent.click(saveButton());
+				await settle();
+				return screen.getByRole("alertdialog", { name: "Saved by someone else" });
+			}
+
+			it("Overwrite saves on top of the newest revision", async () => {
+				const dialog = await saveIntoConflict();
+
+				await fireEvent.click(within(dialog).getByRole("button", { name: "Overwrite" }));
+				await settle();
+
+				expect(server.requestsTo("/api/situations/s1").map((request) => request.headers["If-Match"])).toEqual(['"1"', '"4"']);
+				expect(situationLink.saved()?.revision).toBe(5);
+				expect(dialog).not.toHaveAttribute("open");
+			});
+
+			it("Save as copy creates a new situation and continues with it", async () => {
+				server.on("POST", SituationApi.PERSONAL_AREA_PATH, (request) => echo(request, 201, { id: "s2", title: "Breakout (2)" }));
+				const dialog = await saveIntoConflict();
+
+				await fireEvent.click(within(dialog).getByRole("button", { name: "Save as copy" }));
+				await settle();
+
+				expect(JSON.parse(posts()[0].body!).origin).toBe("copy");
+				expect(situationEditor.current()).toMatchObject({ id: "s2", title: "Breakout (2)" });
+				expect(goto).toHaveBeenCalledWith("/editor?situation=s2", expect.anything());
+			});
+
+			it("Cancel keeps the situation unsaved", async () => {
+				situationEditor.addElement(5, 5, "red", "Player");
+				const dialog = await saveIntoConflict();
+
+				await fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+				await settle();
+
+				expect(server.requestsTo("/api/situations/s1")).toHaveLength(1);
+				expect(situationEditor.isDirty()).toBe(true);
+			});
+		});
+
+		it("disables Save while saving", async () => {
+			let release: (response: Response) => void = () => undefined;
+			server.on("POST", SituationApi.PERSONAL_AREA_PATH, () => new Promise<Response>((resolve) => (release = resolve)));
+			render(EditorPage);
+
+			await fireEvent.click(saveButton());
+			await settle();
+
+			expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+			release(problemResponse(500, {}));
+			await settle();
+			expect(saveButton()).toBeEnabled();
+		});
+
+		it("exporting a saved situation doesn't count as saving it", async () => {
+			situationLink.attach(summaryOf({ id: "s1" }));
+			situationEditor.addElement(5, 5, "red", "Player");
+			vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => undefined }));
+			render(EditorPage);
+
+			await fireEvent.click(screen.getByRole("button", { name: "Export" }));
+			await fireEvent.click(screen.getByRole("button", { name: "Situation file (JSON)" }));
+
+			expect(situationEditor.isDirty()).toBe(true);
+		});
+
+		it("starting a new situation drops the saved situation from the URL", async () => {
+			situationLink.attach(summaryOf({ id: "s1" }));
+			render(EditorPage);
+
+			await fireEvent.click(screen.getByRole("button", { name: "New" }));
+			await settle();
+			await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+			await settle();
+
+			expect(goto).toHaveBeenCalledWith("/editor", { replaceState: true, keepFocus: true, noScroll: true });
+			expect(situationLink.saved()).toBeNull();
+		});
+	});
+});

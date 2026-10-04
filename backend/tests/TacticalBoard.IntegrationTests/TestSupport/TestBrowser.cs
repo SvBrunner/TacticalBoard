@@ -65,6 +65,33 @@ internal sealed class TestBrowser(HttpClient client, FakeIdentityProvider identi
         return await Client.SendAsync(request, Cancellation);
     }
 
+    /// <summary>A JSON request with the antiforgery header if <paramref name="antiforgeryToken"/> is given, and optional extra headers (e.g. <c>If-Match</c>).</summary>
+    public async Task<HttpResponseMessage> SendJsonAsync(
+        HttpMethod method,
+        string path,
+        object? body,
+        string? antiforgeryToken,
+        IReadOnlyDictionary<string, string>? headers = null)
+    {
+        using var request = new HttpRequestMessage(method, new Uri(path, UriKind.Relative));
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        if (antiforgeryToken is not null)
+        {
+            request.Headers.Add("X-CSRF-TOKEN", antiforgeryToken);
+        }
+
+        foreach (var (name, value) in headers ?? new Dictionary<string, string>())
+        {
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        return await Client.SendAsync(request, Cancellation);
+    }
+
     /// <summary><c>POST /auth/logout</c> as the logout form does it (form field), if <paramref name="antiforgeryToken"/> is given.</summary>
     public async Task<HttpResponseMessage> LogoutAsync(string? antiforgeryToken)
     {

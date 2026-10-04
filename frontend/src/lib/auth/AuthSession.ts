@@ -23,6 +23,12 @@ export type SessionState =
 /** The result of changing the display name: the updated user, or a message to show. */
 export type DisplayNameChange = { readonly ok: true; readonly user: CurrentUser } | { readonly ok: false; readonly message: string };
 
+/**
+ * Why the last login gave no session, as the backend reports it on the start
+ * page (`?login=failed` / `?login=blocked`, arc42 ch. 8.13).
+ */
+export type LoginNotice = "failed" | "blocked";
+
 /** A hidden form field (the antiforgery token for the logout form). */
 export interface FormField {
 	readonly name: string;
@@ -74,9 +80,10 @@ export class AuthSession {
 		return `${AuthSession.LOGIN_PATH}?returnUrl=${encodeURIComponent(target)}`;
 	}
 
-	/** Whether the page was opened after a failed login (`?login=failed`). */
-	static loginFailed(search: string): boolean {
-		return new URLSearchParams(search).get(AuthSession.LOGIN_FAILED_PARAMETER) === "failed";
+	/** Why the last login failed, if the page was opened after one (`?login=failed` or `?login=blocked`). */
+	static loginNotice(search: string): LoginNotice | null {
+		const value = new URLSearchParams(search).get(AuthSession.LOGIN_FAILED_PARAMETER);
+		return value === "failed" || value === "blocked" ? value : null;
 	}
 
 	/** The antiforgery field the logout form (a plain POST to `/auth/logout`) has to carry. */

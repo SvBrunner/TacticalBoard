@@ -8,8 +8,8 @@ public interface IUserAuthentication
 {
     /// <summary>
     /// Signs in the identity of <paramref name="login"/>: finds its user or creates it on the
-    /// first login (just in time), applies the bootstrap of system administrators (ch. 8.14),
-    /// and rejects blocked or deleted users.
+    /// first login (just in time; after a deleted account a new, empty one), applies the
+    /// bootstrap of system administrators (ch. 8.14), and rejects blocked users.
     /// </summary>
     Task<UserSignInResult> SignInAsync(ExternalLogin login, CancellationToken cancellationToken);
 

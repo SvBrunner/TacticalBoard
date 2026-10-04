@@ -1,36 +1,91 @@
 <!--
 @component
 Start page (overview): start a new situation or import one from a file;
-either opens the editor. The header has the account corner (log in / the
-user's menu). The "Saved situations" section is where the list of saved
-situations and teams goes once there is storage (Phase 2).
+either opens the editor. On top the shared app navbar (`AppNavbar`) with the
+account corner (log in / the user's menu). "Saved situations" lists the personal area's saved situations
+when logged in (open, delete); otherwise it explains why there are none.
+Teams follow later (Phase 2).
 -->
 <script lang="ts">
 	import { goto } from "$app/navigation";
-	import { AuthSession } from "$lib/auth/AuthSession";
-	import AccountArea from "$lib/components/account/AccountArea.svelte";
+	import { AuthSession, authSession } from "$lib/auth/AuthSession";
+	import AppNavbar from "$lib/components/navigation/AppNavbar.svelte";
 	import SituationDialogs from "$lib/components/dialogs/SituationDialogs.svelte";
+	import SavedSituations from "$lib/components/storage/SavedSituations.svelte";
 	import { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
+	import { EditorRoute } from "$lib/editor/EditorRoute";
 	import { situationEditor } from "$lib/editor/SituationEditor";
 	import { SituationFileTransfer } from "$lib/editor/SituationFileTransfer";
 	import { SituationWorkflow } from "$lib/editor/SituationWorkflow";
 	import { notifications } from "$lib/debug/Notifications";
+	import { SavedSituationList } from "$lib/storage/SavedSituationList";
+	import type { SituationSummary } from "$lib/storage/SituationApi";
+	import { situationLink } from "$lib/storage/SituationLink";
+	import { situationApi, situationOpener } from "$lib/storage/situationStorage";
 
 	const prompt = new ConfirmationPrompt();
 	const workflow = new SituationWorkflow({
 		editor: situationEditor,
 		files: new SituationFileTransfer(),
+		link: situationLink,
 		confirm: (request) => prompt.request(request),
 		log: notifications,
 	});
 
-	const loginFailed = AuthSession.loginFailed(window.location.search);
+	const loginNotice = AuthSession.loginNotice(window.location.search);
+
+	const sessionState = authSession.state;
+	const savedList = new SavedSituationList({
+		api: situationApi,
+		onSessionEnded: () => void authSession.refresh(),
+		log: notifications,
+	});
+	const savedState = savedList.state;
+	let opening = $state(false);
+	let openError: string | null = $state(null);
+
+	// The list belongs to the logged-in user: (re)load it whenever the login state says so.
+	$effect(() => {
+		if ($sessionState.status === "authenticated") {
+			void savedList.load();
+		}
+	});
 
 	let dialogs: SituationDialogs;
 	let fileInput: HTMLInputElement;
 
 	function openEditor() {
 		void goto("/editor");
+	}
+
+	/** Opens a saved situation in the editor ("Discard changes?" first if needed, as for an import). */
+	async function openSaved(situation: SituationSummary) {
+		opening = true;
+		openError = null;
+		try {
+			const outcome = await situationOpener.open(situation.id, () => workflow.confirmDiscardIfDirty());
+			if (outcome.status === "opened") {
+				await goto(EditorRoute.forSaved(situation.id));
+			} else if (outcome.status === "failed") {
+				openError = `"${situation.title}" couldn't be opened. ${outcome.message}`;
+				void savedList.load();
+			}
+		} finally {
+			opening = false;
+		}
+	}
+
+	async function deleteSaved(situation: SituationSummary) {
+		openError = null;
+		const confirmed = await prompt.request({
+			title: "Delete situation?",
+			message: `“${situation.title}” will be deleted.`,
+			confirmLabel: "Delete",
+			cancelLabel: "Cancel",
+		});
+		if (confirmed) {
+			await savedList.delete(situation);
+		}
 	}
 
 	function handleFileChange(event: Event) {
@@ -48,18 +103,9 @@ situations and teams goes once there is storage (Phase 2).
 	<meta name="description" content="Tactics board for floorball situations." />
 </svelte:head>
 
-<main class="start">
-	<header class="masthead">
-		<div class="badge" aria-hidden="true">
-			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-contrast)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-				<circle cx="12" cy="12" r="9" />
-				<path d="M12 3v18M3 12h18" />
-			</svg>
-		</div>
-		<h1 class="app-title">Tactical Board</h1>
-		<AccountArea returnTo="/" {loginFailed} />
-	</header>
+<AppNavbar title="Tactical Board" home loginReturnTo="/" {loginNotice} />
 
+<main class="start">
 	<section class="panel" aria-labelledby="start-heading">
 		<h2 id="start-heading" class="panel-title">Start</h2>
 		<ul class="actions">
@@ -92,7 +138,17 @@ situations and teams goes once there is storage (Phase 2).
 
 	<section class="panel" aria-labelledby="saved-heading">
 		<h2 id="saved-heading" class="panel-title">Saved situations</h2>
-		<p class="empty-state">Saved situations will appear here once storage is available.</p>
+		{#if openError}
+			<p class="open-error" role="alert">{openError}</p>
+		{/if}
+		<SavedSituations
+			session={$sessionState}
+			list={$savedState}
+			busy={opening}
+			onOpen={openSaved}
+			onDelete={deleteSaved}
+			onRetry={() => void savedList.load()}
+		/>
 	</section>
 </main>
 
@@ -102,38 +158,13 @@ situations and teams goes once there is storage (Phase 2).
 	.start {
 		width: min(720px, 100%);
 		margin: 0 auto;
-		padding: 48px 24px;
-		padding-top: calc(48px + env(safe-area-inset-top, 0px));
+		padding: 32px 24px;
 		padding-left: calc(24px + env(safe-area-inset-left, 0px));
 		padding-right: calc(24px + env(safe-area-inset-right, 0px));
 		padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
 		display: flex;
 		flex-direction: column;
 		gap: 24px;
-	}
-
-	.masthead {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 16px;
-	}
-
-	.badge {
-		width: 48px;
-		height: 48px;
-		border-radius: var(--radius-md);
-		background: var(--accent);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-	}
-
-	.app-title {
-		margin: 0;
-		font-size: 28px;
-		font-weight: 700;
 	}
 
 	.panel {
@@ -195,24 +226,21 @@ situations and teams goes once there is storage (Phase 2).
 		display: none;
 	}
 
-	.empty-state {
+	.open-error {
 		margin: 0;
 		font-size: 14px;
 		line-height: 1.5;
-		color: var(--text-muted);
+		color: var(--danger);
 	}
 
 	@media (max-width: 599px) {
 		.start {
-			padding-top: calc(24px + env(safe-area-inset-top, 0px));
+			padding-top: 16px;
 			padding-left: calc(16px + env(safe-area-inset-left, 0px));
 			padding-right: calc(16px + env(safe-area-inset-right, 0px));
 			gap: 16px;
 		}
 
-		.app-title {
-			font-size: 22px;
-		}
 
 		.panel {
 			padding: 16px;

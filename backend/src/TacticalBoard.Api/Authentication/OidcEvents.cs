@@ -7,8 +7,9 @@ namespace TacticalBoard.Api.Authentication;
 
 /// <summary>
 /// The login's hooks into the OIDC handler: public redirect URIs, mapping the IdP login to a
-/// local user (just in time, rejecting blocked and deleted users), a session principal that holds
-/// only the local user id, and a quiet redirect instead of an error page when a login fails.
+/// local user (just in time, rejecting blocked users), a session principal that holds only the
+/// local user id, and a quiet redirect instead of an error page when a login fails
+/// (<c>/?login=blocked</c> for a blocked user, otherwise <c>/?login=failed</c> without a reason).
 /// </summary>
 public sealed partial class OidcEvents(IUserAuthentication users, PublicUrls publicUrls, ILogger<OidcEvents> logger)
     : OpenIdConnectEvents
@@ -47,7 +48,7 @@ public sealed partial class OidcEvents(IUserAuthentication users, PublicUrls pub
         if (login is null)
         {
             LogLoginWithoutIdentity(logger);
-            RedirectToLoginFailed(context);
+            Redirect(context, AuthPaths.LoginFailedRedirect);
             return;
         }
 
@@ -55,7 +56,7 @@ public sealed partial class OidcEvents(IUserAuthentication users, PublicUrls pub
         if (!result.Succeeded)
         {
             LogLoginRejected(logger, login.Issuer, login.Subject, result.Rejection!.Value);
-            RedirectToLoginFailed(context);
+            Redirect(context, result.Rejection == SignInRejection.Blocked ? AuthPaths.LoginBlockedRedirect : AuthPaths.LoginFailedRedirect);
             return;
         }
 
@@ -85,9 +86,9 @@ public sealed partial class OidcEvents(IUserAuthentication users, PublicUrls pub
             : [new AuthenticationToken { Name = OpenIdConnectParameterNames.IdToken, Value = idToken }]);
     }
 
-    private static void RedirectToLoginFailed(TicketReceivedContext context)
+    private static void Redirect(TicketReceivedContext context, string target)
     {
-        context.Response.Redirect(AuthPaths.LoginFailedRedirect);
+        context.Response.Redirect(target);
         context.HandleResponse();
     }
 

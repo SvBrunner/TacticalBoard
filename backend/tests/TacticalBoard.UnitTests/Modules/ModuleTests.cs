@@ -12,7 +12,7 @@ using TacticalBoard.Users;
 
 namespace TacticalBoard.UnitTests.Modules;
 
-/// <summary>The modules: each registers its own EF Core model configuration; only Users has endpoints so far.</summary>
+/// <summary>The modules: each registers its own EF Core model configuration; only Users and Situations have endpoints so far.</summary>
 public class ModuleTests
 {
     public static TheoryData<IModule, string> Modules => new()
@@ -43,7 +43,7 @@ public class ModuleTests
     }
 
     public static TheoryData<IModule> ModulesWithoutEndpoints => new(
-        Modules.Select(row => (IModule)row.Data.Item1).Where(module => module is not UsersModule));
+        Modules.Select(row => (IModule)row.Data.Item1).Where(module => module is not (UsersModule or SituationsModule)));
 
     [Theory]
     [MemberData(nameof(ModulesWithoutEndpoints))]

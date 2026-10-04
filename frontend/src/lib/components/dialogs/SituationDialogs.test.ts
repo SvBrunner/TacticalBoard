@@ -8,6 +8,7 @@ import { FixedClock } from "$lib/model/Clock";
 import { Frame } from "$lib/model/Frame";
 import { SequentialIdGenerator } from "$lib/model/ids/IdGenerator";
 import { Situation } from "$lib/model/Situation";
+import { SituationLink } from "$lib/storage/SituationLink";
 import { installDialogPolyfill } from "$lib/testing/dialogPolyfill";
 import SituationDialogs from "./SituationDialogs.svelte";
 
@@ -43,7 +44,7 @@ describe("SituationDialogs", () => {
 		restore = installDialogPolyfill();
 		editor = new SituationEditor(new SequentialIdGenerator(), new FixedClock());
 		prompt = new ConfirmationPrompt();
-		workflow = new SituationWorkflow({ editor, files, confirm: (request) => prompt.request(request) });
+		workflow = new SituationWorkflow({ editor, files, link: new SituationLink(), confirm: (request) => prompt.request(request) });
 		onOpened = vi.fn<() => void>();
 	});
 

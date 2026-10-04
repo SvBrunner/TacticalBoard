@@ -37,7 +37,7 @@ public sealed class UserRepositoryTests(PostgresFixture postgres) : IAsyncLifeti
         var user = NewUser("alice");
         await WithRepositoryAsync(async users => { await users.AddAsync(user, Cancellation); return 0; });
 
-        var byIdentity = await WithRepositoryAsync(users => users.FindByIdentityIncludingDeletedAsync(user.Identity, Cancellation));
+        var byIdentity = await WithRepositoryAsync(users => users.FindByIdentityAsync(user.Identity, Cancellation));
         var byId = await WithRepositoryAsync(users => users.FindAsync(user.Id, Cancellation));
         var session = await WithRepositoryAsync(users => users.FindSessionUserAsync(user.Id, Cancellation));
 
@@ -64,15 +64,22 @@ public sealed class UserRepositoryTests(PostgresFixture postgres) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task Deleted_users_are_found_only_by_identity()
+    public async Task Deleted_users_are_not_found_and_their_identity_may_get_a_new_account()
     {
         var user = NewUser("alice");
         await WithRepositoryAsync(async users => { await users.AddAsync(user, Cancellation); return 0; });
         await UserRows.DeleteAsync(_connectionString, "alice");
 
-        Assert.True((await WithRepositoryAsync(users => users.FindByIdentityIncludingDeletedAsync(user.Identity, Cancellation)))!.IsDeleted);
+        Assert.Null(await WithRepositoryAsync(users => users.FindByIdentityAsync(user.Identity, Cancellation)));
+        Assert.True(await WithRepositoryAsync(users => users.AnyAccountIncludingDeletedAsync(user.Identity, Cancellation)));
+        Assert.False(await WithRepositoryAsync(users => users.AnyAccountIncludingDeletedAsync(NewUser("bob").Identity, Cancellation)));
         Assert.Null(await WithRepositoryAsync(users => users.FindAsync(user.Id, Cancellation)));
         Assert.Null(await WithRepositoryAsync(users => users.FindSessionUserAsync(user.Id, Cancellation)));
+
+        // The identity may get a new account; it is unique among non-deleted users only.
+        var second = NewUser("alice");
+        await WithRepositoryAsync(async users => { await users.AddAsync(second, Cancellation); return 0; });
+        Assert.Equal(second.Id, (await WithRepositoryAsync(users => users.FindByIdentityAsync(user.Identity, Cancellation)))!.Id);
         await Assert.ThrowsAsync<DuplicateUserIdentityException>(() =>
             WithRepositoryAsync(async users => { await users.AddAsync(NewUser("alice"), Cancellation); return 0; }));
     }
@@ -109,5 +116,18 @@ public sealed class UserRepositoryTests(PostgresFixture postgres) : IAsyncLifeti
         });
 
         Assert.Equal("Coach", (await WithRepositoryAsync(users => users.FindAsync(user.Id, Cancellation)))!.DisplayName.Value);
+    }
+
+    [Fact]
+    public async Task Finds_the_display_names_of_non_deleted_users()
+    {
+        var alice = NewUser("alice");
+        var gone = NewUser("gone");
+        gone.MarkDeleted(DateTimeOffset.UtcNow);
+        await WithRepositoryAsync(async users => { await users.AddAsync(alice, Cancellation); await users.AddAsync(gone, Cancellation); return 0; });
+
+        var names = await WithRepositoryAsync(users => users.FindDisplayNamesAsync([alice.Id, gone.Id, Guid.NewGuid()], Cancellation));
+
+        Assert.Equal(new Dictionary<Guid, string> { [alice.Id] = "User alice" }, names);
     }
 }

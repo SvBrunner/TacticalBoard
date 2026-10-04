@@ -6,9 +6,6 @@ public enum SignInRejection
     /// <summary>The user is blocked.</summary>
     Blocked,
 
-    /// <summary>The account was deleted.</summary>
-    Deleted,
-
     /// <summary>The issuer or subject is unusable (empty or longer than allowed).</summary>
     InvalidIdentity,
 }

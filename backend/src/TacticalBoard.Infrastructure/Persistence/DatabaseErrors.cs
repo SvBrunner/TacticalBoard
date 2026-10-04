@@ -12,4 +12,16 @@ public static class DatabaseErrors
         ArgumentNullException.ThrowIfNull(exception);
         return exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
     }
+
+    /// <summary>
+    /// The name of the unique constraint or index that caused <paramref name="exception"/>, or
+    /// <c>null</c> if it was no unique violation (or the database didn't say which).
+    /// </summary>
+    public static string? UniqueViolationConstraint(DbUpdateException exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        return exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } postgres
+            ? postgres.ConstraintName
+            : null;
+    }
 }

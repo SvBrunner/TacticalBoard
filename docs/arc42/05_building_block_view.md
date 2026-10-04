@@ -69,4 +69,6 @@ Conventions inside a module project (folders are created as the module gets cont
 - `Infrastructure/`: EF Core entity configurations (`IEntityTypeConfiguration<T>`, picked up automatically from the module's assembly) and repository implementations.
 - `Endpoints/`: the module's HTTP endpoints (minimal APIs).
 
+Contracts in use so far: Users provides `ICurrentUser`, `IUserAuthentication` (for the host's login) and `IUserDirectory` (display names); Areas provides `AreaReference`, `IAreaAccess` (may the current user read/write this area — a rule per area kind, so the team rule plugs in later) and `IActorDirectory` (current user id and display names for Situations and Folders, which may not use Users directly). Situations has its REST endpoints below `/api/personal-area/situations` and `/api/situations` (ch. 8.15). Teams and Folders have no content yet.
+
 The rules are checked by architecture tests (`backend/tests/TacticalBoard.UnitTests/Architecture/`): project references and compiled assembly references per module, no cycles, only the module class and `Contracts` public, no infrastructure dependencies in `Domain`/`Application`.

@@ -622,6 +622,71 @@ describe("SituationEditor", () => {
 		});
 	});
 
+	describe("acknowledgeSave", () => {
+		const saved = { id: "server-id", title: "Loaded (2)", createdAt: "2026-10-04T08:00:00.000Z", updatedAt: "2026-10-04T08:00:00.000Z" };
+
+		function startSave() {
+			return { situation: editor.current(), changeCount: editor.changeCount() };
+		}
+
+		it("takes over the server's id, title and timestamps and is clean afterwards", () => {
+			editor.load(twoFrameSituation());
+			editor.addElement(1, 1, "red", "Player");
+			const basis = startSave();
+
+			editor.acknowledgeSave(saved, basis);
+
+			expect(editor.current()).toMatchObject(saved);
+			expect(editor.isDirty()).toBe(false);
+			expect(editor.current().frames[0]).toBe(basis.situation.frames[0]);
+		});
+
+		it("keeps the undo history", () => {
+			editor.load(twoFrameSituation());
+			editor.addElement(1, 1, "red", "Player");
+
+			editor.acknowledgeSave(saved, startSave());
+
+			expect(get(editor.history).canUndo).toBe(true);
+		});
+
+		it("stays dirty and keeps edits made while the save was running", () => {
+			editor.load(twoFrameSituation());
+			const basis = startSave();
+			clock.set("2026-10-05T00:00:00.000Z");
+			editor.addElement(1, 1, "red", "Player");
+
+			editor.acknowledgeSave(saved, basis);
+
+			expect(editor.isDirty()).toBe(true);
+			expect(editor.current().id).toBe("server-id");
+			expect(editor.current().updatedAt).toBe("2026-10-05T00:00:00.000Z");
+			expect(editor.currentFrame().elements).toHaveLength(2);
+		});
+
+		it("keeps a title typed while the save was running", () => {
+			editor.load(twoFrameSituation());
+			const basis = startSave();
+			editor.changeTitle("Typed meanwhile");
+
+			editor.acknowledgeSave(saved, basis);
+
+			expect(editor.current().title).toBe("Typed meanwhile");
+			expect(editor.isDirty()).toBe(true);
+		});
+
+		it("counts every change, situation-level ones included", () => {
+			editor.load(twoFrameSituation());
+			const before = editor.changeCount();
+
+			editor.addElement(1, 1, "red", "Player");
+			editor.changeTitle("New");
+			editor.changeTitle("New");
+
+			expect(editor.changeCount()).toBe(before + 2);
+		});
+	});
+
 	describe("unsaved changes", () => {
 		const dirtyNow = () => get(editor.hasUnsavedChanges);
 

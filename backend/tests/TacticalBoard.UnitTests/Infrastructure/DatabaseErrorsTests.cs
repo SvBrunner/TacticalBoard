@@ -11,8 +11,14 @@ public class DatabaseErrorsTests
     {
         Assert.False(DatabaseErrors.IsUniqueViolation(new DbUpdateException("x")));
         Assert.False(DatabaseErrors.IsUniqueViolation(new DbUpdateException("x", new InvalidOperationException())));
+        Assert.Null(DatabaseErrors.UniqueViolationConstraint(new DbUpdateException("x")));
+        Assert.Null(DatabaseErrors.UniqueViolationConstraint(new DbUpdateException("x", new InvalidOperationException())));
     }
 
     [Fact]
-    public void Requires_an_exception() => Assert.Throws<ArgumentNullException>(() => DatabaseErrors.IsUniqueViolation(null!));
+    public void Requires_an_exception()
+    {
+        Assert.Throws<ArgumentNullException>(() => DatabaseErrors.IsUniqueViolation(null!));
+        Assert.Throws<ArgumentNullException>(() => DatabaseErrors.UniqueViolationConstraint(null!));
+    }
 }

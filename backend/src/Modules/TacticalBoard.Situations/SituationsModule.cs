@@ -3,6 +3,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TacticalBoard.Infrastructure;
 using TacticalBoard.Infrastructure.Modularity;
+using TacticalBoard.Situations.Application;
+using TacticalBoard.Situations.Endpoints;
+using TacticalBoard.Situations.Infrastructure;
 
 namespace TacticalBoard.Situations;
 
@@ -18,11 +21,10 @@ public sealed class SituationsModule : IModule
     public void RegisterServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddModelConfigurationFrom(typeof(SituationsModule).Assembly);
+        services.AddScoped<ISituationRepository, EfSituationRepository>();
+        services.AddScoped<SituationService>();
     }
 
     /// <inheritdoc />
-    public void MapEndpoints(IEndpointRouteBuilder api)
-    {
-        // No endpoints yet.
-    }
+    public void MapEndpoints(IEndpointRouteBuilder api) => SituationEndpoints.Map(api);
 }

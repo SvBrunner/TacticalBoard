@@ -82,16 +82,34 @@ public class UserAuthenticationServiceTests
     }
 
     [Fact]
-    public async Task Rejects_a_deleted_user_and_creates_no_new_one()
+    public async Task Gives_a_deleted_identity_a_new_empty_account()
     {
-        var user = TestUsers.Create("alice");
-        user.MarkDeleted(Now);
-        _repository.Users.Add(user);
+        var deleted = TestUsers.Create("alice", "Old name");
+        deleted.MarkDeleted(Now);
+        _repository.Users.Add(deleted);
 
         var result = await Service().SignInAsync(Login(), Cancellation);
 
-        Assert.Equal(SignInRejection.Deleted, result.Rejection);
-        Assert.Single(_repository.Users);
+        Assert.True(result.Succeeded);
+        Assert.NotEqual(deleted.Id, result.UserId);
+        Assert.Equal(2, _repository.Users.Count);
+        Assert.True(deleted.IsDeleted);
+        Assert.False(_repository.Users.Single(user => user.Id == result.UserId).IsDeleted);
+    }
+
+    [Fact]
+    public async Task A_new_account_after_deletion_is_no_first_login_for_the_bootstrap()
+    {
+        _configured = new BootstrapAdministrators([TestUsers.Identity("alice")]);
+        var admin = TestUsers.Create("admin");
+        admin.GrantSystemAdministrator();
+        var deleted = TestUsers.Create("alice");
+        deleted.MarkDeleted(Now);
+        _repository.Users.AddRange([admin, deleted]);
+
+        var result = await Service().SignInAsync(Login(), Cancellation);
+
+        Assert.False(_repository.Users.Single(user => user.Id == result.UserId).IsSystemAdministrator);
     }
 
     [Fact]

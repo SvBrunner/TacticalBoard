@@ -67,7 +67,7 @@ Significant decisions, recorded as lightweight ADRs.
 - **Context**: Situations already have a versioned JSON file format (ch. 8.3). The server needs to list, sort and search them, and versioned storage may come later.
 - **Decision**: Every save stores the complete situation document (always in the current format version) as a new **revision** row (`jsonb`). The situation row holds the metadata as ordinary columns: area, folder, title, field type, sport, format version, created/updated at and by, the current revision number, deleted at. Only the current revision is used in Phase 2; there is no UI for older revisions.
 - **Rationale**: One format for files and server, no mapping of frames and elements to tables; the revision table makes later version history and realtime editing possible without a data migration.
-- **Consequences**: The frontend migrates older file versions before uploading; the backend validates the current format only. The revision number is the concurrency token (ETag). Storage grows with every save (acceptable at this scale; pruning can come later).
+- **Consequences**: The frontend migrates older file versions before uploading; the backend validates the current format only, with a port of the frontend's validator that has to be kept in sync (ch. 8.15). The revision number is the concurrency token (ETag). The server owns the situation's id, title and timestamps and writes them into every stored document, so a revision never disagrees with its row. Storage grows with every save (acceptable at this scale; pruning can come later).
 
 ## ADR-010: Realtime after Phase 2, without blocking it
 

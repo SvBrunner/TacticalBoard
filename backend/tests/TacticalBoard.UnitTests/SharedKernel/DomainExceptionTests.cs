@@ -18,6 +18,10 @@ public class DomainExceptionTests
         Assert.Equal("'A' exists.", exception.Message);
     }
 
+    [Fact]
+    public void Has_no_details_by_default() =>
+        Assert.Empty(new SampleException(DomainErrorKind.Conflict, "duplicate-title", "Duplicate title", "'A' exists.").Details);
+
     [Theory]
     [InlineData("Not Kebab")]
     [InlineData("snake_case")]

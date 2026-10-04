@@ -54,10 +54,16 @@ describe("AccountArea", () => {
 		});
 
 		it("says when the last login failed", () => {
-			render(AccountArea, { props: { session, loginFailed: true } });
+			render(AccountArea, { props: { session, loginNotice: "failed" } });
 
 			expect(screen.getByRole("status")).toHaveTextContent("Login failed.");
 			expect(screen.getByRole("link", { name: "Log in" })).toBeInTheDocument();
+		});
+
+		it("says when the account is blocked", () => {
+			render(AccountArea, { props: { session, loginNotice: "blocked" } });
+
+			expect(screen.getByRole("status")).toHaveTextContent("Account blocked.");
 		});
 
 		it("says nothing about a login by default", () => {

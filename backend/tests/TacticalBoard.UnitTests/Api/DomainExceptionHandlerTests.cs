@@ -32,6 +32,25 @@ public class DomainExceptionHandlerTests
         Assert.Equal("/api/situations", body.GetProperty("instance").GetString());
     }
 
+    private sealed class ConflictWithDetailsException()
+        : DomainException(DomainErrorKind.PreconditionFailed, "save-conflict", "Save conflict", "Someone else saved.")
+    {
+        public override IReadOnlyDictionary<string, object?> Details { get; } = new Dictionary<string, object?> { ["currentRevision"] = 8 };
+    }
+
+    [Fact]
+    public async Task Adds_the_details_of_a_domain_exception_as_extension_members()
+    {
+        var context = ProblemDetailsHttpContext.Create("/api/situations/1");
+
+        await CreateHandler(context).TryHandleAsync(context, new ConflictWithDetailsException(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(StatusCodes.Status412PreconditionFailed, context.Response.StatusCode);
+        var body = ProblemDetailsHttpContext.ReadBody(context);
+        Assert.Equal("https://tacticalboard/errors/save-conflict", body.GetProperty("type").GetString());
+        Assert.Equal(8, body.GetProperty("currentRevision").GetInt32());
+    }
+
     [Fact]
     public async Task Leaves_other_exceptions_to_the_default_handler()
     {

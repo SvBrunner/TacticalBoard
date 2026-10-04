@@ -124,13 +124,23 @@ public class OidcEventsTests
         Assert.Empty(properties.GetTokens());
     }
 
-    [Theory]
-    [InlineData(SignInRejection.Blocked)]
-    [InlineData(SignInRejection.Deleted)]
-    [InlineData(SignInRejection.InvalidIdentity)]
-    public async Task Gives_a_rejected_user_no_session(SignInRejection rejection)
+    [Fact]
+    public async Task Sends_a_blocked_user_to_the_blocked_notice()
     {
-        _users.SignInResult = UserSignInResult.Rejected(rejection);
+        _users.SignInResult = UserSignInResult.Rejected(SignInRejection.Blocked);
+        var context = TicketContext(IdpPrincipal(("iss", Issuer), ("sub", "abc")), new AuthenticationProperties());
+
+        await Events().TicketReceived(context);
+
+        Assert.True(context.Result!.Handled);
+        Assert.Equal(AuthPaths.LoginBlockedRedirect, context.Response.Headers.Location.ToString());
+        Assert.Equal("/?login=blocked", AuthPaths.LoginBlockedRedirect);
+    }
+
+    [Fact]
+    public async Task Gives_an_unusable_identity_no_session()
+    {
+        _users.SignInResult = UserSignInResult.Rejected(SignInRejection.InvalidIdentity);
         var context = TicketContext(IdpPrincipal(("iss", Issuer), ("sub", "abc")), new AuthenticationProperties());
 
         await Events().TicketReceived(context);

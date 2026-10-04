@@ -1,7 +1,8 @@
 <!--
 @component
 The logged-in user's menu: a disclosure button with the display name, and
-below it "Change display name" and "Log out". Log out is a real form POST to
+below it "Change display name" and "Log out". On phones the button shows
+only the user icon; the display name stays its accessible name. Log out is a real form POST to
 `/auth/logout` (a full page navigation, so the backend can continue with the
 identity provider's logout); its antiforgery field is fetched right before
 submitting. The menu closes after a choice, with Escape (focus back on the
@@ -211,6 +212,29 @@ button), or when focus or a press goes elsewhere.
 	.account-option:disabled {
 		opacity: 0.6;
 		cursor: progress;
+	}
+
+	/* Phones: icon only, so the shared navbar fits (the name stays the accessible name). */
+	@media (max-width: 599px), (max-height: 499px) {
+		.account-toggle {
+			width: var(--touch-target);
+			padding: 0;
+			justify-content: center;
+		}
+
+		.name {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			margin: -1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+
+		.chevron {
+			display: none;
+		}
 	}
 
 	.account-error {

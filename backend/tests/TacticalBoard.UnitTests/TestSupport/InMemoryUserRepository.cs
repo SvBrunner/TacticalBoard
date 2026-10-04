@@ -15,8 +15,11 @@ internal sealed class InMemoryUserRepository : IUserRepository
     /// <summary>When set, the next <see cref="AddAsync"/> fails as if a parallel login had added this user first.</summary>
     public User? ParallelWinner { get; set; }
 
-    public Task<User?> FindByIdentityIncludingDeletedAsync(ExternalIdentity identity, CancellationToken cancellationToken) =>
-        Task.FromResult(Users.SingleOrDefault(user => user.Identity == identity));
+    public Task<User?> FindByIdentityAsync(ExternalIdentity identity, CancellationToken cancellationToken) =>
+        Task.FromResult(Users.SingleOrDefault(user => user.Identity == identity && !user.IsDeleted));
+
+    public Task<bool> AnyAccountIncludingDeletedAsync(ExternalIdentity identity, CancellationToken cancellationToken) =>
+        Task.FromResult(Users.Any(user => user.Identity == identity));
 
     public Task<User?> FindAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Users.SingleOrDefault(user => user.Id == id && !user.IsDeleted));
@@ -28,6 +31,17 @@ internal sealed class InMemoryUserRepository : IUserRepository
         return Task.FromResult(user is null
             ? null
             : new SessionUser(user.Id, user.DisplayName.Value, user.IsSystemAdministrator, user.IsBlocked));
+    }
+
+    public int DisplayNameQueries { get; private set; }
+
+    public Task<IReadOnlyDictionary<Guid, string>> FindDisplayNamesAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        DisplayNameQueries++;
+        IReadOnlyDictionary<Guid, string> names = Users
+            .Where(user => ids.Contains(user.Id) && !user.IsDeleted)
+            .ToDictionary(user => user.Id, user => user.DisplayName.Value);
+        return Task.FromResult(names);
     }
 
     public Task<bool> AnyActiveSystemAdministratorAsync(CancellationToken cancellationToken) =>
@@ -42,7 +56,7 @@ internal sealed class InMemoryUserRepository : IUserRepository
             throw new DuplicateUserIdentityException();
         }
 
-        if (Users.Any(existing => existing.Identity == user.Identity))
+        if (Users.Any(existing => existing.Identity == user.Identity && !existing.IsDeleted))
         {
             throw new DuplicateUserIdentityException();
         }

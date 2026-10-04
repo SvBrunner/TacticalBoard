@@ -167,26 +167,36 @@ public sealed class LoginTests(PostgresFixture postgres) : IAsyncLifetime
         using var callback = await browser.LoginAsync("alice");
 
         Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
-        Assert.Equal("/?login=failed", callback.Headers.Location!.OriginalString);
+        Assert.Equal("/?login=blocked", callback.Headers.Location!.OriginalString);
         Assert.DoesNotContain(callback.Headers.TryGetValues("Set-Cookie", out var cookies) ? cookies : [], cookie => cookie.StartsWith("tb_session=", StringComparison.Ordinal) && !cookie.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase));
         using var me = await browser.GetAsync("/api/me");
         Assert.Equal(HttpStatusCode.Unauthorized, me.StatusCode);
     }
 
     [Fact]
-    public async Task A_deleted_user_gets_no_session_and_no_new_account()
+    public async Task A_deleted_user_gets_a_new_empty_account_on_the_next_login()
     {
         using (var first = _factory.CreateBrowser())
         {
-            await first.LoginSuccessfullyAsync("alice");
+            await first.LoginSuccessfullyAsync("alice", TestClaims.Profile("Alice"));
         }
 
+        var oldId = await IdOfAsync();
         await UserRows.DeleteAsync(_connectionString, "alice");
         using var browser = _factory.CreateBrowser();
-        using var callback = await browser.LoginAsync("alice");
+        await browser.LoginSuccessfullyAsync("alice", TestClaims.Profile("Alice again"));
 
-        Assert.Equal("/?login=failed", callback.Headers.Location!.OriginalString);
-        Assert.Equal(1, await UserRows.CountAsync(_connectionString));
+        var me = await browser.MeAsync();
+        Assert.NotEqual(oldId, me.GetProperty("id").GetString());
+        Assert.Equal("Alice again", me.GetProperty("displayName").GetString());
+        Assert.Equal(2, await UserRows.CountAsync(_connectionString));
+    }
+
+    private async Task<string> IdOfAsync()
+    {
+        using var browser = _factory.CreateBrowser();
+        await browser.LoginSuccessfullyAsync("alice");
+        return (await browser.MeAsync()).GetProperty("id").GetString()!;
     }
 
     [Fact]

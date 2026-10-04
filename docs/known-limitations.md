@@ -19,9 +19,22 @@ The field is always scaled to fit the available space and cannot be zoomed or pa
 - Elements get an enlarged invisible hit area of at least 44 CSS px, so they stay easy to tap and drag. Where hit areas of close elements overlap, the topmost element wins, and a tap near an element selects it instead of placing a new one.
 - Users who need more detail can turn the phone to landscape or use a tablet/desktop.
 
-## The edited situation lives in memory only
+## Situations that are not saved on the server live in memory only
 
-Until there is storage (Phase 2), the situation being edited exists only in the browser tab's memory. Reloading the page or opening `/editor` directly therefore has no situation to show and leads back to the start page. While there are unsaved (not exported) changes, the browser warns before the page is left or reloaded.
+A new or imported situation that isn't saved on the server (always in local mode) exists only in the browser tab's memory. Reloading the page or opening `/editor` directly therefore has no situation to show and leads back to the start page. While there are unsaved changes, the browser warns before the page is left or reloaded. A saved situation is restored after a reload from `/editor?situation=<id>` (its unsaved changes are lost, after the browser's warning).
+
+## Saving on the server
+
+- **Personal area only, top level only.** Folders and teams come in later steps; `folderId` is always `null`.
+- **The start page's list is not live.** It is loaded when the page is shown (and after a delete); situations saved or deleted in another tab or by another session appear after navigating to the start page again.
+- **Deleting is only possible from the start page's list**, not in the editor. Deleting the situation that is still open in the editor (e.g. after the browser's Back button) is not noticed there; its next save fails with "This situation no longer exists on the server" and it can only be exported.
+- **Every save is a full revision.** Even a save without changes writes a new revision; nothing is pruned (see arc42 ch. 11).
+- **Titles are limited to 200 characters** on the server (the editor doesn't limit typing; saving a longer title is rejected with a message). A numbered title (" (2)") may be slightly longer.
+- **Numbered titles append to the whole title**, so a copy of "Powerplay (2)" whose title is taken becomes "Powerplay (2) (2)".
+- **Unknown extra properties** of a document are stored as sent (the validator ignores them, like the importer).
+- **Edits made while a save is running** stay unsaved (the situation stays dirty); the server's title wins only if the title wasn't changed in the meantime.
+- **The conflict question doesn't show what the other person changed**; there is no comparison or merge.
+- **Created/changed by** names are looked up when listing; a renamed user shows the new name for older changes too.
 
 ## Hidden-half elements of half-field situations
 
@@ -50,7 +63,8 @@ GIF stores frame delays in hundredths of a second and at most 256 colors per fra
 
 - **The session does not follow the IdP session.** After the login the session lives on its own (14 days without use, sliding) and is checked against the local user on every request (blocked, deleted). Logging out at the IdP directly, or the IdP ending its session, does not end it: IdP-initiated (front-channel/back-channel) logout is not supported, and the IdP's tokens are not refreshed or re-validated. A user blocked or disabled only at the IdP keeps an existing session until it expires or they log out; blocking in the app ends it at once.
 - **Logging out at the IdP depends on the IdP.** If the IdP's discovery document has no `end_session_endpoint` (or the IdP can't be reached), "Log out" ends only the app's session; the next "Log in" may then return without asking for credentials.
-- **A failed login says only "Login failed."** The start page does not tell why (blocked, deleted, IdP error), on purpose; the reason is in the backend log.
+- **A failed login says only "Login failed."**, except for a blocked account ("Account blocked."). The start page does not tell other reasons (IdP error, unusable identity), on purpose; the reason is in the backend log.
+- **A deleted account comes back empty.** Logging in again with the identity of a deleted account creates a new, empty account; nothing of the old one (situations, memberships) is restored, and there is no restore UI.
 - **Data-protection keys are stored unencrypted** in `DataProtection__KeysDirectory` (the backend logs a warning at startup). Whoever can read that volume can decrypt session cookies; protect it like the database.
 - **One database query per request with a session**, for the per-request check of the user. Cheap (primary key, no tracking) and the price of "a blocked user's session ends with the next request".
 - **The dev server logs a proxy error** (`http proxy error: /api/me`) in its terminal when `pnpm run dev` runs without a backend. The app itself stays quiet ("Local mode").

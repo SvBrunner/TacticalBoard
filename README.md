@@ -4,7 +4,7 @@ A tactics board for drawing and saving game situations across different sports â
 
 Currently implemented (the Phase 1 MVP, frontend only, floorball): create a situation on a full or half field; place, move, and color players (with position labels), balls, and markers; draw pass, run, and shot arrows that can be bent; undo/redo; multiple frames with descriptions, played back as a slideshow; export/import as JSON and export as an animated GIF. Works by touch on phones and tablets, in a light and a dark theme.
 
-In progress (Phase 2): a backend with users and teams (per-team roles Admin, Editor, Reader) where a team organizes its saved situations into folders; later more sports. Done so far: the backend skeleton (modules, database, migrations, health endpoint, Docker Compose stack) and the login through any OpenID Connect provider (users created on first login, editable display name, log in/out on the start page). Without login the app works exactly as before (local mode). See [docs/roadmap.md](docs/roadmap.md).
+In progress (Phase 2): a backend with users and teams (per-team roles Admin, Editor, Reader) where a team organizes its saved situations into folders; later more sports. Done so far: the backend skeleton (modules, database, migrations, health endpoint, Docker Compose stack), the login through any OpenID Connect provider (users created on first login, editable display name, log in/out in the app's navbar on the start page and in the editor), and saving situations in the personal area (Save button and Ctrl/Cmd+S, revisions, unique and numbered titles, a warning with Overwrite / Save as copy when someone else saved in between, created/changed by; the start page lists the saved situations to open or delete). Without login the app works exactly as before (local mode). See [docs/roadmap.md](docs/roadmap.md).
 
 ## Structure
 
@@ -100,7 +100,7 @@ Development credentials (local use only):
 | App login (test users in the realm `tacticalboard`) | `trainer` / `trainer` (configured as system administrator), `player` / `player` |
 | OIDC client for the backend | client ID `tacticalboard`, secret `tacticalboard-dev-secret`, issuer `http://localhost:8180/realms/tacticalboard` (containers reach Keycloak at `http://idp:8080`), redirect URIs `http://localhost:{8080,5080,5173}/auth/callback` |
 
-Open http://localhost:8080 and click **Log in** on the start page. Keycloak runs in dev mode and keeps no data: the realm is re-imported from `deploy/keycloak/tacticalboard-realm.json` when its container is recreated. The users have fixed IDs, so the backend's bootstrap configuration (`trainer` as system administrator) stays valid. Sessions survive a backend restart (the key volume `backend-keys`).
+Open http://localhost:8080 and click **Log in** in the navbar. Logged in, the editor has a **Save** button (and Ctrl/Cmd+S); saved situations appear on the start page. The REST API for situations is described in [arc42 ch. 8.15](docs/arc42/08_crosscutting_concepts.md). Keycloak runs in dev mode and keeps no data: the realm is re-imported from `deploy/keycloak/tacticalboard-realm.json` when its container is recreated. The users have fixed IDs, so the backend's bootstrap configuration (`trainer` as system administrator) stays valid. Sessions survive a backend restart (the key volume `backend-keys`).
 
 Stop with `docker compose down`; `docker compose down -v` also deletes the volumes (database, session keys).
 

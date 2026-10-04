@@ -27,7 +27,7 @@ sequenceDiagram
     B-->>F: Current user (name, system admin flag)
 ```
 
-A blocked or deleted user gets no session: the callback redirects to `/?login=failed` instead. Every later request with the session cookie checks the user again (ch. 8.13).
+A blocked user gets no session: the callback redirects to `/?login=blocked` ("Account blocked."); other failures to `/?login=failed`. A deleted account's identity gets a new, empty account. Every later request with the session cookie checks the user again (ch. 8.13).
 
 ## 6.2 Save a team situation
 
@@ -54,3 +54,26 @@ sequenceDiagram
 ```
 
 "Overwrite" repeats the save with the newest revision as `If-Match`; "Save as copy" creates a new situation with the title suffix " (2)" (or the next free number), see ch. 8.15.
+
+The personal area (implemented, roadmap Phase 2 step 3) works the same way without the role check: Areas answers "only the owner". The first save is `POST /api/personal-area/situations` (`201`, `ETag "1"`).
+
+## 6.3 Open a saved situation, and reload the editor
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant S as Backend: Situations
+    participant A as Backend: Areas
+
+    U->>F: Start page: click a saved situation
+    F->>S: GET /api/situations/{id}
+    S->>A: May the user read this area?
+    A-->>S: Yes (personal area: the owner)
+    S-->>F: 200, metadata + document, ETag "3"
+    F-->>U: "Discard changes?" (only with unsaved changes)
+    F->>F: Load into the editor, remember id + revision 3
+    F-->>U: /editor?situation={id}
+    Note over U,F: Reload of /editor?situation={id}: the in-memory situation is gone,<br/>so the editor route loads it again with the same GET (no question);<br/>if that fails (logged out, deleted, no server) it goes to the start page.
+```
+

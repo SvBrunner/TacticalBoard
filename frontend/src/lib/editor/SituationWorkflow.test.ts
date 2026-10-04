@@ -5,7 +5,27 @@ import { SequentialIdGenerator } from "$lib/model/ids/IdGenerator";
 import { Situation } from "$lib/model/Situation";
 import { InvalidJsonError } from "$lib/model/serialization/SituationImportErrors";
 import { SituationEditor } from "./SituationEditor";
-import { DISCARD_CHANGES_REQUEST, SituationWorkflow, type SituationFiles } from "./SituationWorkflow";
+import { SituationLink } from "$lib/storage/SituationLink";
+import type { SituationSummary } from "$lib/storage/SituationApi";
+import {
+	DISCARD_CHANGES_REQUEST,
+	DISCARD_SAVED_CHANGES_REQUEST,
+	SituationWorkflow,
+	type SituationFiles,
+} from "./SituationWorkflow";
+
+const savedSummary: SituationSummary = {
+	id: "server-1",
+	title: "Saved",
+	sport: "floorball",
+	fieldType: "full",
+	folderId: null,
+	revision: 1,
+	createdAt: "2026-10-04T08:00:00Z",
+	createdBy: { id: "u1", displayName: "Alice" },
+	updatedAt: "2026-10-04T08:00:00Z",
+	updatedBy: { id: "u1", displayName: "Alice" },
+};
 
 function importedSituation(): Situation {
 	return new Situation({
@@ -43,6 +63,7 @@ describe("SituationWorkflow", () => {
 	let confirm: ReturnType<typeof vi.fn<(request: unknown) => Promise<boolean>>>;
 	let log: { notify: ReturnType<typeof vi.fn<(message: string, level?: string) => void>> };
 	let workflow: SituationWorkflow;
+	let link: SituationLink;
 	const file = new File(["{}"], "play.situation.json");
 
 	beforeEach(() => {
@@ -50,7 +71,8 @@ describe("SituationWorkflow", () => {
 		files = new FakeFiles();
 		confirm = vi.fn(async () => true);
 		log = { notify: vi.fn<(message: string, level?: string) => void>() };
-		workflow = new SituationWorkflow({ editor, files, confirm, log });
+		link = new SituationLink();
+		workflow = new SituationWorkflow({ editor, files, link, confirm, log });
 	});
 
 	const messages = () => log.notify.mock.calls.map((call) => call[0]);
@@ -67,6 +89,17 @@ describe("SituationWorkflow", () => {
 
 			await expect(workflow.confirmDiscardIfDirty()).resolves.toBe(answer);
 			expect(confirm).toHaveBeenCalledWith(DISCARD_CHANGES_REQUEST);
+		});
+
+		it("for a server situation the question speaks of saving", async () => {
+			link.attach(savedSummary);
+			editor.addElement(0, 0, "red", "Player");
+
+			await workflow.confirmDiscardIfDirty();
+
+			expect(confirm).toHaveBeenCalledWith(DISCARD_SAVED_CHANGES_REQUEST);
+			expect(DISCARD_SAVED_CHANGES_REQUEST).toMatchObject({ title: "Discard changes?", confirmLabel: "Discard" });
+			expect(DISCARD_SAVED_CHANGES_REQUEST.message).toContain("haven't been saved");
 		});
 
 		it("the question is 'Discard changes?' with Discard/Cancel", () => {
@@ -86,6 +119,14 @@ describe("SituationWorkflow", () => {
 			expect(created).toMatchObject({ title: "Box play", fieldType: "half" });
 			expect(messages()).toEqual(['Created "Box play" (half field)']);
 		});
+
+		it("starts an unsaved new situation, also after a server situation", () => {
+			link.attach(savedSummary);
+
+			workflow.createNew({ title: "Box play", fieldType: "half" });
+
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "new" });
+		});
 	});
 
 	describe("importFile", () => {
@@ -95,6 +136,24 @@ describe("SituationWorkflow", () => {
 			expect(editor.current().id).toBe("imported");
 			expect(confirm).not.toHaveBeenCalled();
 			expect(messages()).toEqual(["Loading play.situation.json…", 'Loaded "Imported" from play.situation.json']);
+		});
+
+		it("marks the situation as imported (for its first save)", async () => {
+			link.attach(savedSummary);
+
+			await workflow.importFile(file);
+
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported" });
+		});
+
+		it("keeps the link when the import is cancelled", async () => {
+			link.attach(savedSummary);
+			editor.addElement(0, 0, "red", "Player");
+			confirm.mockResolvedValue(false);
+
+			await workflow.importFile(file);
+
+			expect(link.saved()).toBe(savedSummary);
 		});
 
 		it("asks before discarding unsaved changes and opens the file when confirmed", async () => {
@@ -145,6 +204,16 @@ describe("SituationWorkflow", () => {
 			expect(editor.isDirty()).toBe(false);
 			expect(messages()).toEqual(["Exported 1 frame(s) to file.situation.json"]);
 		});
+
+		it("doesn't mark a server situation saved: only saving on the server does", () => {
+			link.attach(savedSummary);
+			editor.addElement(0, 0, "red", "Player");
+
+			workflow.exportCurrent();
+
+			expect(files.exported).toHaveLength(1);
+			expect(editor.isDirty()).toBe(true);
+		});
 	});
 
 	describe("undo/redo", () => {
@@ -167,7 +236,7 @@ describe("SituationWorkflow", () => {
 	});
 
 	it("works without a log", async () => {
-		const silent = new SituationWorkflow({ editor, files, confirm });
+		const silent = new SituationWorkflow({ editor, files, link, confirm });
 
 		silent.createNew({ title: "", fieldType: "full" });
 		await expect(silent.importFile(file)).resolves.toBe(true);
@@ -189,6 +258,14 @@ describe("SituationWorkflow", () => {
 			expect(navigate).toHaveBeenCalledOnce();
 			expect(editor.isSituationOpen()).toBe(false);
 			expect(messages()).toContain('Closed "Breakout"');
+		});
+
+		it("forgets the server situation", async () => {
+			link.attach(savedSummary);
+
+			await workflow.leave(vi.fn());
+
+			expect(link.saved()).toBeNull();
 		});
 
 		it("with unsaved changes asks 'Discard changes?' first; confirming navigates and discards them", async () => {

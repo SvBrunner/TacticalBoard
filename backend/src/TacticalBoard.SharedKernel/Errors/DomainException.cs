@@ -31,4 +31,10 @@ public abstract class DomainException : Exception
 
     /// <summary>Short, human-readable summary that is the same for every occurrence of this error.</summary>
     public string Title { get; }
+
+    /// <summary>
+    /// Additional, error-specific members for the client (camelCase names), e.g. the current
+    /// revision of a save conflict. The API adds them to the Problem Details response. Empty by default.
+    /// </summary>
+    public virtual IReadOnlyDictionary<string, object?> Details { get; } = new Dictionary<string, object?>();
 }

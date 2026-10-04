@@ -88,6 +88,29 @@ describe("ApiClient", () => {
 			expect(request.body).toBe(JSON.stringify({ displayName: "Coach" }));
 		});
 
+		it("sends extra headers along (e.g. If-Match)", async () => {
+			server.on("PUT", "/api/situations/1", jsonResponse(200, {}));
+
+			await client.send("PUT", "/api/situations/1", {}, { "If-Match": '"3"' });
+
+			const [request] = server.requestsTo("/api/situations/1");
+			expect(request.headers["If-Match"]).toBe('"3"');
+			expect(request.headers["X-CSRF-TOKEN"]).toBe("token-1");
+		});
+
+		it("keeps the extra headers on the retry with a fresh token", async () => {
+			let calls = 0;
+			server.on("PUT", "/api/situations/1", () =>
+				++calls === 1
+					? problemResponse(400, { type: ApiClient.INVALID_ANTIFORGERY_TOKEN })
+					: jsonResponse(200, {}),
+			);
+
+			await client.send("PUT", "/api/situations/1", {}, { "If-Match": '"3"' });
+
+			expect(server.requestsTo("/api/situations/1").map((request) => request.headers["If-Match"])).toEqual(['"3"', '"3"']);
+		});
+
 		it("sends no body and no content type without a body", async () => {
 			server.on("DELETE", "/api/things/1", new Response(null, { status: 204 }));
 
@@ -166,6 +189,17 @@ describe("ApiClient", () => {
 			expect(error.fieldError("displayName")).toBe("Too long.");
 			expect(error.fieldError("other")).toBeUndefined();
 			expect(error.name).toBe("ApiError");
+		});
+
+		it("lists every validation message with its field", () => {
+			const error = new ApiError(400, { errors: { a: ["One.", "Two."], b: ["Three."] } });
+
+			expect(error.fieldErrors()).toEqual(["a: One.", "a: Two.", "b: Three."]);
+			expect(new ApiError(500, null).fieldErrors()).toEqual([]);
+		});
+
+		it("exposes extension members of the problem", () => {
+			expect(new ApiError(412, { currentRevision: 8 }).problem?.currentRevision).toBe(8);
 		});
 
 		it("prefers the detail as message", () => {
