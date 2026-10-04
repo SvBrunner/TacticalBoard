@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Module Areas (arc42 ch. 5.2). May use: Teams, Users. -->
+  <ItemGroup>
+    <ProjectReference Include="..\TacticalBoard.Teams\TacticalBoard.Teams.csproj" />
+    <ProjectReference Include="..\TacticalBoard.Users\TacticalBoard.Users.csproj" />
+  </ItemGroup>
+</Project>

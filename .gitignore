@@ -5,6 +5,8 @@
 node_modules/
 
 # build output
+bin/
+obj/
 dist/
 build/
 .svelte-kit/

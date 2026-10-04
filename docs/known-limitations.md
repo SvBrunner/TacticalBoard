@@ -1,13 +1,13 @@
 # Known limitations
 
-## The board page cannot be server-rendered
+## No server-rendered pages
 
-The board editor (`frontend/src/routes/editor/+page.svelte`) draws its content with Konva canvases. Konva requires a browser (canvas/DOM APIs) and cannot run in a server-side rendering context.
+The board editor (`frontend/src/routes/editor/+page.svelte`) draws its content with Konva canvases. Konva requires a browser (canvas/DOM APIs) and cannot run in a server-side rendering context, so `frontend/src/routes/editor/+page.ts` sets `ssr = false` for the editor route.
 
-Because of this, `frontend/src/routes/editor/+page.ts` sets `ssr = false` for the editor route: the page is rendered entirely client-side and cannot be prerendered as static HTML. (The start page `/` does not use Konva and is server-rendered normally.)
+Since the switch to `adapter-static` (ADR-008), the whole app is a static single-page app: `frontend/src/routes/+layout.ts` sets `ssr = false` for every route, nothing is prerendered, and the web server answers every path with the fallback page `index.html`. The start page is therefore rendered in the browser too.
 
 **Impact:**
-- No server-rendered HTML for the board page — search engines and no-JS clients see an empty shell.
+- No server-rendered HTML for any page — search engines and no-JS clients see an empty shell.
 - First paint waits for JS to load and run.
 
 ## No pinch-zoom on the board

@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/Modules/">
+    <Project Path="src/Modules/TacticalBoard.Areas/TacticalBoard.Areas.csproj" />
+    <Project Path="src/Modules/TacticalBoard.Folders/TacticalBoard.Folders.csproj" />
+    <Project Path="src/Modules/TacticalBoard.Situations/TacticalBoard.Situations.csproj" />
+    <Project Path="src/Modules/TacticalBoard.Teams/TacticalBoard.Teams.csproj" />
+    <Project Path="src/Modules/TacticalBoard.Users/TacticalBoard.Users.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/TacticalBoard.Api/TacticalBoard.Api.csproj" />
+    <Project Path="src/TacticalBoard.Infrastructure/TacticalBoard.Infrastructure.csproj" />
+    <Project Path="src/TacticalBoard.SharedKernel/TacticalBoard.SharedKernel.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/tests/">
+    <Project Path="tests/TacticalBoard.IntegrationTests/TacticalBoard.IntegrationTests.csproj" />
+    <Project Path="tests/TacticalBoard.UnitTests/TacticalBoard.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -49,3 +49,24 @@ graph TD
 - Situations and Folders never check roles themselves; they ask Areas, which delegates to Teams or Users.
 - Users depends on no other module. Account deletion needs to know about memberships and personal content: Users publishes the request ("user is about to be deleted" / "user deleted") through an in-process interface that Teams and Areas implement, so the dependency arrows stay as above.
 - System administrators reach team management through Teams (with their own authorization rule), never through Situations or Folders, so they can't read content (ch. 8.1).
+
+### Implementation (`backend/`)
+
+One .NET solution (`backend/TacticalBoard.slnx`), **one project per module**, so the dependency arrows above are enforced by the compiler:
+
+| Project | Content |
+|---|---|
+| `src/TacticalBoard.SharedKernel` | Abstractions every module's domain code may use, with no framework dependency: `IClock`, `IIdGenerator`, `DomainException` (+ `DomainErrorKind`, `ErrorCode`), `ISoftDeletable` / `SoftDeletableEntity`. |
+| `src/TacticalBoard.Infrastructure` | Shared technical plumbing: `SystemClock`, `SequentialGuidGenerator` (UUID v7), the one EF Core context `TacticalBoardDbContext` with the soft-delete query filter and interceptor (ch. 8.16), migration on startup, and the module contract `IModule`. |
+| `src/Modules/TacticalBoard.{Users,Teams,Areas,Folders,Situations}` | One project per module. Each references only the modules it may use (above); transitive project references are switched off (`src/Modules/Directory.Build.props`), so e.g. Situations can't use Users or Teams. |
+| `src/TacticalBoard.Api` | The host: composes the modules (`Hosting/ModuleCatalog`, `Hosting/ApiHost`), Problem Details (ch. 8.2), `GET /api/health`, configuration, and the EF Core migrations (`Persistence/Migrations`; only the host knows every module's part of the model). |
+
+Conventions inside a module project (folders are created as the module gets content):
+
+- `<Module>Module` (implements `IModule`) registers the module's services and maps its endpoints below `/api`. It is the only public type besides the `Contracts` namespace.
+- `Contracts/`: the public interfaces and DTOs other modules may use (e.g. the current user, `ITeamAuthorization`). Everything else is `internal`.
+- `Domain/`, `Application/`: entities, domain services, application services and repository interfaces; they depend only on SharedKernel abstractions and other modules' contracts, never on EF Core, Npgsql or ASP.NET Core.
+- `Infrastructure/`: EF Core entity configurations (`IEntityTypeConfiguration<T>`, picked up automatically from the module's assembly) and repository implementations.
+- `Endpoints/`: the module's HTTP endpoints (minimal APIs).
+
+The rules are checked by architecture tests (`backend/tests/TacticalBoard.UnitTests/Architecture/`): project references and compiled assembly references per module, no cycles, only the module class and `Contracts` public, no infrastructure dependencies in `Domain`/`Application`.

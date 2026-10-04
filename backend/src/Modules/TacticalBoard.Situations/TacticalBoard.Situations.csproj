@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Module Situations (arc42 ch. 5.2). May use: Folders, Areas. -->
+  <ItemGroup>
+    <ProjectReference Include="..\TacticalBoard.Folders\TacticalBoard.Folders.csproj" />
+    <ProjectReference Include="..\TacticalBoard.Areas\TacticalBoard.Areas.csproj" />
+  </ItemGroup>
+</Project>

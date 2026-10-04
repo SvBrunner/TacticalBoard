@@ -1,0 +1,65 @@
+# Local development stack (arc42 ch. 7, ADR-005): `docker compose up --build`, then open
+# http://localhost:8080. See README.md ("Running the whole stack") for details and credentials.
+name: tacticalboard
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./deploy/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - frontend
+      - backend
+
+  frontend:
+    build: ./frontend
+
+  backend:
+    build: ./backend
+    environment:
+      ConnectionStrings__TacticalBoard: "Host=db;Port=5432;Database=tacticalboard;Username=tacticalboard;Password=tacticalboard"
+      Database__MigrateOnStartup: "true"
+      App__PublicBaseUrl: "http://localhost:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: tacticalboard
+      POSTGRES_USER: tacticalboard
+      POSTGRES_PASSWORD: tacticalboard
+    ports:
+      # Published for running the backend outside Compose (dotnet run) against this database.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tacticalboard -d tacticalboard"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Development OIDC identity provider (not used by the backend yet; the BFF login follows in
+  # roadmap Phase 2 step 2). Browsers reach it at http://localhost:8180; containers at
+  # http://idp:8080. The issuer is always http://localhost:8180/realms/tacticalboard
+  # (KC_HOSTNAME), while backchannel endpoints (token, JWKS) follow the requesting host.
+  idp:
+    image: quay.io/keycloak/keycloak:26.6
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8180:8080"
+    volumes:
+      - ./deploy/keycloak:/opt/keycloak/data/import:ro
+
+volumes:
+  db-data:

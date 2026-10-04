@@ -1,0 +1,25 @@
+# Serves the static frontend build (ADR-008). Every path that is neither a
+# file nor a build asset gets the SPA fallback page, so client-side routes
+# (e.g. /editor) can be opened directly; a missing asset stays a 404.
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	root * /srv
+	encode zstd gzip
+
+	@spa {
+		not path /_app/*
+		not file
+	}
+	rewrite @spa /index.html
+
+	@immutable path /_app/immutable/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	@mutable not path /_app/immutable/*
+	header @mutable Cache-Control "no-cache"
+
+	file_server
+}

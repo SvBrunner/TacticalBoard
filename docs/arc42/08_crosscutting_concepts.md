@@ -53,6 +53,15 @@ Example shape:
 }
 ```
 
+Conventions (implemented):
+
+- Every problem `type` is `https://tacticalboard/errors/{code}`, the code in kebab-case. The URI is an identifier, not a page to fetch.
+- **Domain errors** derive from `DomainException` (SharedKernel) with a transport-neutral kind and their own code, e.g. `duplicate-title`. The kind decides the status: Validation → 400, Forbidden → 403, NotFound → 404, Conflict → 409, PreconditionFailed → 412.
+- **Framework errors** get a code from their status's reason phrase: `bad-request`, `not-found`, `method-not-allowed`, … Validation errors (with `errors`) are `validation-failed`; unexpected exceptions are `500` `internal-error` without any internal details.
+- Every problem has `status`, `instance` (the request path) and `traceId`.
+
+Implementation: `backend/src/TacticalBoard.SharedKernel/Errors/`, `backend/src/TacticalBoard.Api/ErrorHandling/` (`ProblemTypes`, `DomainErrorStatusCodes`, `DomainExceptionHandler`, `ProblemDetailsEnricher`).
+
 ## 8.3 Situation File Format
 
 Situations are exported and imported as JSON files named `<slug-of-title>.situation.json` (`situation.json` if the title yields no usable characters), pretty-printed with a 2-space indent.
@@ -203,7 +212,7 @@ Until there is server-side storage, "saved" means **exported**. From Phase 2, fo
 ## 8.8 App navigation
 
 - `/` is the **start page**: "New situation" (opens the New situation dialog: title + Full/Half field, Full preselected) and "Import" (file picker). Creating or importing navigates to the editor. A "Saved situations" section is the placeholder for the Phase 2 list of saved situations and teams.
-- `/editor` is the **board editor** (client-only, `ssr = false`). Its header has the app badge, New (same flow as on the start page), Load, Export, Undo, Redo.
+- `/editor` is the **board editor** (client-only, `ssr = false`; since the static build, every route is client-only, see ADR-008). Its header has the app badge, New (same flow as on the start page), Load, Export, Undo, Redo.
 - The **badge** (top left, a link named "Start page") goes back to the start page: after "Discard changes?" if there are unsaved changes (Cancel stays in the editor), then the situation is **closed** (`SituationWorkflow.leave` → `SituationEditor.close`): it is dropped, so its changes are really discarded and the unload warning no longer applies. A click with a modifier key (e.g. open in a new tab) is left to the browser.
 - The edited situation lives in the `situationEditor` singleton, so it survives other client-side navigation between both pages (e.g. the browser's Back button). Opening `/editor` without a situation (directly, or after a reload, which loses the in-memory state) redirects to `/`.
 - Dialogs are native `<dialog>` elements opened modally (`modalDialog` action): focus moves into the dialog on open and back to the opener on close, Escape cancels, and page-wide keyboard shortcuts (undo/redo, Delete) are ignored while focus is inside a modal dialog.
@@ -366,6 +375,7 @@ The deployment configuration lists identities that are system administrators fro
 - Deleting a team soft-deletes its folders, situations, memberships and pending join requests. A folder can be deleted only while it contains no (non-deleted) situations.
 - Uniqueness (situation titles and folder names per area, team names) only counts non-deleted items, so names can be reused.
 - **Account deletion** (by the user or a system administrator): blocked while the user is the last Admin of a team with other members. Otherwise their personal area (folders, situations), memberships and pending join requests are soft-deleted, teams where they were the only member are deleted, and the user record is anonymized (display name removed) and soft-deleted. "Created/changed by" on team situations then shows "Deleted user".
+- Implementation (plumbing): an entity implements `ISoftDeletable` (or derives from `SoftDeletableEntity`, SharedKernel). `TacticalBoardDbContext` gives every such root entity type the named global query filter `SoftDelete` (`deleted_at IS NULL`); queries that need deleted rows use `IgnoreQueryFilters(["SoftDelete"])`. `SoftDeleteInterceptor` turns a `Remove` of such an entity into an update that sets `deleted_at` from `IClock`, so it is never deleted physically. Cascading a delete to dependents (e.g. a team's folders) stays an explicit domain operation. Code: `backend/src/TacticalBoard.Infrastructure/Persistence/`.
 
 ## 8.17 Teams (Phase 2)
 

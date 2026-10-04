@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Abstractions shared by every module's domain and application code.
+    No framework or infrastructure dependencies: this is what domain code may depend on.
+  -->
+</Project>

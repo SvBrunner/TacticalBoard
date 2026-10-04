@@ -1,0 +1,18 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..'))" />
+  <!--
+    Module projects (arc42 ch. 5.2). Each module may use only the modules it references
+    directly: transitive project references are switched off, so the dependency arrows of
+    ch. 5.2 are enforced by the compiler (and checked by the architecture tests).
+  -->
+  <PropertyGroup>
+    <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\TacticalBoard.SharedKernel\TacticalBoard.SharedKernel.csproj" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\TacticalBoard.Infrastructure\TacticalBoard.Infrastructure.csproj" />
+    <InternalsVisibleTo Include="TacticalBoard.UnitTests" />
+    <InternalsVisibleTo Include="TacticalBoard.IntegrationTests" />
+  </ItemGroup>
+</Project>

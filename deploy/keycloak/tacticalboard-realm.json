@@ -1,0 +1,54 @@
+{
+  "realm": "tacticalboard",
+  "displayName": "TacticalBoard (development)",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "sslRequired": "external",
+  "clients": [
+    {
+      "clientId": "tacticalboard",
+      "name": "TacticalBoard",
+      "description": "The TacticalBoard backend as OIDC client (BFF, Authorization Code flow with PKCE).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "tacticalboard-dev-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "http://localhost:8080/auth/callback",
+        "http://localhost:5080/auth/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8080/*##http://localhost:5080/*"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "trainer",
+      "enabled": true,
+      "email": "trainer@example.org",
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Trainer",
+      "credentials": [{ "type": "password", "value": "trainer", "temporary": false }]
+    },
+    {
+      "username": "player",
+      "enabled": true,
+      "email": "player@example.org",
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Player",
+      "credentials": [{ "type": "password", "value": "player", "temporary": false }]
+    }
+  ]
+}

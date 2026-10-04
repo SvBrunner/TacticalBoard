@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Shared technical plumbing: implementations of the SharedKernel abstractions, the EF Core
+    DbContext with the soft-delete infrastructure, and the module contract (IModule).
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TacticalBoard.SharedKernel\TacticalBoard.SharedKernel.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TacticalBoard.UnitTests" />
+    <InternalsVisibleTo Include="TacticalBoard.IntegrationTests" />
+  </ItemGroup>
+</Project>
