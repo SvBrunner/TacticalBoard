@@ -1,6 +1,7 @@
 import type { ConfirmationRequest } from "$lib/dialogs/ConfirmationPrompt";
 import type { Situation } from "$lib/model/Situation";
 import type { NewSituationInput } from "./SituationEditor";
+import { TOP_LEVEL, type SaveTarget } from "$lib/storage/SaveTarget";
 
 /** The editor operations the workflow uses; implemented by `SituationEditor`. */
 export interface WorkflowEditor {
@@ -23,8 +24,8 @@ export interface SituationFiles {
 /** How the edited situation relates to the server; implemented by `SituationLink`. */
 export interface WorkflowLink {
 	saved(): unknown;
-	startNew(): void;
-	startImported(): void;
+	startNew(target: SaveTarget): void;
+	startImported(target: SaveTarget): void;
 	reset(): void;
 }
 
@@ -73,20 +74,25 @@ export class SituationWorkflow {
 		return this.deps.confirm(this.deps.link.saved() ? DISCARD_SAVED_CHANGES_REQUEST : DISCARD_CHANGES_REQUEST);
 	}
 
-	/** Creates and opens a new situation. Call `confirmDiscardIfDirty` before asking for the input. */
-	createNew(input: NewSituationInput): Situation {
+	/**
+	 * Creates and opens a new situation, started at `target` (where its first
+	 * save on the server goes). Call `confirmDiscardIfDirty` before asking for
+	 * the input.
+	 */
+	createNew(input: NewSituationInput, target: SaveTarget = TOP_LEVEL): Situation {
 		const created = this.deps.editor.createNew(input);
-		this.deps.link.startNew();
+		this.deps.link.startNew(target);
 		this.log(`Created "${created.title}" (${created.fieldType} field)`);
 		return created;
 	}
 
 	/**
 	 * Reads a situation file and opens it, after confirming that unsaved
-	 * changes may be discarded. Invalid files are reported and change
-	 * nothing. Returns whether the imported situation was opened.
+	 * changes may be discarded; its first save on the server goes to
+	 * `target`. Invalid files are reported and change nothing. Returns
+	 * whether the imported situation was opened.
 	 */
-	async importFile(file: File): Promise<boolean> {
+	async importFile(file: File, target: SaveTarget = TOP_LEVEL): Promise<boolean> {
 		this.log(`Loading ${file.name}…`);
 		let imported: Situation;
 		try {
@@ -100,7 +106,7 @@ export class SituationWorkflow {
 			return false;
 		}
 		this.deps.editor.load(imported);
-		this.deps.link.startImported();
+		this.deps.link.startImported(target);
 		this.log(`Loaded "${imported.displayTitle}" from ${file.name}`);
 		return true;
 	}

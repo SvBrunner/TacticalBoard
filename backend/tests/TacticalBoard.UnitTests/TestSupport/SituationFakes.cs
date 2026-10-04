@@ -58,8 +58,30 @@ internal sealed class InMemorySituationRepository : ISituationRepository
     public Task<Situation?> FindAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Situations.SingleOrDefault(situation => situation.Id == id && !situation.IsDeleted));
 
-    public Task<IReadOnlyList<Situation>> ListAsync(AreaReference area, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<Situation>>(Situations.Where(situation => situation.Area == area && !situation.IsDeleted).ToList());
+    /// <summary>When set, the next folder save finds the situation deleted (a parallel delete).</summary>
+    public bool DeletedBeforeFolderSave { get; set; }
+
+    /// <summary>The folder saves (situation id, folder id).</summary>
+    public List<(Guid SituationId, Guid? FolderId)> FolderSaves { get; } = [];
+
+    public Task<IReadOnlyList<Situation>> ListAsync(AreaReference area, Guid? folderId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Situation>>(
+            Situations.Where(situation => situation.Area == area && situation.FolderId == folderId && !situation.IsDeleted).ToList());
+
+    public Task<bool> AnyInFolderAsync(Guid folderId, CancellationToken cancellationToken) =>
+        Task.FromResult(Situations.Any(situation => situation.FolderId == folderId && !situation.IsDeleted));
+
+    public Task<bool> SaveFolderAsync(Situation situation, CancellationToken cancellationToken)
+    {
+        if (DeletedBeforeFolderSave)
+        {
+            DeletedBeforeFolderSave = false;
+            return Task.FromResult(false);
+        }
+
+        FolderSaves.Add((situation.Id, situation.FolderId));
+        return Task.FromResult(true);
+    }
 
     public Task<SituationRevision?> FindRevisionAsync(Guid situationId, int number, CancellationToken cancellationToken) =>
         Task.FromResult(Revisions.SingleOrDefault(revision => revision.SituationId == situationId && revision.Number == number));

@@ -77,3 +77,31 @@ sequenceDiagram
     Note over U,F: Reload of /editor?situation={id}: the in-memory situation is gone,<br/>so the editor route loads it again with the same GET (no question);<br/>if that fails (logged out, deleted, no server) it goes to the start page.
 ```
 
+
+## 6.4 Move a situation into a folder, while the folder is being deleted
+
+Implemented in roadmap Phase 2 step 4 (ch. 8.15). A folder may only be deleted while it is empty; a move into it (or a first save in it) must not slip in between the check and the deletion. Both run in one database transaction that locks the folder row (ADR-012).
+
+```mermaid
+sequenceDiagram
+    participant U1 as User (tab 1)
+    participant U2 as User (tab 2)
+    participant S as Backend: Situations
+    participant F as Backend: Folders
+    participant DB as PostgreSQL
+
+    U1->>S: PUT /api/situations/{id}/folder { folderId: F }
+    S->>DB: BEGIN; folder F (not deleted) FOR SHARE
+    U2->>F: DELETE /api/folders/F
+    F->>DB: BEGIN; folder F (not deleted) FOR UPDATE
+    Note over F,DB: waits for tab 1's transaction
+    S->>DB: UPDATE situations SET folder_id = F; COMMIT
+    S-->>U1: 200, metadata (revision and ETag unchanged)
+    DB-->>F: lock granted
+    F->>S: IFolderContents: does F contain situations?
+    S-->>F: yes
+    F->>DB: ROLLBACK
+    F-->>U2: 409 folder-not-empty
+```
+
+The other order works the same way: a deletion that locked the folder first commits, and the waiting move then no longer finds the folder (`404 folder-not-found`). The frontend shows "“<name>” can't be deleted because it still contains situations. Move or delete them first." for `folder-not-empty`, and refuses at once (without asking the server) when the folder's page already lists situations.

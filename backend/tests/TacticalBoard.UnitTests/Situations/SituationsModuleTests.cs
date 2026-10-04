@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TacticalBoard.Areas;
+using TacticalBoard.Folders;
+using TacticalBoard.Folders.Contracts;
 using TacticalBoard.Infrastructure;
 using TacticalBoard.Infrastructure.Persistence;
 using TacticalBoard.Situations;
@@ -23,6 +25,7 @@ public class SituationsModuleTests
         services.AddSharedKernelServices().AddPersistence("TacticalBoard.Api");
         new UsersModule().RegisterServices(services, configuration);
         new AreasModule().RegisterServices(services, configuration);
+        new FoldersModule().RegisterServices(services, configuration);
         new SituationsModule().RegisterServices(services, configuration);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
@@ -35,6 +38,7 @@ public class SituationsModuleTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<SituationService>());
         Assert.IsType<EfSituationRepository>(scope.ServiceProvider.GetRequiredService<ISituationRepository>());
+        Assert.IsType<SituationFolderContents>(scope.ServiceProvider.GetRequiredService<IFolderContents>());
     }
 
     [Fact]
@@ -47,7 +51,7 @@ public class SituationsModuleTests
         var situations = model.FindEntityType(typeof(Situation))!;
 
         Assert.Equal("situations", situations.GetTableName());
-        var index = Assert.Single(situations.GetIndexes());
+        var index = situations.GetIndexes().Single(candidate => candidate.GetDatabaseName() == SituationConfiguration.TitleIndexName);
         Assert.True(index.IsUnique);
         Assert.Equal(SituationConfiguration.TitleIndexName, index.GetDatabaseName());
         Assert.Equal(["AreaKind", "AreaOwnerId", "NormalizedTitle"], index.Properties.Select(property => property.Name));
@@ -55,6 +59,11 @@ public class SituationsModuleTests
         Assert.Equal("area_id", situations.FindProperty(nameof(Situation.AreaOwnerId))!.GetColumnName());
         Assert.True(situations.FindProperty(nameof(Situation.CurrentRevision))!.IsConcurrencyToken);
         Assert.NotNull(situations.FindDeclaredQueryFilter(SoftDeleteQueryFilter.Name));
+        var folderIndex = situations.GetIndexes().Single(candidate => candidate.GetDatabaseName() == SituationConfiguration.FolderIndexName);
+        Assert.False(folderIndex.IsUnique);
+        Assert.Equal(["FolderId"], folderIndex.Properties.Select(property => property.Name));
+        Assert.Equal("deleted_at IS NULL", folderIndex.GetFilter());
+        Assert.Equal(2, situations.GetIndexes().Count());
     }
 
     [Fact]

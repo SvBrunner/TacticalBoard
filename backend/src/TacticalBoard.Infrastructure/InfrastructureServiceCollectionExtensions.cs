@@ -8,6 +8,7 @@ using TacticalBoard.Infrastructure.Identifiers;
 using TacticalBoard.Infrastructure.Persistence;
 using TacticalBoard.Infrastructure.Time;
 using TacticalBoard.SharedKernel.Identifiers;
+using TacticalBoard.SharedKernel.Persistence;
 using TacticalBoard.SharedKernel.Time;
 
 namespace TacticalBoard.Infrastructure;
@@ -26,7 +27,7 @@ public static class InfrastructureServiceCollectionExtensions
 
     /// <summary>
     /// Registers <see cref="TacticalBoardDbContext"/> on PostgreSQL (snake_case names, soft delete),
-    /// the <see cref="DatabaseOptions"/> and the migration on startup.
+    /// <see cref="IUnitOfWork"/>, the <see cref="DatabaseOptions"/> and the migration on startup.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="migrationsAssembly">The assembly that contains the EF Core migrations.</param>
@@ -57,6 +58,7 @@ public static class InfrastructureServiceCollectionExtensions
                 .AddInterceptors(serviceProvider.GetRequiredService<SoftDeleteInterceptor>());
         });
 
+        services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<ISchemaMigrator, EfCoreSchemaMigrator>();
         services.AddHostedService<DatabaseMigrationHostedService>();
         return services;

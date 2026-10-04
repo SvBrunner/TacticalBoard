@@ -3,7 +3,9 @@ import { situationEditor } from "$lib/editor/SituationEditor";
 import { FakeFetch, jsonResponse } from "$lib/testing/fakeFetch";
 import { storedFrom } from "$lib/testing/storageFakes";
 import { situationLink } from "./SituationLink";
-import { situationOpener } from "./situationStorage";
+import { folderApi, situationApi, situationOpener } from "./situationStorage";
+import { FolderApi } from "./FolderApi";
+import { SituationApi } from "./SituationApi";
 
 describe("situationStorage", () => {
 	afterEach(() => {
@@ -22,5 +24,10 @@ describe("situationStorage", () => {
 
 		expect(situationEditor.current()).toMatchObject({ id: "server-9", fieldType: "half" });
 		expect(situationLink.saved()?.revision).toBe(4);
+	});
+
+	it("provides the app's REST APIs for situations and folders", () => {
+		expect(situationApi).toBeInstanceOf(SituationApi);
+		expect(folderApi).toBeInstanceOf(FolderApi);
 	});
 });

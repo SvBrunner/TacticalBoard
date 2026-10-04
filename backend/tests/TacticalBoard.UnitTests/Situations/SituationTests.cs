@@ -14,7 +14,7 @@ public class SituationTests
     private static readonly DateTimeOffset Created = new(2026, 10, 4, 8, 0, 0, TimeSpan.Zero);
 
     private static (Situation Situation, SituationRevision Revision) Create(string title = "Powerplay", string fieldType = "full") =>
-        Situation.Create(Id, AreaReference.Personal(Alice), SituationTitle.FromTrusted(title), SituationDocuments.Valid(fieldType: fieldType), Created, Alice);
+        Situation.Create(Id, AreaReference.Personal(Alice), null, SituationTitle.FromTrusted(title), SituationDocuments.Valid(fieldType: fieldType), Created, Alice);
 
     private static JsonElement Content(SituationRevision revision) => JsonDocument.Parse(revision.Document).RootElement.GetProperty("situation");
 
@@ -89,10 +89,11 @@ public class SituationTests
         var title = SituationTitle.FromTrusted("A");
         var document = SituationDocuments.Valid();
 
-        Assert.Throws<ArgumentException>(() => Situation.Create(Guid.Empty, area, title, document, Created, Alice));
-        Assert.Throws<ArgumentNullException>(() => Situation.Create(Id, null!, title, document, Created, Alice));
-        Assert.Throws<ArgumentNullException>(() => Situation.Create(Id, area, null!, document, Created, Alice));
-        Assert.Throws<ArgumentNullException>(() => Situation.Create(Id, area, title, null!, Created, Alice));
+        Assert.Throws<ArgumentException>(() => Situation.Create(Guid.Empty, area, null, title, document, Created, Alice));
+        Assert.Throws<ArgumentException>(() => Situation.Create(Id, area, Guid.Empty, title, document, Created, Alice));
+        Assert.Throws<ArgumentNullException>(() => Situation.Create(Id, null!, null, title, document, Created, Alice));
+        Assert.Throws<ArgumentNullException>(() => Situation.Create(Id, area, null, null!, document, Created, Alice));
+        Assert.Throws<ArgumentNullException>(() => Situation.Create(Id, area, null, title, null!, Created, Alice));
         var (situation, _) = Create();
         Assert.Throws<ArgumentNullException>(() => situation.Revise(null!, document, Created, Alice));
         Assert.Throws<ArgumentNullException>(() => situation.Revise(title, null!, Created, Alice));
@@ -109,5 +110,32 @@ public class SituationTests
 
         Assert.True(situation.IsDeleted);
         Assert.Equal(Created, situation.DeletedAt);
+    }
+
+    [Fact]
+    public void Can_be_created_in_a_folder()
+    {
+        var folder = Guid.Parse("0199a6d0-0000-7000-8000-0000000000f1");
+
+        var (situation, _) = Situation.Create(Id, AreaReference.Personal(Alice), folder, SituationTitle.FromTrusted("A"), SituationDocuments.Valid(), Created, Alice);
+
+        Assert.Equal(folder, situation.FolderId);
+    }
+
+    [Fact]
+    public void Moving_changes_only_the_folder()
+    {
+        var (situation, _) = Create();
+        var folder = Guid.Parse("0199a6d0-0000-7000-8000-0000000000f1");
+
+        situation.MoveTo(folder);
+
+        Assert.Equal(folder, situation.FolderId);
+        Assert.Equal((1, Created, Alice), (situation.CurrentRevision, situation.UpdatedAt, situation.UpdatedBy));
+
+        situation.MoveTo(null);
+
+        Assert.Null(situation.FolderId);
+        Assert.Throws<ArgumentException>(() => situation.MoveTo(Guid.Empty));
     }
 }

@@ -22,6 +22,64 @@ namespace TacticalBoard.Api.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("TacticalBoard.Folders.Domain.Folder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AreaKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("area_kind");
+
+                    b.Property<Guid>("AreaOwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("area_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("normalized_name");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_folders");
+
+                    b.HasIndex("AreaKind", "AreaOwnerId", "NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_folders_area_name")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("folders", (string)null);
+                });
+
             modelBuilder.Entity("TacticalBoard.Situations.Domain.Situation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -95,6 +153,10 @@ namespace TacticalBoard.Api.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_situations");
+
+                    b.HasIndex("FolderId")
+                        .HasDatabaseName("ix_situations_folder")
+                        .HasFilter("deleted_at IS NULL");
 
                     b.HasIndex("AreaKind", "AreaOwnerId", "NormalizedTitle")
                         .IsUnique()

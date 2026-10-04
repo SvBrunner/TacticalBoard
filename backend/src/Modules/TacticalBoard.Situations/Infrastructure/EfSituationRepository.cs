@@ -16,11 +16,16 @@ internal sealed class EfSituationRepository(TacticalBoardDbContext context) : IS
     public Task<Situation?> FindAsync(Guid id, CancellationToken cancellationToken) =>
         Situations.SingleOrDefaultAsync(situation => situation.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<Situation>> ListAsync(AreaReference area, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Situation>> ListAsync(AreaReference area, Guid? folderId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(area);
-        return await InArea(Situations.AsNoTracking(), area).ToListAsync(cancellationToken);
+        return await InArea(Situations.AsNoTracking(), area)
+            .Where(situation => situation.FolderId == folderId)
+            .ToListAsync(cancellationToken);
     }
+
+    public Task<bool> AnyInFolderAsync(Guid folderId, CancellationToken cancellationToken) =>
+        Situations.AsNoTracking().AnyAsync(situation => situation.FolderId == folderId, cancellationToken);
 
     public Task<SituationRevision?> FindRevisionAsync(Guid situationId, int number, CancellationToken cancellationToken) =>
         Revisions.AsNoTracking().SingleOrDefaultAsync(revision => revision.SituationId == situationId && revision.Number == number, cancellationToken);
@@ -84,6 +89,20 @@ internal sealed class EfSituationRepository(TacticalBoardDbContext context) : IS
 
             throw;
         }
+    }
+
+    public async Task<bool> SaveFolderAsync(Situation situation, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(situation);
+        var folderId = situation.FolderId;
+        var updated = await Situations
+            .Where(stored => stored.Id == situation.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(stored => stored.FolderId, folderId), cancellationToken);
+
+        // The tracked entity now matches the row again; a later SaveChanges must not write it once more.
+        context.Entry(situation).Property(stored => stored.FolderId).OriginalValue = folderId;
+        context.Entry(situation).Property(stored => stored.FolderId).IsModified = false;
+        return updated == 1;
     }
 
     public async Task SaveChangesAsync(CancellationToken cancellationToken)

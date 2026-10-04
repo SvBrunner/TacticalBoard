@@ -1,27 +1,35 @@
 <!--
 @component
 Start page (overview): start a new situation or import one from a file;
-either opens the editor. On top the shared app navbar (`AppNavbar`) with the
-account corner (log in / the user's menu). "Saved situations" lists the personal area's saved situations
-when logged in (open, delete); otherwise it explains why there are none.
-Teams follow later (Phase 2).
+either opens the editor, and its first save on the server goes to the top
+level of the personal area. On top the shared app navbar (`AppNavbar`) with
+the account corner (log in / the user's menu). "Saved situations" shows the
+personal area when logged in (arc42 ch. 8.15): its folders (links to their
+pages, "New folder") and the situations at its top level (open, move,
+delete); otherwise it explains why there are none. Teams follow later
+(Phase 2).
 -->
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { AuthSession, authSession } from "$lib/auth/AuthSession";
 	import AppNavbar from "$lib/components/navigation/AppNavbar.svelte";
-	import SituationDialogs from "$lib/components/dialogs/SituationDialogs.svelte";
+	import FolderNameDialog from "$lib/components/storage/FolderNameDialog.svelte";
+	import MoveSituationDialog from "$lib/components/storage/MoveSituationDialog.svelte";
+	import SavedFolders from "$lib/components/storage/SavedFolders.svelte";
 	import SavedSituations from "$lib/components/storage/SavedSituations.svelte";
+	import StartActions from "$lib/components/storage/StartActions.svelte";
 	import { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
-	import { EditorRoute } from "$lib/editor/EditorRoute";
 	import { situationEditor } from "$lib/editor/SituationEditor";
 	import { SituationFileTransfer } from "$lib/editor/SituationFileTransfer";
 	import { SituationWorkflow } from "$lib/editor/SituationWorkflow";
 	import { notifications } from "$lib/debug/Notifications";
+	import { FolderList } from "$lib/storage/FolderList";
+	import { SavedSituationActions } from "$lib/storage/SavedSituationActions";
 	import { SavedSituationList } from "$lib/storage/SavedSituationList";
+	import { TOP_LEVEL } from "$lib/storage/SaveTarget";
 	import type { SituationSummary } from "$lib/storage/SituationApi";
 	import { situationLink } from "$lib/storage/SituationLink";
-	import { situationApi, situationOpener } from "$lib/storage/situationStorage";
+	import { folderApi, situationApi, situationOpener } from "$lib/storage/situationStorage";
 
 	const prompt = new ConfirmationPrompt();
 	const workflow = new SituationWorkflow({
@@ -35,66 +43,47 @@ Teams follow later (Phase 2).
 	const loginNotice = AuthSession.loginNotice(window.location.search);
 
 	const sessionState = authSession.state;
+	const refreshSession = () => void authSession.refresh();
 	const savedList = new SavedSituationList({
 		api: situationApi,
-		onSessionEnded: () => void authSession.refresh(),
+		place: TOP_LEVEL,
+		link: situationLink,
+		onSessionEnded: refreshSession,
 		log: notifications,
 	});
 	const savedState = savedList.state;
-	let opening = $state(false);
-	let openError: string | null = $state(null);
+	const folders = new FolderList({ api: folderApi, onSessionEnded: refreshSession, log: notifications });
+	const folderState = folders.state;
+	const actions = new SavedSituationActions({
+		list: savedList,
+		opener: situationOpener,
+		confirmDiscard: () => workflow.confirmDiscardIfDirty(),
+		confirm: (request) => prompt.request(request),
+		navigate: (url) => goto(url),
+	});
+	const actionState = actions.state;
 
-	// The list belongs to the logged-in user: (re)load it whenever the login state says so.
+	let creatingFolder = $state(false);
+	let moving: SituationSummary | null = $state(null);
+	const authenticated = $derived($sessionState.status === "authenticated");
+	const folderItems = $derived($folderState.status === "loaded" ? $folderState.folders : []);
+	const hasFolders = $derived(folderItems.length > 0);
+
+	// The lists belong to the logged-in user: (re)load them whenever the login state says so.
 	$effect(() => {
 		if ($sessionState.status === "authenticated") {
 			void savedList.load();
+			void folders.load();
 		}
 	});
-
-	let dialogs: SituationDialogs;
-	let fileInput: HTMLInputElement;
 
 	function openEditor() {
 		void goto("/editor");
 	}
 
-	/** Opens a saved situation in the editor ("Discard changes?" first if needed, as for an import). */
-	async function openSaved(situation: SituationSummary) {
-		opening = true;
-		openError = null;
-		try {
-			const outcome = await situationOpener.open(situation.id, () => workflow.confirmDiscardIfDirty());
-			if (outcome.status === "opened") {
-				await goto(EditorRoute.forSaved(situation.id));
-			} else if (outcome.status === "failed") {
-				openError = `"${situation.title}" couldn't be opened. ${outcome.message}`;
-				void savedList.load();
-			}
-		} finally {
-			opening = false;
-		}
-	}
-
-	async function deleteSaved(situation: SituationSummary) {
-		openError = null;
-		const confirmed = await prompt.request({
-			title: "Delete situation?",
-			message: `“${situation.title}” will be deleted.`,
-			confirmLabel: "Delete",
-			cancelLabel: "Cancel",
-		});
-		if (confirmed) {
-			await savedList.delete(situation);
-		}
-	}
-
-	function handleFileChange(event: Event) {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		input.value = "";
-		if (file) {
-			void dialogs.importFile(file);
-		}
+	function move(situation: SituationSummary, folderId: string | null) {
+		moving = null;
+		void actions.move(situation, folderId);
 	}
 </script>
 
@@ -108,51 +97,60 @@ Teams follow later (Phase 2).
 <main class="start">
 	<section class="panel" aria-labelledby="start-heading">
 		<h2 id="start-heading" class="panel-title">Start</h2>
-		<ul class="actions">
-			<li>
-				<button type="button" class="action primary" onclick={() => dialogs.startNew()}>
-					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-						<path d="M12 5v14M5 12h14" />
-					</svg>
-					New situation
-				</button>
-			</li>
-			<li>
-				<button type="button" class="action" onclick={() => fileInput.click()}>
-					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-						<path d="M12 15V3M7 8l5-5 5 5" />
-						<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-					</svg>
-					Import
-				</button>
-				<input
-					bind:this={fileInput}
-					type="file"
-					accept=".json"
-					class="hidden-input"
-					onchange={handleFileChange}
-				/>
-			</li>
-		</ul>
+		<StartActions {workflow} {prompt} target={TOP_LEVEL} onOpened={openEditor} />
 	</section>
 
 	<section class="panel" aria-labelledby="saved-heading">
 		<h2 id="saved-heading" class="panel-title">Saved situations</h2>
-		{#if openError}
-			<p class="open-error" role="alert">{openError}</p>
+		{#if $actionState.error}
+			<p class="open-error" role="alert">{$actionState.error}</p>
 		{/if}
-		<SavedSituations
-			session={$sessionState}
-			list={$savedState}
-			busy={opening}
-			onOpen={openSaved}
-			onDelete={deleteSaved}
-			onRetry={() => void savedList.load()}
-		/>
+		{#if authenticated}
+			<section class="part" aria-labelledby="folders-heading">
+				<div class="part-head">
+					<h3 id="folders-heading" class="part-title">Folders</h3>
+					<button type="button" class="new-folder" onclick={() => (creatingFolder = true)}>
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+							<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+							<path d="M12 11v5M9.5 13.5h5" />
+						</svg>
+						New folder
+					</button>
+				</div>
+				<SavedFolders list={$folderState} onRetry={() => void folders.load()} />
+			</section>
+			<section class="part" aria-labelledby="top-level-heading">
+				<h3 id="top-level-heading" class="part-title">Situations</h3>
+				{@render situationList()}
+			</section>
+		{:else}
+			{@render situationList()}
+		{/if}
 	</section>
 </main>
 
-<SituationDialogs bind:this={dialogs} {workflow} {prompt} onOpened={openEditor} />
+{#snippet situationList()}
+	<SavedSituations
+		session={$sessionState}
+		list={$savedState}
+		busy={$actionState.opening}
+		emptyMessage={hasFolders ? "No situations outside the folders." : undefined}
+		onOpen={(situation) => void actions.open(situation)}
+		onDelete={(situation) => void actions.delete(situation)}
+		onMove={(situation) => (moving = situation)}
+		onRetry={() => void savedList.load()}
+	/>
+{/snippet}
+
+<FolderNameDialog
+	open={creatingFolder}
+	title="New folder"
+	submitLabel="Create"
+	onSubmit={(name) => folders.create(name)}
+	onClose={() => (creatingFolder = false)}
+/>
+
+<MoveSituationDialog situation={moving} folders={folderItems} onMove={move} onCancel={() => (moving = null)} />
 
 <style>
 	.start {
@@ -184,46 +182,47 @@ Teams follow later (Phase 2).
 		color: var(--text-muted);
 	}
 
-	.actions {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	.part {
+		display: flex;
+		flex-direction: column;
 		gap: 12px;
 	}
 
-	.action {
-		width: 100%;
-		min-height: 72px;
-		padding: 0 20px;
+	.part-head {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.part-title {
+		margin: 0;
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--text);
+	}
+
+	.new-folder {
+		min-height: var(--touch-target);
+		padding: 0 12px;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
 		border: none;
-		border-radius: var(--radius-md);
+		border-radius: var(--radius-sm);
 		background: var(--bg-app);
 		color: var(--text);
 		box-shadow: inset 0 0 0 1px var(--border);
-		font-size: 16px;
+		font: inherit;
+		font-size: 14px;
 		font-weight: 600;
-		text-align: left;
 		cursor: pointer;
 	}
 
-	.action.primary {
-		background: var(--accent);
-		color: var(--accent-contrast);
-		box-shadow: none;
-	}
-
-	.action:focus-visible {
+	.new-folder:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
-	}
-
-	.hidden-input {
-		display: none;
 	}
 
 	.open-error {
@@ -240,7 +239,6 @@ Teams follow later (Phase 2).
 			padding-right: calc(16px + env(safe-area-inset-right, 0px));
 			gap: 16px;
 		}
-
 
 		.panel {
 			padding: 16px;

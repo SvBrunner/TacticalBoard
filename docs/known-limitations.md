@@ -25,9 +25,9 @@ A new or imported situation that isn't saved on the server (always in local mode
 
 ## Saving on the server
 
-- **Personal area only, top level only.** Folders and teams come in later steps; `folderId` is always `null`.
-- **The start page's list is not live.** It is loaded when the page is shown (and after a delete); situations saved or deleted in another tab or by another session appear after navigating to the start page again.
-- **Deleting is only possible from the start page's list**, not in the editor. Deleting the situation that is still open in the editor (e.g. after the browser's Back button) is not noticed there; its next save fails with "This situation no longer exists on the server" and it can only be exported.
+- **Personal area only.** Teams come in later steps.
+- **The lists are not live.** The start page's folders and situations and a folder's page are loaded when the page is shown (and after a delete, move or new folder); changes made in another tab or by another session appear after navigating to the page again. A folder deleted or renamed elsewhere still shows its old state until then (an action on it then says that it no longer exists).
+- **Deleting is only possible from the lists** (the start page or a folder's page), not in the editor. Deleting the situation that is still open in the editor (e.g. after the browser's Back button) is not noticed there; its next save fails with "This situation no longer exists on the server" and it can only be exported.
 - **Every save is a full revision.** Even a save without changes writes a new revision; nothing is pruned (see arc42 ch. 11).
 - **Titles are limited to 200 characters** on the server (the editor doesn't limit typing; saving a longer title is rejected with a message). A numbered title (" (2)") may be slightly longer.
 - **Numbered titles append to the whole title**, so a copy of "Powerplay (2)" whose title is taken becomes "Powerplay (2) (2)".
@@ -35,6 +35,17 @@ A new or imported situation that isn't saved on the server (always in local mode
 - **Edits made while a save is running** stay unsaved (the situation stays dirty); the server's title wins only if the title wasn't changed in the meantime.
 - **The conflict question doesn't show what the other person changed**; there is no comparison or merge.
 - **Created/changed by** names are looked up when listing; a renamed user shows the new name for older changes too.
+
+## Folders
+
+- **Flat, personal area only.** No subfolders (by design, arc42 ch. 1); team folders come with teams.
+- **Moving works with the Move button and a picker**, not by drag and drop. It moves one situation at a time, only within the area (copying to another area works only through export and import).
+- **Renaming and deleting a folder happen on its page**, not in the start page's list. A folder's page lists only its situations; the start page lists only the top level, so there is no view of all situations at once and no search.
+- **The editor doesn't show the folder** of the edited situation, and its own **New** and **Load** start at the top level of the personal area — only "New situation" / "Import" on a folder's page save into that folder. The badge always leads back to the start page, not to the folder.
+- **A move doesn't count as a change**: "Last changed by/at" and the lists' order stay as they were (the revision and the ETag stay too, arc42 ch. 8.15).
+- **Folder names**: at most 100 characters, no line breaks or other control characters; a taken name is refused (no automatic numbering, unlike titles). Renaming has no conflict check; the last rename wins.
+- **Folders are sorted by name** with a culture-independent, case-insensitive comparison (e.g. accented letters sort with their base letter, but language-specific orders are not followed).
+- **A folder that still contains situations can't be deleted** (by design); its situations have to be moved or deleted one by one first.
 
 ## Hidden-half elements of half-field situations
 

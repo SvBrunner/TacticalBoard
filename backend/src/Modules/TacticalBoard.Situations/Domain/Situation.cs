@@ -30,7 +30,10 @@ internal sealed class Situation : SoftDeletableEntity
     /// <summary>The area the situation lives in; it never changes (no moving between areas, ch. 1).</summary>
     public AreaReference Area => new(AreaKind, AreaOwnerId);
 
-    /// <summary>The folder within the area, or <c>null</c> for the top level. Reserved for folders (roadmap Phase 2 step 4); always <c>null</c> for now.</summary>
+    /// <summary>
+    /// The folder within the area, or <c>null</c> for the top level. Changed by <see cref="MoveTo"/>;
+    /// that the folder exists and lies in <see cref="Area"/> is checked by the service.
+    /// </summary>
     public Guid? FolderId { get; private set; }
 
     public string Title { get; private set; }
@@ -56,10 +59,11 @@ internal sealed class Situation : SoftDeletableEntity
     /// <summary>The number of the newest revision (1 for a new situation).</summary>
     public int CurrentRevision { get; private set; }
 
-    /// <summary>Creates a situation from its first save, with revision 1.</summary>
+    /// <summary>Creates a situation from its first save, with revision 1, in <paramref name="folderId"/> (or at the top level).</summary>
     public static (Situation Situation, SituationRevision Revision) Create(
         Guid id,
         AreaReference area,
+        Guid? folderId,
         SituationTitle title,
         SituationDocument document,
         DateTimeOffset at,
@@ -73,11 +77,17 @@ internal sealed class Situation : SoftDeletableEntity
             throw new ArgumentException("The id must not be empty.", nameof(id));
         }
 
+        if (folderId == Guid.Empty)
+        {
+            throw new ArgumentException("The folder id must not be empty.", nameof(folderId));
+        }
+
         var situation = new Situation
         {
             Id = id,
             AreaKind = area.Kind,
             AreaOwnerId = area.OwnerId,
+            FolderId = folderId,
             Sport = document.Sport,
             FieldType = document.FieldType,
             CreatedAt = at,
@@ -104,6 +114,21 @@ internal sealed class Situation : SoftDeletableEntity
         }
 
         return Apply(title, document, at, by, CurrentRevision + 1);
+    }
+
+    /// <summary>
+    /// Moves the situation into another folder of its area (or to the top level, <c>null</c>). A
+    /// metadata change only (arc42 ch. 8.15): no new revision, the document, the revision number
+    /// (ETag) and "last changed" stay as they are.
+    /// </summary>
+    public void MoveTo(Guid? folderId)
+    {
+        if (folderId == Guid.Empty)
+        {
+            throw new ArgumentException("The folder id must not be empty.", nameof(folderId));
+        }
+
+        FolderId = folderId;
     }
 
     private SituationRevision Apply(SituationTitle title, SituationDocument document, DateTimeOffset at, Guid by, int revisionNumber)

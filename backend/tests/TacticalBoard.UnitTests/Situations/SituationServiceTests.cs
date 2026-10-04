@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TacticalBoard.Areas.Contracts;
+using TacticalBoard.Folders.Contracts;
 using TacticalBoard.Situations.Application;
 using TacticalBoard.Situations.Domain;
 using TacticalBoard.UnitTests.TestSupport;
@@ -21,7 +22,13 @@ public class SituationServiceTests
 
     private readonly SequenceIdGenerator _ids = new();
 
-    private SituationService Service => new(_repository, _areas, _actors, _ids, _clock);
+    private readonly FakeUnitOfWork _transactions = new();
+
+    private FakeFolderDirectory? _folders;
+
+    private FakeFolderDirectory Folders => _folders ??= new FakeFolderDirectory(_transactions);
+
+    private SituationService Service => new(_repository, Folders, _areas, _actors, _transactions, _ids, _clock);
 
     private static SituationTitle Title(string text)
     {
@@ -364,5 +371,199 @@ public class SituationServiceTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => Service.CreateAsync(AlicesArea, Title("A"), null!, SituationOrigin.New, Cancellation));
         await Assert.ThrowsAsync<ArgumentNullException>(() => Service.UpdateAsync(Guid.NewGuid(), 1, null!, SituationDocuments.Valid(), Cancellation));
         await Assert.ThrowsAsync<ArgumentNullException>(() => Service.UpdateAsync(Guid.NewGuid(), 1, Title("A"), null!, Cancellation));
+    }
+
+    private Task<SituationView> CreateInFolderAsync(Guid folderId, string title, SituationOrigin origin = SituationOrigin.New) =>
+        Service.CreateInFolderAsync(folderId, Title(title), SituationDocuments.Valid(title), origin, Cancellation);
+
+    [Fact]
+    public async Task Listing_the_area_shows_only_the_top_level()
+    {
+        var folder = Folders.Add(AlicesArea);
+        await CreateAsync("Top");
+        await CreateInFolderAsync(folder.Id, "Inside");
+
+        var list = await Service.ListAsync(AlicesArea, Cancellation);
+
+        Assert.Equal(["Top"], list.Select(situation => situation.Title));
+    }
+
+    [Fact]
+    public async Task Lists_a_folders_situations_most_recently_changed_first()
+    {
+        var folder = Folders.Add(AlicesArea);
+        var other = Folders.Add(AlicesArea);
+        await CreateInFolderAsync(folder.Id, "Older");
+        _clock.UtcNow = _clock.UtcNow.AddMinutes(1);
+        await CreateInFolderAsync(folder.Id, "Newer");
+        await CreateInFolderAsync(other.Id, "Elsewhere");
+        await CreateAsync("Top");
+
+        var list = await Service.ListInFolderAsync(folder.Id, Cancellation);
+
+        Assert.Equal(["Newer", "Older"], list.Select(situation => situation.Title));
+        Assert.All(list, situation => Assert.Equal(folder.Id, situation.FolderId));
+    }
+
+    [Fact]
+    public async Task Listing_an_unknown_or_unreadable_folder_is_folder_not_found()
+    {
+        var bobsFolder = Folders.Add(AreaReference.Personal(Bob));
+
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => Service.ListInFolderAsync(Guid.NewGuid(), Cancellation));
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => Service.ListInFolderAsync(bobsFolder.Id, Cancellation));
+    }
+
+    [Fact]
+    public async Task Creates_a_situation_in_a_folder_while_the_folder_is_locked()
+    {
+        var folder = Folders.Add(AlicesArea);
+
+        var view = await CreateInFolderAsync(folder.Id, "Powerplay");
+
+        Assert.Equal(folder.Id, view.Summary.FolderId);
+        Assert.Equal((folder.Id, AlicesArea), (_repository.Situations[0].FolderId, _repository.Situations[0].Area));
+        Assert.Equal([(folder.Id, true)], Folders.Placements);
+        Assert.Equal(1, _transactions.Transactions);
+    }
+
+    [Fact]
+    public async Task Titles_are_unique_in_the_whole_area_not_per_folder()
+    {
+        var folder = Folders.Add(AlicesArea);
+        await CreateAsync("Powerplay");
+
+        await Assert.ThrowsAsync<DuplicateSituationTitleException>(() => CreateInFolderAsync(folder.Id, "Powerplay"));
+        var imported = await CreateInFolderAsync(folder.Id, "Powerplay", SituationOrigin.Imported);
+        var untitled = await CreateInFolderAsync(folder.Id, "");
+        var secondUntitled = await CreateAsync("");
+
+        Assert.Equal("Powerplay (2)", imported.Summary.Title);
+        Assert.Equal(("Untitled Situation", "Untitled Situation (2)"), (untitled.Summary.Title, secondUntitled.Summary.Title));
+    }
+
+    [Fact]
+    public async Task A_numbered_first_save_in_a_folder_chooses_again_inside_the_transaction()
+    {
+        var folder = Folders.Add(AlicesArea);
+        _repository.TitlesTakenInParallel.Enqueue("Untitled Situation");
+
+        var view = await CreateInFolderAsync(folder.Id, "");
+
+        Assert.Equal("Untitled Situation (2)", view.Summary.Title);
+        Assert.Equal((1, 0), (_transactions.Transactions, _transactions.RolledBack));
+    }
+
+    [Fact]
+    public async Task Creating_in_an_unknown_unreadable_or_just_deleted_folder_is_folder_not_found()
+    {
+        var bobsFolder = Folders.Add(AreaReference.Personal(Bob));
+        var folder = Folders.Add(AlicesArea);
+
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => CreateInFolderAsync(Guid.NewGuid(), "A"));
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => CreateInFolderAsync(bobsFolder.Id, "A"));
+        Folders.DeletedBeforePlacing = true;
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => CreateInFolderAsync(folder.Id, "A"));
+        Assert.Empty(_repository.Situations);
+    }
+
+    [Fact]
+    public async Task Creating_in_a_folder_needs_write_access_to_its_area()
+    {
+        var folder = Folders.Add(AlicesArea);
+        _areas.Writable.Clear();
+
+        await Assert.ThrowsAsync<SituationAccessDeniedException>(() => CreateInFolderAsync(folder.Id, "A"));
+        Assert.Empty(_repository.Situations);
+    }
+
+    [Fact]
+    public async Task Moves_a_situation_into_a_folder_and_back_without_a_new_revision()
+    {
+        var folder = Folders.Add(AlicesArea);
+        var created = await CreateAsync("Powerplay");
+        _clock.UtcNow = _clock.UtcNow.AddMinutes(5);
+        _actors.CurrentUserId = Bob;
+
+        var moved = await Service.MoveAsync(created.Summary.Id, folder.Id, Cancellation);
+
+        Assert.Equal(folder.Id, moved.FolderId);
+        Assert.Equal(created.Summary with { FolderId = folder.Id }, moved);
+        Assert.Single(_repository.Revisions);
+        Assert.Equal([(folder.Id, true)], Folders.Placements);
+        Assert.Empty(await Service.ListAsync(AlicesArea, Cancellation));
+        Assert.Single(await Service.ListInFolderAsync(folder.Id, Cancellation));
+
+        var back = await Service.MoveAsync(created.Summary.Id, null, Cancellation);
+
+        Assert.Null(back.FolderId);
+        Assert.Equal([(created.Summary.Id, (Guid?)folder.Id), (created.Summary.Id, null)], _repository.FolderSaves);
+        Assert.Single(await Service.ListAsync(AlicesArea, Cancellation));
+    }
+
+    [Fact]
+    public async Task A_moved_situation_can_still_be_saved_with_its_revision()
+    {
+        var folder = Folders.Add(AlicesArea);
+        var created = await CreateAsync("Powerplay");
+        await Service.MoveAsync(created.Summary.Id, folder.Id, Cancellation);
+
+        var saved = await Service.UpdateAsync(created.Summary.Id, 1, Title("Powerplay"), SituationDocuments.Valid(), Cancellation);
+
+        Assert.Equal((2, (Guid?)folder.Id), (saved.Summary.Revision, saved.Summary.FolderId));
+    }
+
+    [Fact]
+    public async Task Moving_into_an_unknown_deleted_or_other_areas_folder_is_folder_not_found()
+    {
+        var created = await CreateAsync("Powerplay");
+        var bobsFolder = Folders.Add(AreaReference.Personal(Bob));
+        _areas.Readable.Add(AreaReference.Personal(Bob));
+        _areas.Writable.Add(AreaReference.Personal(Bob));
+        var folder = Folders.Add(AlicesArea);
+
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => Service.MoveAsync(created.Summary.Id, Guid.NewGuid(), Cancellation));
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => Service.MoveAsync(created.Summary.Id, bobsFolder.Id, Cancellation));
+        Folders.DeletedBeforePlacing = true;
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => Service.MoveAsync(created.Summary.Id, folder.Id, Cancellation));
+        Assert.Empty(_repository.FolderSaves);
+        Assert.Equal(3, _transactions.RolledBack);
+    }
+
+    [Fact]
+    public async Task Moving_needs_write_access_and_an_existing_situation()
+    {
+        var folder = Folders.Add(AlicesArea);
+        var created = await CreateAsync("Powerplay");
+
+        await Assert.ThrowsAsync<SituationNotFoundException>(() => Service.MoveAsync(Guid.NewGuid(), folder.Id, Cancellation));
+        _repository.DeletedBeforeFolderSave = true;
+        await Assert.ThrowsAsync<SituationNotFoundException>(() => Service.MoveAsync(created.Summary.Id, folder.Id, Cancellation));
+        _areas.Writable.Clear();
+        await Assert.ThrowsAsync<SituationAccessDeniedException>(() => Service.MoveAsync(created.Summary.Id, null, Cancellation));
+        _areas.Readable.Clear();
+        await Assert.ThrowsAsync<SituationNotFoundException>(() => Service.MoveAsync(created.Summary.Id, null, Cancellation));
+        Assert.Empty(_repository.FolderSaves);
+    }
+
+    [Fact]
+    public async Task Tells_the_folders_module_whether_a_folder_contains_situations()
+    {
+        var folder = Folders.Add(AlicesArea);
+        var contents = new SituationFolderContents(_repository);
+        Assert.False(await contents.HasSituationsAsync(folder.Id, Cancellation));
+
+        var created = await CreateInFolderAsync(folder.Id, "Powerplay");
+        Assert.True(await contents.HasSituationsAsync(folder.Id, Cancellation));
+
+        await Service.DeleteAsync(created.Summary.Id, Cancellation);
+        Assert.False(await contents.HasSituationsAsync(folder.Id, Cancellation));
+    }
+
+    [Fact]
+    public async Task Rejects_missing_arguments_for_folders()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() => Service.CreateInFolderAsync(Guid.NewGuid(), null!, SituationDocuments.Valid(), SituationOrigin.New, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => Service.CreateInFolderAsync(Guid.NewGuid(), Title("A"), null!, SituationOrigin.New, Cancellation));
     }
 }

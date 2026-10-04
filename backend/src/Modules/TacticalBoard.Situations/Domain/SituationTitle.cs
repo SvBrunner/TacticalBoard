@@ -1,5 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
+using TacticalBoard.SharedKernel.Text;
 
 namespace TacticalBoard.Situations.Domain;
 
@@ -55,12 +55,8 @@ internal sealed record SituationTitle
         return new SituationTitle(value);
     }
 
-    /// <summary>The comparison form of <paramref name="text"/>.</summary>
-    public static string Normalize(string text)
-    {
-        ArgumentNullException.ThrowIfNull(text);
-        return text.Trim().Normalize(NormalizationForm.FormC).ToUpperInvariant();
-    }
+    /// <summary>The comparison form of <paramref name="text"/> (<see cref="UniqueNames.Normalize"/>).</summary>
+    public static string Normalize(string text) => UniqueNames.Normalize(text);
 
     /// <summary>This title with the suffix <c> (n)</c>, e.g. <c>Powerplay (2)</c>.</summary>
     public SituationTitle WithNumber(int number)

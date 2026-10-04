@@ -3,8 +3,10 @@ import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
 import type { SavedIdentity, SaveBasis } from "$lib/editor/SituationEditor";
 import type { Situation } from "$lib/model/Situation";
 import type { SituationFileDto } from "$lib/model/serialization/SituationFileDto";
+import { FolderApi } from "./FolderApi";
 import { SituationApi, type SituationOrigin, type SituationSummary, type StoredSituation } from "./SituationApi";
 import type { LinkState } from "./SituationLink";
+import type { SaveTarget } from "./SaveTarget";
 
 /** What the user chooses when someone else saved the situation in the meantime (arc42 ch. 8.15). */
 export type ConflictChoice = "overwrite" | "copy" | "cancel";
@@ -25,7 +27,7 @@ export interface SaveEditor {
 
 /** The server calls a save needs; implemented by `SituationApi`. */
 export interface SaveApi {
-	create(document: unknown, origin: SituationOrigin): Promise<StoredSituation>;
+	create(document: unknown, origin: SituationOrigin, target: SaveTarget): Promise<StoredSituation>;
 	update(id: string, revision: number, document: unknown): Promise<StoredSituation>;
 }
 
@@ -57,10 +59,11 @@ export interface SituationSaverDependencies {
 
 /**
  * Saves the edited situation on the server (arc42 ch. 8.15): the first save
- * creates it in the personal area (at the top level), later saves update it
- * on top of the revision they are based on. A save conflict asks the user:
- * overwrite (save again on top of the newest revision), save as a copy (a new
- * situation), or cancel. Afterwards the editor shows the server's state (id,
+ * creates it where it was started (a folder of the personal area or its top
+ * level, `LinkState.target`), later saves update it on top of the revision
+ * they are based on. A save conflict asks the user: overwrite (save again on
+ * top of the newest revision), save as a copy (a new situation in the same
+ * folder or top level as the original), or cancel. Afterwards the editor shows the server's state (id,
  * title, timestamps) and is clean. Failures (e.g. a taken title) end up in
  * `state` as a message for the editor.
  */
@@ -115,7 +118,7 @@ export class SituationSaver {
 	/** The server's answer, or `null` when the user cancelled a conflict. */
 	private async send(document: SituationFileDto, link: LinkState): Promise<StoredSituation | null> {
 		if (link.kind === "unsaved") {
-			return this.deps.api.create(document, link.origin);
+			return this.deps.api.create(document, link.origin, link.target);
 		}
 		let revision = link.summary.revision;
 		for (;;) {
@@ -130,7 +133,7 @@ export class SituationSaver {
 					return null;
 				}
 				if (choice === "copy") {
-					return this.deps.api.create(document, "copy");
+					return this.deps.api.create(document, "copy", { folderId: link.summary.folderId });
 				}
 				revision = SituationSaver.currentRevisionOf(error) ?? revision;
 			}
@@ -166,6 +169,9 @@ export class SituationSaver {
 		}
 		if (error.type === SituationApi.NOT_FOUND) {
 			return "This situation no longer exists on the server (it was deleted). Export it to keep your changes.";
+		}
+		if (error.type === FolderApi.NOT_FOUND) {
+			return "The folder to save in no longer exists (it was deleted). Export the situation to keep it.";
 		}
 		const details = error.fieldErrors();
 		return details.length > 0

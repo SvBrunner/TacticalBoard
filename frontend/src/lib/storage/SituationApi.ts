@@ -1,4 +1,6 @@
 import type { ApiClient } from "$lib/api/ApiClient";
+import { FolderApi } from "./FolderApi";
+import type { SaveTarget } from "./SaveTarget";
 
 /** Who created or changed a saved situation; `displayName` is `null` for a deleted user. */
 export interface UserReference {
@@ -12,7 +14,7 @@ export interface SituationSummary {
 	readonly title: string;
 	readonly sport: string;
 	readonly fieldType: string;
-	/** Reserved for folders (later); always `null` for now: the top level of the area. */
+	/** The folder of the area it is in, or `null` for the top level. */
 	readonly folderId: string | null;
 	/** The current revision, the concurrency token of the next save. */
 	readonly revision: number;
@@ -51,9 +53,19 @@ export class SituationApi {
 		return `"${revision}"`;
 	}
 
-	/** The current user's saved situations (metadata only). */
-	listPersonal(): Promise<SituationSummary[]> {
-		return this.api.get<SituationSummary[]>(SituationApi.PERSONAL_AREA_PATH);
+	/** The situations of a folder: its own collection path. */
+	static folderSituationsPath(folderId: string): string {
+		return `${FolderApi.folderPath(folderId)}/situations`;
+	}
+
+	/** Where a first save into `target` goes. */
+	static collectionPath(target: SaveTarget): string {
+		return target.folderId === null ? SituationApi.PERSONAL_AREA_PATH : SituationApi.folderSituationsPath(target.folderId);
+	}
+
+	/** The saved situations at `target` (metadata only): the top level of the personal area, or a folder. */
+	list(target: SaveTarget): Promise<SituationSummary[]> {
+		return this.api.get<SituationSummary[]>(SituationApi.collectionPath(target));
 	}
 
 	/** One saved situation with its document. */
@@ -61,9 +73,9 @@ export class SituationApi {
 		return this.api.get<StoredSituation>(SituationApi.situationPath(id));
 	}
 
-	/** The first save: creates the situation at the top level of the personal area. */
-	create(document: unknown, origin: SituationOrigin): Promise<StoredSituation> {
-		return this.api.send<StoredSituation>("POST", SituationApi.PERSONAL_AREA_PATH, { document, origin });
+	/** The first save: creates the situation at `target` (the top level of the personal area, or a folder). */
+	create(document: unknown, origin: SituationOrigin, target: SaveTarget): Promise<StoredSituation> {
+		return this.api.send<StoredSituation>("POST", SituationApi.collectionPath(target), { document, origin });
 	}
 
 	/** A later save on top of `revision`; a `412` (save-conflict) when someone else saved in between. */
@@ -71,6 +83,14 @@ export class SituationApi {
 		return this.api.send<StoredSituation>("PUT", SituationApi.situationPath(id), { document }, {
 			"If-Match": SituationApi.revisionTag(revision),
 		});
+	}
+
+	/**
+	 * Moves the situation into a folder of its area, or to the top level
+	 * (`null`). Not a save: no new revision, no `If-Match` (arc42 ch. 8.15).
+	 */
+	move(id: string, folderId: string | null): Promise<SituationSummary> {
+		return this.api.send<SituationSummary>("PUT", `${SituationApi.situationPath(id)}/folder`, { folderId });
 	}
 
 	/** Deletes the situation (on the server a soft delete). */

@@ -9,8 +9,14 @@ internal interface ISituationRepository
     /// <summary>The non-deleted situation with <paramref name="id"/>, tracked for changes.</summary>
     Task<Situation?> FindAsync(Guid id, CancellationToken cancellationToken);
 
-    /// <summary>The non-deleted situations of <paramref name="area"/> (read-only).</summary>
-    Task<IReadOnlyList<Situation>> ListAsync(AreaReference area, CancellationToken cancellationToken);
+    /// <summary>
+    /// The non-deleted situations of <paramref name="area"/> in the folder <paramref name="folderId"/>,
+    /// or at the top level for <c>null</c> (read-only).
+    /// </summary>
+    Task<IReadOnlyList<Situation>> ListAsync(AreaReference area, Guid? folderId, CancellationToken cancellationToken);
+
+    /// <summary>Whether a non-deleted situation is in the folder <paramref name="folderId"/>.</summary>
+    Task<bool> AnyInFolderAsync(Guid folderId, CancellationToken cancellationToken);
 
     /// <summary>One revision of a situation (read-only).</summary>
     Task<SituationRevision?> FindRevisionAsync(Guid situationId, int number, CancellationToken cancellationToken);
@@ -30,6 +36,13 @@ internal interface ISituationRepository
     /// <exception cref="TitleUniquenessViolationException">Another situation of the area got the same title in the meantime.</exception>
     /// <exception cref="ConcurrentRevisionException">Someone else saved a revision in the meantime.</exception>
     Task SaveRevisionAsync(Situation situation, SituationRevision revision, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Writes only the folder of a tracked situation (a move, arc42 ch. 8.15). Deliberately without
+    /// the revision check: a move doesn't conflict with a parallel save of the content.
+    /// </summary>
+    /// <returns><c>false</c> if the situation was deleted in the meantime.</returns>
+    Task<bool> SaveFolderAsync(Situation situation, CancellationToken cancellationToken);
 
     /// <summary>Saves the changes of tracked situations (e.g. a soft delete).</summary>
     /// <exception cref="ConcurrentRevisionException">Someone else saved a revision in the meantime.</exception>

@@ -1,20 +1,25 @@
 using TacticalBoard.Areas.Contracts;
+using TacticalBoard.Folders.Contracts;
 using TacticalBoard.SharedKernel.Identifiers;
+using TacticalBoard.SharedKernel.Persistence;
 using TacticalBoard.SharedKernel.Time;
 using TacticalBoard.Situations.Domain;
 
 namespace TacticalBoard.Situations.Application;
 
 /// <summary>
-/// The use cases of saved situations (arc42 ch. 8.15): list, open, save (create or update with
-/// conflict detection, title uniqueness and default titles) and delete. Access is decided by the
-/// Areas module: a situation in an area the user can't read is "not found"; one they can read but
-/// not write is "forbidden".
+/// The use cases of saved situations (arc42 ch. 8.15): list (top level or a folder), open, save
+/// (create or update with conflict detection, title uniqueness and default titles), move between
+/// the folders of the area, and delete. Access is decided by the Areas module: a situation or
+/// folder in an area the user can't read is "not found"; one they can read but not write is
+/// "forbidden". Folders are looked up through the Folders module (<see cref="IFolderDirectory"/>).
 /// </summary>
 internal sealed class SituationService(
     ISituationRepository situations,
+    IFolderDirectory folders,
     IAreaAccess areas,
     IActorDirectory actors,
+    IUnitOfWork transactions,
     IIdGenerator ids,
     IClock clock)
 {
@@ -22,7 +27,8 @@ internal sealed class SituationService(
     public const int TitleAttempts = 3;
 
     /// <summary>
-    /// The situations of <paramref name="area"/>, most recently changed first (then by title).
+    /// The situations at the top level of <paramref name="area"/> (in no folder), most recently
+    /// changed first (then by title).
     /// </summary>
     /// <exception cref="SituationAccessDeniedException">The user may not read the area.</exception>
     public async Task<IReadOnlyList<SituationSummaryView>> ListAsync(AreaReference area, CancellationToken cancellationToken)
@@ -33,7 +39,20 @@ internal sealed class SituationService(
             throw new SituationAccessDeniedException();
         }
 
-        var found = (await situations.ListAsync(area, cancellationToken))
+        return await ListPlaceAsync(area, folderId: null, cancellationToken);
+    }
+
+    /// <summary>The situations in the folder <paramref name="folderId"/>, in the same order as <see cref="ListAsync(AreaReference, CancellationToken)"/>.</summary>
+    /// <exception cref="FolderNotFoundException">The folder doesn't exist or the user may not read its area.</exception>
+    public async Task<IReadOnlyList<SituationSummaryView>> ListInFolderAsync(Guid folderId, CancellationToken cancellationToken)
+    {
+        var folder = await FindReadableFolderAsync(folderId, cancellationToken);
+        return await ListPlaceAsync(folder.Area, folder.Id, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<SituationSummaryView>> ListPlaceAsync(AreaReference area, Guid? folderId, CancellationToken cancellationToken)
+    {
+        var found = (await situations.ListAsync(area, folderId, cancellationToken))
             .OrderByDescending(situation => situation.UpdatedAt)
             .ThenBy(situation => situation.NormalizedTitle, StringComparer.Ordinal)
             .ToList();
@@ -49,7 +68,7 @@ internal sealed class SituationService(
         return await ViewAsync(situation, cancellationToken);
     }
 
-    /// <summary>The first save of a situation: creates it in <paramref name="area"/> (at the top level) with revision 1.</summary>
+    /// <summary>The first save of a situation: creates it at the top level of <paramref name="area"/> with revision 1.</summary>
     /// <exception cref="SituationAccessDeniedException">The user may not write in the area.</exception>
     /// <exception cref="DuplicateSituationTitleException">The title is taken (only for <see cref="SituationOrigin.New"/> with a non-default title).</exception>
     public async Task<SituationView> CreateAsync(
@@ -67,11 +86,55 @@ internal sealed class SituationService(
             throw new SituationAccessDeniedException();
         }
 
+        return await CreatePlacedAsync(area, folderId: null, title, document, origin, cancellationToken);
+    }
+
+    /// <summary>
+    /// The first save of a situation started in a folder (ch. 8.15: saved where it was started):
+    /// creates it in the folder <paramref name="folderId"/>, in the folder's area. Titles are unique
+    /// in the whole area, not per folder.
+    /// </summary>
+    /// <exception cref="FolderNotFoundException">The folder doesn't exist or the user may not read its area.</exception>
+    /// <exception cref="SituationAccessDeniedException">The user may not write in the folder's area.</exception>
+    /// <exception cref="DuplicateSituationTitleException">The title is taken (as for <see cref="CreateAsync(AreaReference, SituationTitle, SituationDocument, SituationOrigin, CancellationToken)"/>).</exception>
+    public async Task<SituationView> CreateInFolderAsync(
+        Guid folderId,
+        SituationTitle title,
+        SituationDocument document,
+        SituationOrigin origin,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(title);
+        ArgumentNullException.ThrowIfNull(document);
+        var folder = await FindReadableFolderAsync(folderId, cancellationToken);
+        if (!await areas.CanWriteAsync(folder.Area, cancellationToken))
+        {
+            throw new SituationAccessDeniedException();
+        }
+
+        // The folder must not be deleted between the check and the save (ch. 8.15).
+        return await transactions.InTransactionAsync(
+            async cancellation =>
+            {
+                _ = await folders.FindForPlacingAsync(folder.Id, cancellation) ?? throw new FolderNotFoundException(folderId);
+                return await CreatePlacedAsync(folder.Area, folder.Id, title, document, origin, cancellation);
+            },
+            cancellationToken);
+    }
+
+    private async Task<SituationView> CreatePlacedAsync(
+        AreaReference area,
+        Guid? folderId,
+        SituationTitle title,
+        SituationDocument document,
+        SituationOrigin origin,
+        CancellationToken cancellationToken)
+    {
         var numbered = origin != SituationOrigin.New || title.IsDefault;
         for (var attempt = 1; ; attempt++)
         {
             var finalTitle = await ChooseTitleAsync(area, title, numbered, exceptSituationId: null, cancellationToken);
-            var (situation, revision) = Situation.Create(ids.NewId(), area, finalTitle, document, SaveTime(), actors.CurrentUserId);
+            var (situation, revision) = Situation.Create(ids.NewId(), area, folderId, finalTitle, document, SaveTime(), actors.CurrentUserId);
             try
             {
                 await situations.AddAsync(situation, revision, cancellationToken);
@@ -127,6 +190,43 @@ internal sealed class SituationService(
         return await ViewAsync(situation, revision, cancellationToken);
     }
 
+    /// <summary>
+    /// Moves the situation into the folder <paramref name="folderId"/> of its area, or to the top
+    /// level (<c>null</c>). Not into another area (ch. 1). A metadata change (ch. 8.15): no new
+    /// revision, the revision number (ETag) and "last changed" stay, and no <c>If-Match</c> is
+    /// needed, because a move doesn't conflict with saving the content.
+    /// </summary>
+    /// <returns>The situation's metadata after the move.</returns>
+    /// <exception cref="SituationNotFoundException">It doesn't exist or the user may not read its area.</exception>
+    /// <exception cref="SituationAccessDeniedException">The user may not write in its area.</exception>
+    /// <exception cref="FolderNotFoundException">The target folder doesn't exist or lies in another area.</exception>
+    public async Task<SituationSummaryView> MoveAsync(Guid id, Guid? folderId, CancellationToken cancellationToken)
+    {
+        var situation = await FindWritableAsync(id, cancellationToken);
+        await transactions.InTransactionAsync(
+            async cancellation =>
+            {
+                // The target folder must not be deleted between the check and the move (ch. 8.15).
+                if (folderId is { } target)
+                {
+                    var folder = await folders.FindForPlacingAsync(target, cancellation);
+                    if (folder is null || folder.Area != situation.Area)
+                    {
+                        throw new FolderNotFoundException(target);
+                    }
+                }
+
+                situation.MoveTo(folderId);
+                return await situations.SaveFolderAsync(situation, cancellation)
+                    ? true
+                    : throw new SituationNotFoundException(id);
+            },
+            cancellationToken);
+
+        var names = await NamesAsync([situation], cancellationToken);
+        return Summary(situation, names);
+    }
+
     /// <summary>Soft-deletes the situation (with its revisions); its title becomes free again.</summary>
     /// <exception cref="SituationNotFoundException">It doesn't exist or the user may not read its area.</exception>
     /// <exception cref="SituationAccessDeniedException">The user may not write in its area.</exception>
@@ -142,6 +242,17 @@ internal sealed class SituationService(
         {
             throw new SituationSaveConflictException(exception.CurrentRevision);
         }
+    }
+
+    private async Task<FolderReference> FindReadableFolderAsync(Guid folderId, CancellationToken cancellationToken)
+    {
+        var folder = await folders.FindAsync(folderId, cancellationToken);
+        if (folder is null || !await areas.CanReadAsync(folder.Area, cancellationToken))
+        {
+            throw new FolderNotFoundException(folderId);
+        }
+
+        return folder;
     }
 
     private async Task<Situation> FindReadableAsync(Guid id, CancellationToken cancellationToken)

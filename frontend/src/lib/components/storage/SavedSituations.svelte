@@ -1,10 +1,12 @@
 <!--
 @component
-The content of the start page's "Saved situations" section (arc42 ch. 8.15):
-the personal area's situations with title, field type, last changed by/at and
-created by; a situation opens with its title button and is deleted with its
-Delete button (the owner asks for confirmation). Without login a hint to log
-in; without a server a hint that local mode works as usual.
+The saved situations of one place of the personal area (arc42 ch. 8.15): the
+top level on the start page, or a folder on its page. Each with title, field
+type, last changed by/at and created by; a situation opens with its title
+button, Move offers the other folders of the area (`onMove` opens the
+picker), and Delete deletes it (the owner asks for confirmation). Without
+login a hint to log in; without a server a hint that local mode works as
+usual.
 -->
 <script lang="ts">
 	import type { SessionState } from "$lib/auth/AuthSession";
@@ -17,12 +19,25 @@ in; without a server a hint that local mode works as usual.
 		list: SavedListState;
 		onOpen: (situation: SituationSummary) => void;
 		onDelete: (situation: SituationSummary) => void;
+		/** Move was chosen (the owner shows the folder picker). */
+		onMove: (situation: SituationSummary) => void;
 		onRetry: () => void;
+		/** Shown when the place has no situations. */
+		emptyMessage?: string;
 		/** Disables the buttons (e.g. while a situation is being opened). */
 		busy?: boolean;
 	}
 
-	let { session, list, onOpen, onDelete, onRetry, busy = false }: Props = $props();
+	let {
+		session,
+		list,
+		onOpen,
+		onDelete,
+		onMove,
+		onRetry,
+		emptyMessage = "No saved situations yet. Create or import one and save it in the editor.",
+		busy = false,
+	}: Props = $props();
 
 	const uid = $props.id();
 </script>
@@ -40,7 +55,7 @@ in; without a server a hint that local mode works as usual.
 			<button type="button" class="retry" onclick={onRetry}>Try again</button>
 		</div>
 	{:else if list.situations.length === 0}
-		<p class="hint">No saved situations yet. Create or import one and save it in the editor.</p>
+		<p class="hint">{emptyMessage}</p>
 	{:else}
 		<ul class="saved-list">
 			{#each list.situations as situation, index (situation.id)}
@@ -64,7 +79,21 @@ in; without a server a hint that local mode works as usual.
 					</p>
 					<button
 						type="button"
-						class="delete"
+						class="action move"
+						aria-label="Move “{situation.title}”"
+						title="Move to another folder"
+						disabled={busy}
+						onclick={() => onMove(situation)}
+					>
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+							<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+							<path d="M10 13h6M13.5 10.5 16 13l-2.5 2.5" />
+						</svg>
+						<span class="action-label">Move</span>
+					</button>
+					<button
+						type="button"
+						class="action delete"
 						aria-label="Delete “{situation.title}”"
 						title="Delete"
 						disabled={busy}
@@ -73,7 +102,7 @@ in; without a server a hint that local mode works as usual.
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 							<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
 						</svg>
-						<span class="delete-label">Delete</span>
+						<span class="action-label">Delete</span>
 					</button>
 				</li>
 			{/each}
@@ -97,7 +126,7 @@ in; without a server a hint that local mode works as usual.
 	}
 
 	.retry,
-	.delete {
+	.action {
 		min-height: var(--touch-target);
 		min-width: var(--touch-target);
 		padding: 0 12px;
@@ -127,12 +156,12 @@ in; without a server a hint that local mode works as usual.
 
 	.saved-item {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-columns: minmax(0, 1fr) auto auto;
 		grid-template-areas:
-			"open delete"
-			"meta delete";
+			"open move delete"
+			"meta move delete";
 		align-items: center;
-		column-gap: 12px;
+		column-gap: 8px;
 		padding: 8px 8px 8px 16px;
 		border-radius: var(--radius-md);
 		background: var(--bg-app);
@@ -168,13 +197,17 @@ in; without a server a hint that local mode works as usual.
 		color: var(--text-muted);
 	}
 
+	.move {
+		grid-area: move;
+	}
+
 	.delete {
 		grid-area: delete;
 		color: var(--danger);
 	}
 
 	.open:focus-visible,
-	.delete:focus-visible,
+	.action:focus-visible,
 	.retry:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
@@ -186,11 +219,11 @@ in; without a server a hint that local mode works as usual.
 	}
 
 	@media (max-width: 599px) {
-		.delete {
+		.action {
 			padding: 0;
 		}
 
-		.delete-label {
+		.action-label {
 			position: absolute;
 			width: 1px;
 			height: 1px;

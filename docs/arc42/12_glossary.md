@@ -23,7 +23,9 @@
 | Navbar | The app's navigation bar at the top of the start page and the editor: badge (link to the start page), page title, the page's tools, and the account corner (Log in / the user's menu). |
 | Soft delete | Deleting by marking an item as deleted instead of removing it from the database. |
 | Local mode | Using the app without login: editing plus JSON/GIF export and import, nothing stored on the server. |
-| Folder | Groups situations in a team or in a user's personal area. One level only, no subfolders. |
+| Folder | Groups situations in a team or in a user's personal area. One level only, no subfolders. Its name is unique in the area; it can be deleted only while empty. Has its own page (`/folders/<id>`). |
+| Top level | The place in an area outside every folder. A situation is either in one folder of its area or at its top level. |
+| Move | Putting a saved situation into another folder of its area (or to its top level) with its Move button. Not a save: no new revision. |
 | Role | A team-scoped permission level: Admin, Editor, or Reader. See ch. 8 for the permission matrix. |
 | System administrator | System-wide user type that manages users and teams (incl. members and roles), without access to situations or folders. Granted only by another system administrator, the first one through the deployment configuration. |
 | Trainer | A coach-type user of the system. Descriptive only — not a role and not mapped to team roles. |

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { ApiClient, ApiError } from "$lib/api/ApiClient";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
 import { SituationApi } from "./SituationApi";
+import { inFolder, TOP_LEVEL } from "./SaveTarget";
 
 const summary = {
 	id: "s1",
@@ -25,10 +26,21 @@ describe("SituationApi", () => {
 		api = new SituationApi(new ApiClient(server.fetch));
 	});
 
-	it("lists the personal area", async () => {
+	it("lists the top level of the personal area", async () => {
 		server.on("GET", "/api/personal-area/situations", jsonResponse(200, [summary]));
 
-		await expect(api.listPersonal()).resolves.toEqual([summary]);
+		await expect(api.list(TOP_LEVEL)).resolves.toEqual([summary]);
+	});
+
+	it("lists a folder", async () => {
+		server.on("GET", "/api/folders/f1/situations", jsonResponse(200, [{ ...summary, folderId: "f1" }]));
+
+		await expect(api.list(inFolder("f1"))).resolves.toEqual([{ ...summary, folderId: "f1" }]);
+	});
+
+	it("has a collection path per place, with the folder id encoded", () => {
+		expect(SituationApi.collectionPath(TOP_LEVEL)).toBe("/api/personal-area/situations");
+		expect(SituationApi.collectionPath(inFolder("a/b"))).toBe("/api/folders/a%2Fb/situations");
 	});
 
 	it("gets one situation with its document", async () => {
@@ -44,11 +56,32 @@ describe("SituationApi", () => {
 	it("creates with the document and its origin, through the antiforgery header", async () => {
 		server.on("POST", "/api/personal-area/situations", jsonResponse(201, { ...summary, revision: 1, document: {} }));
 
-		await api.create({ format: "doc" }, "imported");
+		await api.create({ format: "doc" }, "imported", TOP_LEVEL);
 
 		const [request] = server.requestsTo("/api/personal-area/situations").filter((r) => r.method === "POST");
 		expect(JSON.parse(request.body!)).toEqual({ document: { format: "doc" }, origin: "imported" });
 		expect(request.headers["X-CSRF-TOKEN"]).toBe("token-1");
+	});
+
+	it("creates in a folder through the folder's collection", async () => {
+		server.on("POST", "/api/folders/f1/situations", jsonResponse(201, { ...summary, folderId: "f1", revision: 1, document: {} }));
+
+		await expect(api.create({ format: "doc" }, "new", inFolder("f1"))).resolves.toMatchObject({ folderId: "f1" });
+
+		const [request] = server.requestsTo("/api/folders/f1/situations");
+		expect(JSON.parse(request.body!)).toEqual({ document: { format: "doc" }, origin: "new" });
+	});
+
+	it("moves with the target folder (or null) and no If-Match", async () => {
+		server.on("PUT", "/api/situations/s1/folder", jsonResponse(200, { ...summary, folderId: "f1" }));
+
+		await expect(api.move("s1", "f1")).resolves.toMatchObject({ folderId: "f1" });
+		await api.move("s1", null);
+
+		const requests = server.requestsTo("/api/situations/s1/folder");
+		expect(requests.map((request) => JSON.parse(request.body!))).toEqual([{ folderId: "f1" }, { folderId: null }]);
+		expect(requests[0].headers["If-Match"]).toBeUndefined();
+		expect(requests[0].headers["X-CSRF-TOKEN"]).toBe("token-1");
 	});
 
 	it("updates with If-Match of the revision it is based on", async () => {

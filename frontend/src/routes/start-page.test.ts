@@ -6,6 +6,7 @@ import { authSession } from "$lib/auth/AuthSession";
 import { situationEditor } from "$lib/editor/SituationEditor";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
 import { situationLink } from "$lib/storage/SituationLink";
+import type { Folder } from "$lib/storage/FolderApi";
 import { storedFrom, summaryOf } from "$lib/testing/storageFakes";
 import { SituationSerializer } from "$lib/model/serialization/SituationSerializer";
 import { Frame } from "$lib/model/Frame";
@@ -14,6 +15,10 @@ import { installDialogPolyfill } from "$lib/testing/dialogPolyfill";
 import StartPage from "./+page.svelte";
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
+
+function folderOf(id: string, name: string): Folder {
+	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z" };
+}
 
 function situationFile(name = "play.situation.json"): File {
 	const situation = new Situation({
@@ -248,11 +253,12 @@ describe("start page", () => {
 			return screen.getByRole("region", { name: "Saved situations" });
 		}
 
-		async function loggedInWith(situations = [summaryOf({ id: "s1", title: "Powerplay" })]) {
+		async function loggedInWith(situations = [summaryOf({ id: "s1", title: "Powerplay" })], folders: Folder[] = []) {
 			server = new FakeFetch()
 				.on("GET", "/api/me", jsonResponse(200, alice))
 				.on("GET", "/api/antiforgery", jsonResponse(200, ANTIFORGERY))
-				.on("GET", "/api/personal-area/situations", jsonResponse(200, situations));
+				.on("GET", "/api/personal-area/situations", jsonResponse(200, situations))
+				.on("GET", "/api/personal-area/folders", jsonResponse(200, folders));
 			vi.stubGlobal("fetch", server.fetch);
 			await authSession.refresh();
 		}
@@ -292,8 +298,111 @@ describe("start page", () => {
 			render(StartPage);
 			await settle();
 
-			const items = within(within(savedSection()).getByRole("list")).getAllByRole("listitem");
+			const situations = screen.getByRole("region", { name: "Situations" });
+			const items = within(within(situations).getByRole("list")).getAllByRole("listitem");
 			expect(items.map((item) => within(item).getAllByRole("button")[0].textContent?.trim())).toEqual(["Powerplay", "Breakout"]);
+		});
+
+		it("splits the saved situations into Folders and Situations (the top level) when logged in", async () => {
+			await loggedInWith();
+			render(StartPage);
+			await settle();
+
+			const parts = within(savedSection()).getAllByRole("region");
+			expect(parts.map((part) => within(part).getByRole("heading", { level: 3 }).textContent)).toEqual(["Folders", "Situations"]);
+			expect(within(parts[0]).getByText("No folders yet.")).toBeInTheDocument();
+			expect(server.requestsTo("/api/personal-area/situations")).toHaveLength(1);
+		});
+
+		it("lists the folders as links to their pages", async () => {
+			await loggedInWith([], [folderOf("f1", "Breakouts"), folderOf("f2", "Set pieces")]);
+			render(StartPage);
+			await settle();
+
+			const folders = screen.getByRole("region", { name: "Folders" });
+			expect(within(folders).getAllByRole("link").map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
+				["Breakouts", "/folders/f1"],
+				["Set pieces", "/folders/f2"],
+			]);
+			expect(screen.getByRole("region", { name: "Situations" })).toHaveTextContent("No situations outside the folders.");
+		});
+
+		it("shows no folder parts without login", async () => {
+			vi.stubGlobal("fetch", new FakeFetch().on("GET", "/api/me", problemResponse(401, {})).fetch);
+			await authSession.refresh();
+			render(StartPage);
+
+			expect(within(savedSection()).queryByRole("region")).toBeNull();
+			expect(screen.queryByRole("button", { name: "New folder" })).toBeNull();
+		});
+
+		it("creates a folder with New folder and lists it", async () => {
+			await loggedInWith();
+			server.on("POST", "/api/personal-area/folders", jsonResponse(201, folderOf("f1", "Set pieces")));
+			render(StartPage);
+			await settle();
+
+			await fireEvent.click(screen.getByRole("button", { name: "New folder" }));
+			await settle();
+			const dialog = screen.getByRole("dialog", { name: "New folder" });
+			server.on("GET", "/api/personal-area/folders", jsonResponse(200, [folderOf("f1", "Set pieces")]));
+			await fireEvent.input(within(dialog).getByRole("textbox", { name: "Folder name" }), { target: { value: " Set pieces " } });
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+			await settle();
+
+			const [post] = server.requestsTo("/api/personal-area/folders").filter((request) => request.method === "POST");
+			expect(JSON.parse(post.body!)).toEqual({ name: "Set pieces" });
+			expect(dialog).not.toHaveAttribute("open");
+			expect(within(screen.getByRole("region", { name: "Folders" })).getByRole("link", { name: "Set pieces" })).toBeInTheDocument();
+		});
+
+		it("keeps the New folder dialog open with the reason when the name is taken", async () => {
+			await loggedInWith([], [folderOf("f1", "Set pieces")]);
+			server.on("POST", "/api/personal-area/folders", problemResponse(409, { type: "https://tacticalboard/errors/duplicate-folder-name" }));
+			render(StartPage);
+			await settle();
+
+			await fireEvent.click(screen.getByRole("button", { name: "New folder" }));
+			await settle();
+			const dialog = screen.getByRole("dialog", { name: "New folder" });
+			await fireEvent.input(within(dialog).getByRole("textbox", { name: "Folder name" }), { target: { value: "set pieces" } });
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+			await settle();
+
+			expect(within(dialog).getByRole("alert")).toHaveTextContent("A folder named “set pieces” already exists. Choose another name.");
+			expect(dialog).toHaveAttribute("open");
+		});
+
+		it("moves a top-level situation into a folder with Move", async () => {
+			await loggedInWith([summaryOf({ id: "s1", title: "Powerplay" })], [folderOf("f1", "Breakouts")]);
+			server.on("PUT", "/api/situations/s1/folder", jsonResponse(200, summaryOf({ id: "s1", title: "Powerplay", folderId: "f1" })));
+			render(StartPage);
+			await settle();
+
+			await fireEvent.click(screen.getByRole("button", { name: "Move “Powerplay”" }));
+			await settle();
+			const dialog = screen.getByRole("dialog", { name: "Move “Powerplay”" });
+			expect(within(dialog).getByRole("radio", { name: /Top level/ })).toBeChecked();
+			server.on("GET", "/api/personal-area/situations", jsonResponse(200, []));
+			await fireEvent.click(within(dialog).getByRole("radio", { name: /Breakouts/ }));
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Move" }));
+			await settle();
+
+			expect(JSON.parse(server.requestsTo("/api/situations/s1/folder")[0].body!)).toEqual({ folderId: "f1" });
+			expect(dialog).not.toHaveAttribute("open");
+			expect(screen.getByRole("region", { name: "Situations" })).toHaveTextContent("No situations outside the folders.");
+		});
+
+		it("a new situation from the start page is started at the top level", async () => {
+			await loggedInWith();
+			render(StartPage);
+			await settle();
+
+			await fireEvent.click(screen.getByRole("button", { name: "New situation" }));
+			await settle();
+			await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+			expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: null } });
 		});
 
 		it("opens a saved situation in the editor", async () => {
@@ -358,6 +467,7 @@ describe("start page", () => {
 
 			expect(server.requestsTo("/api/situations/s1").map((request) => request.method)).toEqual(["DELETE"]);
 			expect(savedSection()).toHaveTextContent("No saved situations yet.");
+			expect(server.requestsTo("/api/situations/s1/folder")).toEqual([]);
 		});
 
 		it("keeps the situation when the deletion is cancelled", async () => {

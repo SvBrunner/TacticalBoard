@@ -25,42 +25,7 @@ public sealed class SituationApiTests(PostgresFixture postgres) : IAsyncLifetime
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static JsonObject Document(string title = "Powerplay", string fieldType = "full") => new()
-    {
-        ["format"] = "tacticalboard.situation",
-        ["formatVersion"] = 3,
-        ["situation"] = new JsonObject
-        {
-            ["id"] = "local-id",
-            ["title"] = title,
-            ["description"] = "Markdown",
-            ["sport"] = "floorball",
-            ["fieldType"] = fieldType,
-            ["createdAt"] = "2020-01-01T00:00:00.000Z",
-            ["updatedAt"] = "2020-01-01T00:00:00.000Z",
-            ["frames"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["id"] = "f1",
-                    ["description"] = "",
-                    ["elements"] = new JsonArray
-                    {
-                        new JsonObject { ["id"] = "p1", ["type"] = "Player", ["color"] = "red", ["x"] = 1200.5, ["y"] = 300, ["label"] = "C" },
-                        new JsonObject
-                        {
-                            ["id"] = "a1",
-                            ["type"] = "Pass",
-                            ["color"] = "black",
-                            ["start"] = new JsonObject { ["x"] = 1, ["y"] = 2 },
-                            ["end"] = new JsonObject { ["x"] = 3, ["y"] = 4 },
-                            ["bends"] = new JsonArray(new JsonObject { ["x"] = 2, ["y"] = 3 }),
-                        },
-                    },
-                },
-            },
-        },
-    };
+    private static JsonObject Document(string title = "Powerplay", string fieldType = "full") => SituationJson.Document(title, fieldType);
 
     private async Task<TestBrowser> LoggedInAsync(string subject, string name)
     {

@@ -9,6 +9,7 @@ import { Frame } from "$lib/model/Frame";
 import { SequentialIdGenerator } from "$lib/model/ids/IdGenerator";
 import { Situation } from "$lib/model/Situation";
 import { SituationLink } from "$lib/storage/SituationLink";
+import { inFolder, TOP_LEVEL, type SaveTarget } from "$lib/storage/SaveTarget";
 import { installDialogPolyfill } from "$lib/testing/dialogPolyfill";
 import SituationDialogs from "./SituationDialogs.svelte";
 
@@ -39,12 +40,14 @@ describe("SituationDialogs", () => {
 	let prompt: ConfirmationPrompt;
 	let workflow: SituationWorkflow;
 	let onOpened: ReturnType<typeof vi.fn<() => void>>;
+	let link: SituationLink;
 
 	beforeEach(() => {
 		restore = installDialogPolyfill();
 		editor = new SituationEditor(new SequentialIdGenerator(), new FixedClock());
 		prompt = new ConfirmationPrompt();
-		workflow = new SituationWorkflow({ editor, files, link: new SituationLink(), confirm: (request) => prompt.request(request) });
+		link = new SituationLink();
+		workflow = new SituationWorkflow({ editor, files, link, confirm: (request) => prompt.request(request) });
 		onOpened = vi.fn<() => void>();
 	});
 
@@ -53,8 +56,8 @@ describe("SituationDialogs", () => {
 		restore();
 	});
 
-	function renderDialogs() {
-		return render(SituationDialogs, { props: { workflow, prompt, onOpened } });
+	function renderDialogs(target?: SaveTarget) {
+		return render(SituationDialogs, { props: { workflow, prompt, onOpened, target } });
 	}
 
 	// Closed dialogs are hidden from the accessibility tree, so look them up structurally.
@@ -91,6 +94,17 @@ describe("SituationDialogs", () => {
 			expect(newDialog().open).toBe(false);
 			expect(editor.current()).toMatchObject({ title: "Box", fieldType: "half" });
 			expect(onOpened).toHaveBeenCalledOnce();
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: TOP_LEVEL });
+		});
+
+		it("starts the situation at the given place (its first save goes there)", async () => {
+			const { component } = renderDialogs(inFolder("f1"));
+			await component.startNew();
+			await settle();
+
+			await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
 		});
 
 		it("cancelling the form changes nothing", async () => {
@@ -151,6 +165,15 @@ describe("SituationDialogs", () => {
 
 			expect(editor.current().id).toBe("imported");
 			expect(onOpened).toHaveBeenCalledOnce();
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: TOP_LEVEL });
+		});
+
+		it("imports at the given place (its first save goes there)", async () => {
+			const { component } = renderDialogs(inFolder("f1"));
+
+			await component.importFile(file);
+
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f1" } });
 		});
 
 		it("does not report anything opened when the user keeps the unsaved changes", async () => {

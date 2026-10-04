@@ -8,9 +8,9 @@ import SavedSituations from "./SavedSituations.svelte";
 
 const loggedIn: SessionState = { status: "authenticated", user: { id: "u1", displayName: "Alice", isSystemAdministrator: false } };
 
-function renderWith(session: SessionState, list: SavedListState = { status: "idle" }, busy = false) {
-	const handlers = { onOpen: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() };
-	render(SavedSituations, { props: { session, list, busy, ...handlers } });
+function renderWith(session: SessionState, list: SavedListState = { status: "idle" }, busy = false, emptyMessage?: string) {
+	const handlers = { onOpen: vi.fn(), onDelete: vi.fn(), onMove: vi.fn(), onRetry: vi.fn() };
+	render(SavedSituations, { props: { session, list, busy, emptyMessage, ...handlers } });
 	return handlers;
 }
 
@@ -28,7 +28,7 @@ describe("SavedSituations", () => {
 
 	it("shows nothing while the login state is unknown", () => {
 		const { container } = render(SavedSituations, {
-			props: { session: { status: "unknown" }, list: { status: "idle" }, onOpen: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() },
+			props: { session: { status: "unknown" }, list: { status: "idle" }, onOpen: vi.fn(), onDelete: vi.fn(), onMove: vi.fn(), onRetry: vi.fn() },
 		});
 
 		expect(container.textContent?.trim()).toBe("");
@@ -69,6 +69,13 @@ describe("SavedSituations", () => {
 		expect(screen.getByText(/No saved situations yet\./)).toBeInTheDocument();
 	});
 
+	it("shows the place's own empty message", () => {
+		renderWith(loggedIn, { status: "loaded", situations: [] }, false, "This folder is empty.");
+
+		expect(screen.getByText("This folder is empty.")).toBeInTheDocument();
+		expect(screen.queryByText(/No saved situations yet/)).toBeNull();
+	});
+
 	it("lists the situations with title, field type, last change and creator", () => {
 		renderWith(loggedIn, { status: "loaded", situations: [powerplay, summaryOf({ id: "s2", title: "Breakout" })] });
 
@@ -98,16 +105,45 @@ describe("SavedSituations", () => {
 		expect(onDelete).toHaveBeenCalledWith(powerplay);
 	});
 
+	it("offers moving a situation with its Move button", async () => {
+		const { onMove } = renderWith(loggedIn, { status: "loaded", situations: [powerplay] });
+
+		const move = screen.getByRole("button", { name: "Move “Powerplay”" });
+		expect(move).toHaveTextContent("Move");
+		await fireEvent.click(move);
+
+		expect(onMove).toHaveBeenCalledWith(powerplay);
+	});
+
+	it("orders each situation's buttons: open, move, delete", () => {
+		renderWith(loggedIn, { status: "loaded", situations: [powerplay] });
+
+		const item = within(screen.getByRole("list")).getByRole("listitem");
+		expect(within(item).getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim())).toEqual([
+			"Powerplay",
+			"Move “Powerplay”",
+			"Delete “Powerplay”",
+		]);
+	});
+
 	it("disables the buttons while busy", () => {
 		renderWith(loggedIn, { status: "loaded", situations: [powerplay] }, true);
 
 		expect(screen.getByRole("button", { name: "Powerplay" })).toBeDisabled();
+		expect(screen.getByRole("button", { name: "Move “Powerplay”" })).toBeDisabled();
 		expect(screen.getByRole("button", { name: "Delete “Powerplay”" })).toBeDisabled();
 	});
 
 	it("uses real buttons and hides icons from assistive technology", () => {
 		const { container } = render(SavedSituations, {
-			props: { session: loggedIn, list: { status: "loaded", situations: [powerplay] }, onOpen: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() },
+			props: {
+				session: loggedIn,
+				list: { status: "loaded", situations: [powerplay] },
+				onOpen: vi.fn(),
+				onDelete: vi.fn(),
+				onMove: vi.fn(),
+				onRetry: vi.fn(),
+			},
 		});
 
 		expect(screen.getAllByRole("button").every((button) => button.getAttribute("type") === "button")).toBe(true);

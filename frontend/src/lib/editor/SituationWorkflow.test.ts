@@ -6,6 +6,7 @@ import { Situation } from "$lib/model/Situation";
 import { InvalidJsonError } from "$lib/model/serialization/SituationImportErrors";
 import { SituationEditor } from "./SituationEditor";
 import { SituationLink } from "$lib/storage/SituationLink";
+import { inFolder, TOP_LEVEL } from "$lib/storage/SaveTarget";
 import type { SituationSummary } from "$lib/storage/SituationApi";
 import {
 	DISCARD_CHANGES_REQUEST,
@@ -125,7 +126,13 @@ describe("SituationWorkflow", () => {
 
 			workflow.createNew({ title: "Box play", fieldType: "half" });
 
-			expect(link.current()).toEqual({ kind: "unsaved", origin: "new" });
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: TOP_LEVEL });
+		});
+
+		it("remembers the folder it was started in, for its first save", () => {
+			workflow.createNew({ title: "Box play", fieldType: "half" }, inFolder("f1"));
+
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
 		});
 	});
 
@@ -143,7 +150,13 @@ describe("SituationWorkflow", () => {
 
 			await workflow.importFile(file);
 
-			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported" });
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: TOP_LEVEL });
+		});
+
+		it("remembers the folder an import was started in, for its first save", async () => {
+			await workflow.importFile(file, inFolder("f1"));
+
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f1" } });
 		});
 
 		it("keeps the link when the import is cancelled", async () => {

@@ -14,6 +14,9 @@ internal sealed class SituationConfiguration : IEntityTypeConfiguration<Situatio
     /// </summary>
     public const string TitleIndexName = "ix_situations_area_title";
 
+    /// <summary>Lists a folder's situations and tells whether a folder is empty (ch. 8.15), among non-deleted situations.</summary>
+    public const string FolderIndexName = "ix_situations_folder";
+
     public void Configure(EntityTypeBuilder<Situation> builder)
     {
         builder.ToTable("situations");
@@ -39,5 +42,8 @@ internal sealed class SituationConfiguration : IEntityTypeConfiguration<Situatio
             .IsUnique()
             .HasFilter("deleted_at IS NULL")
             .HasDatabaseName(TitleIndexName);
+        builder.HasIndex(situation => situation.FolderId)
+            .HasFilter("deleted_at IS NULL")
+            .HasDatabaseName(FolderIndexName);
     }
 }

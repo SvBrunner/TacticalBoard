@@ -19,6 +19,7 @@ public class SituationEndpointsTests
 
     private readonly InMemorySituationRepository _repository = new();
     private readonly FakeAreaAccess _areas = new(Alice);
+    private readonly FakeFolderDirectory _folders = new();
     private readonly SituationService _service;
     private readonly DefaultHttpContext _http = new();
 
@@ -26,8 +27,10 @@ public class SituationEndpointsTests
     {
         _service = new SituationService(
             _repository,
+            _folders,
             _areas,
             new FakeActorDirectory(Alice) { Names = { [Alice] = "Alice" } },
+            new FakeUnitOfWork(),
             new SequenceIdGenerator(),
             new FixedClock(new DateTimeOffset(2026, 10, 4, 8, 0, 0, TimeSpan.Zero)));
     }
@@ -220,8 +223,11 @@ public class SituationEndpointsTests
             [
                 "GET /api/personal-area/situations/",
                 "POST /api/personal-area/situations/",
+                "GET /api/folders/{folderId:guid}/situations/",
+                "POST /api/folders/{folderId:guid}/situations/",
                 "GET /api/situations/{id:guid}",
                 "PUT /api/situations/{id:guid}",
+                "PUT /api/situations/{id:guid}/folder",
                 "DELETE /api/situations/{id:guid}",
             ],
             endpoints.Select(endpoint => endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Single() + " " + endpoint.RoutePattern.RawText));
@@ -242,5 +248,69 @@ public class SituationEndpointsTests
         Assert.Throws<ArgumentNullException>(() => SituationResponse.From(null!));
         Assert.Throws<ArgumentNullException>(() => SituationSummaryResponse.From(null!));
         Assert.Throws<ArgumentNullException>(() => UserReferenceResponse.From(null!));
+    }
+
+    [Fact]
+    public async Task Post_in_a_folder_creates_the_situation_there_with_its_location_and_etag()
+    {
+        var folder = _folders.Add(AreaReference.Personal(Alice));
+
+        var result = await SituationEndpoints.CreateInFolderAsync(folder.Id, new CreateSituationRequest(Document(), "imported"), _service, _http.Response, Cancellation);
+
+        var created = Assert.IsType<CreatedAtRoute<SituationResponse>>(result.Result);
+        Assert.Equal(SituationEndpoints.GetSituationRoute, created.RouteName);
+        Assert.Equal(folder.Id, created.Value!.FolderId);
+        Assert.Equal("\"1\"", _http.Response.Headers.ETag.ToString());
+    }
+
+    [Fact]
+    public async Task Post_in_a_folder_validates_like_the_personal_area()
+    {
+        var folder = _folders.Add(AreaReference.Personal(Alice));
+
+        var result = await SituationEndpoints.CreateInFolderAsync(folder.Id, new CreateSituationRequest(null, "elsewhere"), _service, _http.Response, Cancellation);
+
+        var errors = Assert.IsType<ValidationProblem>(result.Result).ProblemDetails.Errors;
+        Assert.True(errors.ContainsKey(SituationEndpoints.OriginField));
+        Assert.True(errors.ContainsKey(SituationEndpoints.DocumentField));
+        Assert.Empty(_repository.Situations);
+    }
+
+    [Fact]
+    public async Task List_of_a_folder_returns_its_situations_and_the_personal_list_only_the_top_level()
+    {
+        var folder = _folders.Add(AreaReference.Personal(Alice));
+        await CreateAsync("Top");
+        await SituationEndpoints.CreateInFolderAsync(folder.Id, new CreateSituationRequest(Document("Inside"), null), _service, _http.Response, Cancellation);
+
+        var inFolder = await SituationEndpoints.ListInFolderAsync(folder.Id, _service, Cancellation);
+        var top = await SituationEndpoints.ListPersonalAsync(_service, _areas, Cancellation);
+
+        Assert.Equal(["Inside"], inFolder.Value!.Select(summary => summary.Title));
+        Assert.Equal(["Top"], top.Value!.Select(summary => summary.Title));
+    }
+
+    [Fact]
+    public async Task Put_folder_moves_the_situation_and_returns_its_metadata()
+    {
+        var folder = _folders.Add(AreaReference.Personal(Alice));
+        var created = await CreateAsync();
+
+        var result = await SituationEndpoints.MoveAsync(created.Id, new MoveSituationRequest(folder.Id), _service, Cancellation);
+
+        Assert.Equal((folder.Id, 1), (result.Value!.FolderId, result.Value.Revision));
+
+        var back = await SituationEndpoints.MoveAsync(created.Id, new MoveSituationRequest(null), _service, Cancellation);
+
+        Assert.Null(back.Value!.FolderId);
+    }
+
+    [Fact]
+    public async Task The_folder_endpoints_reject_missing_arguments()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.ListInFolderAsync(Guid.NewGuid(), null!, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.CreateInFolderAsync(Guid.NewGuid(), null!, _service, _http.Response, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.MoveAsync(Guid.NewGuid(), null!, _service, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.MoveAsync(Guid.NewGuid(), new MoveSituationRequest(null), null!, Cancellation));
     }
 }

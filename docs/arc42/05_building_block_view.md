@@ -31,7 +31,7 @@ The backend is a modular monolith, decomposed by business domain, not by technic
 | **Users** | Local user accounts mapped from the IdP identity (issuer + subject), display name, system administrator role, blocking, account deletion, the bootstrap of the first system administrator. Provides the *current user* to the other modules. |
 | **Teams** | Teams (name, logo, code), overview and search, join requests, memberships and roles, leaving and deleting teams. Owns the **authorization checks** for team content (`ITeamAuthorization`). |
 | **Areas** | The common abstraction for "where situations live": a user's personal area or a team. Answers "may the current user read / write in this area?" by asking Users (personal area: only its owner) or Teams (the role matrix, ch. 8.1). |
-| **Folders** | Flat folders inside an area. |
+| **Folders** | Flat folders inside an area: create, rename (unique names), delete (only when empty). Tells Situations which area a folder belongs to. |
 | **Situations** | Situations with their revisions, saving with conflict detection, title uniqueness and default titles, validation of the situation document. |
 
 Dependencies (arrows = "uses"):
@@ -47,6 +47,7 @@ graph TD
 ```
 
 - Situations and Folders never check roles themselves; they ask Areas, which delegates to Teams or Users.
+- Folders must not use Situations (the arrow points the other way), yet a folder may only be deleted while it contains no situations. Folders therefore defines the question as an interface in its contracts (`IFolderContents`), and Situations implements it (dependency inversion); the check and the deletion share one database transaction with Situations' writes (ADR-012).
 - Users depends on no other module. Account deletion needs to know about memberships and personal content: Users publishes the request ("user is about to be deleted" / "user deleted") through an in-process interface that Teams and Areas implement, so the dependency arrows stay as above.
 - System administrators reach team management through Teams (with their own authorization rule), never through Situations or Folders, so they can't read content (ch. 8.1).
 
@@ -56,8 +57,8 @@ One .NET solution (`backend/TacticalBoard.slnx`), **one project per module**, so
 
 | Project | Content |
 |---|---|
-| `src/TacticalBoard.SharedKernel` | Abstractions every module's domain code may use, with no framework dependency: `IClock`, `IIdGenerator`, `DomainException` (+ `DomainErrorKind`, `ErrorCode`), `ISoftDeletable` / `SoftDeletableEntity`. |
-| `src/TacticalBoard.Infrastructure` | Shared technical plumbing: `SystemClock`, `SequentialGuidGenerator` (UUID v7), the one EF Core context `TacticalBoardDbContext` with the soft-delete query filter and interceptor (ch. 8.16), migration on startup, and the module contract `IModule`. |
+| `src/TacticalBoard.SharedKernel` | Abstractions every module's domain code may use, with no framework dependency: `IClock`, `IIdGenerator`, `DomainException` (+ `DomainErrorKind`, `ErrorCode`), `ISoftDeletable` / `SoftDeletableEntity`, `IUnitOfWork` (one transaction across modules, ADR-012), `UniqueNames` (how unique names are compared: titles, folder names). |
+| `src/TacticalBoard.Infrastructure` | Shared technical plumbing: `SystemClock`, `SequentialGuidGenerator` (UUID v7), the one EF Core context `TacticalBoardDbContext` with the soft-delete query filter and interceptor (ch. 8.16), `EfUnitOfWork` (transactions on that context), migration on startup, and the module contract `IModule`. |
 | `src/Modules/TacticalBoard.{Users,Teams,Areas,Folders,Situations}` | One project per module. Each references only the modules it may use (above); transitive project references are switched off (`src/Modules/Directory.Build.props`), so e.g. Situations can't use Users or Teams. |
 | `src/TacticalBoard.Api` | The host: composes the modules (`Hosting/ModuleCatalog`, `Hosting/ApiHost`), Problem Details (ch. 8.2), `GET /api/health`, the login as BFF (`Authentication/`: cookie session, OIDC, antiforgery, `/auth/*`, ch. 8.13), configuration, and the EF Core migrations (`Persistence/Migrations`; only the host knows every module's part of the model). The host talks to the Users module only through its `Contracts` (`IUserAuthentication`). |
 
@@ -69,6 +70,6 @@ Conventions inside a module project (folders are created as the module gets cont
 - `Infrastructure/`: EF Core entity configurations (`IEntityTypeConfiguration<T>`, picked up automatically from the module's assembly) and repository implementations.
 - `Endpoints/`: the module's HTTP endpoints (minimal APIs).
 
-Contracts in use so far: Users provides `ICurrentUser`, `IUserAuthentication` (for the host's login) and `IUserDirectory` (display names); Areas provides `AreaReference`, `IAreaAccess` (may the current user read/write this area — a rule per area kind, so the team rule plugs in later) and `IActorDirectory` (current user id and display names for Situations and Folders, which may not use Users directly). Situations has its REST endpoints below `/api/personal-area/situations` and `/api/situations` (ch. 8.15). Teams and Folders have no content yet.
+Contracts in use so far: Users provides `ICurrentUser`, `IUserAuthentication` (for the host's login) and `IUserDirectory` (display names); Areas provides `AreaReference`, `IAreaAccess` (may the current user read/write this area — a rule per area kind, so the team rule plugs in later) and `IActorDirectory` (current user id and display names for Situations and Folders, which may not use Users directly); Folders provides `IFolderDirectory` (a folder's area; `FindForPlacingAsync` also locks it against deletion), `FolderReference` and `FolderNotFoundException`, and declares `IFolderContents` ("does this folder contain situations?"), which Situations implements. Folders has its REST endpoints below `/api/personal-area/folders` and `/api/folders`; Situations below `/api/personal-area/situations`, `/api/folders/{id}/situations` and `/api/situations` (ch. 8.15). Teams has no content yet.
 
 The rules are checked by architecture tests (`backend/tests/TacticalBoard.UnitTests/Architecture/`): project references and compiled assembly references per module, no cycles, only the module class and `Contracts` public, no infrastructure dependencies in `Domain`/`Application`.
