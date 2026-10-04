@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using TacticalBoard.SharedKernel.Validation;
 
 namespace TacticalBoard.Users.Domain;
 
@@ -22,26 +23,26 @@ internal sealed record DisplayName
     /// <summary>Validates a name the user entered.</summary>
     /// <param name="input">The raw input.</param>
     /// <param name="displayName">The valid name (trimmed), when the result is <c>true</c>.</param>
-    /// <param name="error">Why the input is invalid, when the result is <c>false</c>.</param>
-    public static bool TryCreate(string? input, [NotNullWhen(true)] out DisplayName? displayName, [NotNullWhen(false)] out string? error)
+    /// <param name="error">Why the input is invalid (with a stable code, arc42 ch. 8.2), when the result is <c>false</c>.</param>
+    public static bool TryCreate(string? input, [NotNullWhen(true)] out DisplayName? displayName, [NotNullWhen(false)] out FieldError? error)
     {
         displayName = null;
         var trimmed = input?.Trim() ?? string.Empty;
         if (trimmed.Length == 0)
         {
-            error = "The display name must not be empty.";
+            error = FieldError.Required("The display name must not be empty.");
             return false;
         }
 
         if (trimmed.Length > MaxLength)
         {
-            error = $"The display name must be at most {MaxLength} characters long.";
+            error = FieldError.TooLong(MaxLength, $"The display name must be at most {MaxLength} characters long.");
             return false;
         }
 
         if (trimmed.Any(char.IsControl))
         {
-            error = "The display name must not contain control characters.";
+            error = FieldError.ControlCharacters("The display name must not contain control characters.");
             return false;
         }
 

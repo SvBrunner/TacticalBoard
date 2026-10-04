@@ -12,6 +12,7 @@ Becomes compact (icon-only buttons, short status) when narrower than
 -->
 <script lang="ts">
 	import { FRAME_DURATION_CHOICES_MS } from "$lib/playback/PlaybackSettings";
+	import { t } from "$lib/i18n";
 	import type { PlaybackStatus } from "$lib/playback/SlideshowPlayer";
 
 	interface Props {
@@ -51,7 +52,7 @@ Becomes compact (icon-only buttons, short status) when narrower than
 	const playing = $derived(status === "playing");
 	const playDisabled = $derived(!active && !canPlay);
 	const playTitle = $derived(
-		playing ? "Pause (Space)" : playDisabled ? "Play (needs at least two frames)" : "Play (Space)",
+		playing ? $t.playback.pauseTitle : playDisabled ? $t.playback.playNeedsFrames : $t.playback.playTitle,
 	);
 
 	// Guarded as well as `disabled`, so a synthetic click on a disabled button can't trigger it.
@@ -74,18 +75,14 @@ Becomes compact (icon-only buttons, short status) when narrower than
 	function changeDuration(event: Event & { currentTarget: HTMLSelectElement }) {
 		onFrameDurationChange(Number(event.currentTarget.value));
 	}
-
-	function seconds(ms: number): string {
-		return `${ms / 1000} s`;
-	}
 </script>
 
-<section class="playback" class:active aria-label="Playback">
-	<div class="transport" role="group" aria-label="Playback controls">
+<section class="playback" class:active aria-label={$t.playback.region}>
+	<div class="transport" role="group" aria-label={$t.playback.controls}>
 		<button
 			type="button"
 			class="btn primary"
-			aria-label={playing ? "Pause" : "Play"}
+			aria-label={playing ? $t.playback.pause : $t.playback.play}
 			title={playTitle}
 			disabled={playDisabled}
 			onclick={togglePlay}
@@ -99,8 +96,8 @@ Becomes compact (icon-only buttons, short status) when narrower than
 		<button
 			type="button"
 			class="btn"
-			aria-label="Previous frame"
-			title="Previous frame (←)"
+			aria-label={$t.playback.previous}
+			title={$t.playback.previousTitle}
 			disabled={!active || frameNumber <= 1}
 			onclick={previous}
 		>
@@ -109,29 +106,29 @@ Becomes compact (icon-only buttons, short status) when narrower than
 		<button
 			type="button"
 			class="btn"
-			aria-label="Next frame"
-			title="Next frame (→)"
+			aria-label={$t.playback.next}
+			title={$t.playback.nextTitle}
 			disabled={!active || frameNumber >= frameCount}
 			onclick={next}
 		>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="16.5" y="5" width="2.5" height="14" rx="1" /><path d="M5 6.2v11.6a1 1 0 0 0 1.55.83l7.95-5.43a1.4 1.4 0 0 0 0-2.4L6.55 5.37A1 1 0 0 0 5 6.2z" /></svg>
 		</button>
-		<button type="button" class="btn" aria-label="Stop" title="Stop (Esc)" disabled={!active} onclick={stop}>
+		<button type="button" class="btn" aria-label={$t.playback.stop} title={$t.playback.stopTitle} disabled={!active} onclick={stop}>
 			<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="5" y="5" width="14" height="14" rx="2" /></svg>
 		</button>
 	</div>
 
 	<p class="status">
-		<span class="status-word">Frame</span>
+		<span class="status-word">{$t.playback.frame}</span>
 		{frameNumber} / {frameCount}
 	</p>
 
 	<div class="settings">
 		<label class="duration" for="{uid}-duration">
-			<span class="setting-label">Frame duration</span>
+			<span class="setting-label">{$t.playback.frameDuration}</span>
 			<select id="{uid}-duration" class="select" value={String(frameDurationMs)} onchange={changeDuration}>
 				{#each FRAME_DURATION_CHOICES_MS as choice (choice)}
-					<option value={String(choice)}>{seconds(choice)}</option>
+					<option value={String(choice)}>{$t.playback.seconds(choice / 1000)}</option>
 				{/each}
 			</select>
 		</label>
@@ -139,11 +136,11 @@ Becomes compact (icon-only buttons, short status) when narrower than
 			type="button"
 			class="btn toggle"
 			aria-pressed={loop}
-			title={loop ? "Loop is on: playback starts over after the last frame" : "Loop is off: playback stops after the last frame"}
+			title={loop ? $t.playback.loopOn : $t.playback.loopOff}
 			onclick={() => onLoopChange(!loop)}
 		>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M17 2l3 3-3 3" /><path d="M4 11V9a4 4 0 0 1 4-4h12" /><path d="M7 22l-3-3 3-3" /><path d="M20 13v2a4 4 0 0 1-4 4H4" /></svg>
-			<span class="setting-label">Loop</span>
+			<span class="setting-label">{$t.playback.loop}</span>
 		</button>
 	</div>
 </section>

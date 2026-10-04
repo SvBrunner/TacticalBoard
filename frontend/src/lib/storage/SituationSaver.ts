@@ -1,10 +1,13 @@
 import { get, writable, type Readable } from "svelte/store";
 import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
 import type { SavedIdentity, SaveBasis } from "$lib/editor/SituationEditor";
+import { inEnglish } from "$lib/i18n";
+import type { Translatable } from "$lib/i18n/Messages";
+import { ProblemText } from "$lib/i18n/ProblemText";
 import type { Situation } from "$lib/model/Situation";
 import type { SituationFileDto } from "$lib/model/serialization/SituationFileDto";
 import { FolderApi } from "./FolderApi";
-import { SituationApi, type SituationOrigin, type SituationSummary, type StoredSituation } from "./SituationApi";
+import { SituationApi, type CreateOptions, type SituationOrigin, type SituationSummary, type StoredSituation } from "./SituationApi";
 import type { LinkState } from "./SituationLink";
 import type { SaveTarget } from "./SaveTarget";
 
@@ -16,18 +19,20 @@ export type SaveState =
 	| { readonly status: "idle" }
 	| { readonly status: "saving" }
 	| { readonly status: "saved"; readonly title: string }
-	| { readonly status: "failed"; readonly message: string };
+	| { readonly status: "failed"; readonly message: Translatable };
 
 /** The editor operations a save needs; implemented by `SituationEditor`. */
 export interface SaveEditor {
 	current(): Situation;
 	changeCount(): number;
+	/** Whether there are changes since the situation was loaded or last saved. */
+	isDirty(): boolean;
 	acknowledgeSave(saved: SavedIdentity, basis: SaveBasis): void;
 }
 
 /** The server calls a save needs; implemented by `SituationApi`. */
 export interface SaveApi {
-	create(document: unknown, origin: SituationOrigin, target: SaveTarget): Promise<StoredSituation>;
+	create(document: unknown, origin: SituationOrigin, target: SaveTarget, options?: CreateOptions): Promise<StoredSituation>;
 	update(id: string, revision: number, document: unknown): Promise<StoredSituation>;
 }
 
@@ -54,11 +59,20 @@ export interface SituationSaverDependencies {
 	readonly onSessionEnded?: () => void;
 	/** Called after every successful save with the server's state. */
 	readonly onSaved?: (saved: StoredSituation) => void;
+	/**
+	 * Whether a title is a default title in any language (arc42 ch. 8.18);
+	 * the first save of such a new situation asks the server to number it
+	 * instead of refusing a taken title. Default: none is.
+	 */
+	readonly isDefaultTitle?: (title: string) => boolean;
 	readonly log?: { notify(message: string, level?: "info" | "warn" | "error"): void };
 }
 
 /**
- * Saves the edited situation on the server (arc42 ch. 8.15): the first save
+ * Saves the edited situation on the server (arc42 ch. 8.15). There is
+ * something to save when the situation was never saved on the server (also
+ * without edits) or has changes since its last save; otherwise saving does
+ * nothing (the Save button is disabled, arc42 ch. 8.7): the first save
  * creates it where it was started (a folder of the personal area or its top
  * level, `LinkState.target`), later saves update it on top of the revision
  * they are based on. A save conflict asks the user: overwrite (save again on
@@ -90,9 +104,23 @@ export class SituationSaver {
 		}
 	}
 
-	/** Saves the current situation; resolves with whether it was saved. Never throws. */
+	/** Whether there is something to save: a never-saved situation, or changes since the last save. */
+	static hasChanges(link: LinkState, dirty: boolean): boolean {
+		return link.kind === "unsaved" || dirty;
+	}
+
+	/** Whether there is something to save right now. */
+	hasChanges(): boolean {
+		return SituationSaver.hasChanges(this.deps.link.current(), this.deps.editor.isDirty());
+	}
+
+	/** Saves the current situation; resolves with whether it was saved. Does nothing without changes. Never throws. */
 	async save(): Promise<boolean> {
 		if (this.isSaving()) {
+			return false;
+		}
+		if (!this.hasChanges()) {
+			this.log("Nothing to save");
 			return false;
 		}
 		this.store.set({ status: "saving" });
@@ -110,7 +138,7 @@ export class SituationSaver {
 		} catch (error) {
 			const message = this.messageFor(error, basis.situation);
 			this.store.set({ status: "failed", message });
-			this.log(`Save failed: ${message}`, "error");
+			this.log(`Save failed: ${inEnglish(message)}`, "error");
 			return false;
 		}
 	}
@@ -118,7 +146,8 @@ export class SituationSaver {
 	/** The server's answer, or `null` when the user cancelled a conflict. */
 	private async send(document: SituationFileDto, link: LinkState): Promise<StoredSituation | null> {
 		if (link.kind === "unsaved") {
-			return this.deps.api.create(document, link.origin, link.target);
+			const titleIsDefault = link.origin === "new" && (this.deps.isDefaultTitle?.(document.situation.title) ?? false);
+			return this.deps.api.create(document, link.origin, link.target, titleIsDefault ? { titleIsDefault } : undefined);
 		}
 		let revision = link.summary.revision;
 		for (;;) {
@@ -153,30 +182,32 @@ export class SituationSaver {
 		this.deps.onSaved?.(stored);
 	}
 
-	private messageFor(error: unknown, situation: Situation): string {
+	private messageFor(error: unknown, situation: Situation): Translatable {
 		if (error instanceof ApiUnavailableError) {
-			return "The server is not reachable. The situation is not saved yet; try again later or export it.";
+			return (m) => m.saving.unreachable;
 		}
 		if (!(error instanceof ApiError)) {
-			return "The situation couldn't be saved.";
+			return (m) => m.saving.failed;
 		}
 		if (error.status === 401) {
 			this.deps.onSessionEnded?.();
-			return "Your session has ended. Log in again to save; until then you can export the situation.";
+			return (m) => m.saving.sessionEnded;
 		}
 		if (error.type === SituationApi.DUPLICATE_TITLE) {
-			return `A situation titled "${situation.displayTitle.trim()}" already exists. Choose another title and save again.`;
+			const title = situation.displayTitle.trim();
+			return (m) => m.saving.duplicateTitle(title);
 		}
 		if (error.type === SituationApi.NOT_FOUND) {
-			return "This situation no longer exists on the server (it was deleted). Export it to keep your changes.";
+			return (m) => m.saving.situationGone;
 		}
 		if (error.type === FolderApi.NOT_FOUND) {
-			return "The folder to save in no longer exists (it was deleted). Export the situation to keep it.";
+			return (m) => m.saving.folderGone;
 		}
-		const details = error.fieldErrors();
-		return details.length > 0
-			? `The situation couldn't be saved: ${details.join("; ")}`
-			: `The situation couldn't be saved: ${error.message}`;
+		const reason = ProblemText.describe(error, () => "");
+		return (m) => {
+			const text = reason(m);
+			return text === "" ? m.saving.failed : m.saving.failedWith(text);
+		};
 	}
 
 	private static currentRevisionOf(error: ApiError): number | undefined {

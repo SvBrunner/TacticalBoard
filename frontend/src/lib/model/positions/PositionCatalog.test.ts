@@ -1,20 +1,33 @@
 import { describe, it, expect } from "vitest";
 import { PositionCatalog } from "./PositionCatalog";
+import { de, en } from "$lib/testing/i18n";
 
 describe("PositionCatalog", () => {
 	const floorball = PositionCatalog.forSport("floorball");
 
 	it("lists the floorball positions in order with code and full name", () => {
 		expect(floorball.positions).toEqual([
-			{ code: "G", name: "Goalie" },
-			{ code: "V", name: "Verteidiger" },
-			{ code: "C", name: "Center" },
-			{ code: "F", name: "Flügel" },
-			{ code: "LV", name: "Linker Verteidiger" },
-			{ code: "RV", name: "Rechter Verteidiger" },
-			{ code: "LF", name: "Linker Flügel" },
-			{ code: "RF", name: "Rechter Flügel" },
+			{ code: "G" },
+			{ code: "V" },
+			{ code: "C" },
+			{ code: "F" },
+			{ code: "LV" },
+			{ code: "RV" },
+			{ code: "LF" },
+			{ code: "RF" },
 		]);
+	});
+
+	it("names the positions in the given catalog's language, falling back to the code", () => {
+		expect(floorball.sport).toBe("floorball");
+		expect(floorball.nameOf("LV", en.positions)).toBe("Left defender");
+		expect(floorball.nameOf("LV", de.positions)).toBe("Linker Verteidiger");
+		expect(floorball.nameOf("G", de.positions)).toBe("Goalie");
+		expect(floorball.nameOf("10", en.positions)).toBe("10");
+		for (const position of floorball.positions) {
+			expect(en.positions.floorball).toHaveProperty(position.code);
+			expect(de.positions.floorball).toHaveProperty(position.code);
+		}
 	});
 
 	it("every predefined code is a valid label", () => {
@@ -25,7 +38,7 @@ describe("PositionCatalog", () => {
 	});
 
 	it("find returns the predefined position for a code, exact match only", () => {
-		expect(floorball.find("LV")).toEqual({ code: "LV", name: "Linker Verteidiger" });
+		expect(floorball.find("LV")).toEqual({ code: "LV" });
 		expect(floorball.find("lv")).toBeUndefined();
 		expect(floorball.find("10")).toBeUndefined();
 		expect(floorball.find("")).toBeUndefined();

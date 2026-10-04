@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { get } from "svelte/store";
+import { en } from "$lib/testing/i18n";
 import { ConfirmationPrompt, type ConfirmationRequest } from "./ConfirmationPrompt";
 
-const question: ConfirmationRequest = { title: "Discard changes?", message: "Sure?", confirmLabel: "Discard" };
+const question: ConfirmationRequest = { title: () => "Discard changes?", message: () => "Sure?", confirmLabel: () => "Discard" };
 
 describe("ConfirmationPrompt", () => {
 	it("has nothing pending initially", () => {
@@ -47,10 +48,10 @@ describe("ConfirmationPrompt", () => {
 	it("a new request answers the previous one with no", async () => {
 		const prompt = new ConfirmationPrompt();
 		const first = prompt.request(question);
-		const second = prompt.request({ ...question, title: "Second?" });
+		const second = prompt.request({ ...question, title: () => "Second?" });
 
 		await expect(first).resolves.toBe(false);
-		expect(get(prompt.pending)?.title).toBe("Second?");
+		expect(get(prompt.pending)?.title(en)).toBe("Second?");
 		prompt.answer(true);
 		await expect(second).resolves.toBe(true);
 	});

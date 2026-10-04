@@ -1,3 +1,5 @@
+import type { Translatable } from "$lib/i18n/Messages";
+
 /**
  * State of a form with one name field (display name, folder name): the input
  * (reactive, bindable), the rules (`problemOf`, the same as the backend's),
@@ -8,12 +10,12 @@
 export abstract class NameForm {
 	value = $state("");
 	/** An error from the server, shown until the input changes. */
-	serverError = $state<string | null>(null);
+	serverError = $state<Translatable | null>(null);
 	saving = $state(false);
 	private attempted = $state(false);
 
 	/** What's wrong with the trimmed input, or `null`. */
-	protected abstract problemOf(trimmed: string): string | null;
+	protected abstract problemOf(trimmed: string): Translatable | null;
 
 	/** Starts over with `current` as the value. */
 	reset(current: string): void {
@@ -29,7 +31,7 @@ export abstract class NameForm {
 	}
 
 	/** What's wrong with the input, or `null`. */
-	get problem(): string | null {
+	get problem(): Translatable | null {
 		return this.problemOf(this.trimmed);
 	}
 
@@ -38,7 +40,7 @@ export abstract class NameForm {
 	}
 
 	/** The message to show now: the server's, or the input problem after a submit attempt. */
-	get message(): string | null {
+	get message(): Translatable | null {
 		return this.serverError ?? (this.attempted ? this.problem : null);
 	}
 

@@ -26,6 +26,18 @@ describe("AppNavbar", () => {
 		expect(link).not.toHaveAttribute("aria-current");
 	});
 
+	it("has the language switcher, and switching translates the bar at once", async () => {
+		render(AppNavbar, { props: { title: "Powerplay" } });
+		const banner = screen.getByRole("banner");
+
+		await fireEvent.change(within(banner).getByRole("combobox", { name: "Language" }), { target: { value: "de" } });
+
+		expect(within(banner).getByRole("navigation", { name: "Hauptnavigation" })).toBeInTheDocument();
+		expect(within(banner).getByRole("link", { name: "Startseite" })).toBeInTheDocument();
+		expect(within(banner).getByRole("navigation", { name: "Konto" })).toBeInTheDocument();
+		expect(within(banner).getByRole("heading", { level: 1, name: "Powerplay" })).toBeInTheDocument();
+	});
+
 	it("marks the start page as the current page", () => {
 		render(AppNavbar, { props: { title: "Tactical Board", home: true } });
 
@@ -63,7 +75,7 @@ describe("AppNavbar", () => {
 	});
 
 	it("shows the user's menu when logged in", async () => {
-		await sessionFrom(jsonResponse(200, { id: "1", displayName: "Alice", isSystemAdministrator: false }));
+		await sessionFrom(jsonResponse(200, { id: "1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null }));
 		render(AppNavbar, { props: { title: "X" } });
 
 		expect(within(screen.getByRole("navigation", { name: "Account" })).getByRole("button", { name: "Alice" })).toBeInTheDocument();

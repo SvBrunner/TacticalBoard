@@ -4,7 +4,7 @@ A tactics board for drawing and saving game situations across different sports â
 
 Currently implemented (the Phase 1 MVP, frontend only, floorball): create a situation on a full or half field; place, move, and color players (with position labels), balls, and markers; draw pass, run, and shot arrows that can be bent; undo/redo; multiple frames with descriptions, played back as a slideshow; export/import as JSON and export as an animated GIF. Works by touch on phones and tablets, in a light and a dark theme.
 
-In progress (Phase 2): a backend with users and teams (per-team roles Admin, Editor, Reader) where a team organizes its saved situations into folders; later more sports. Done so far: the backend skeleton (modules, database, migrations, health endpoint, Docker Compose stack), the login through any OpenID Connect provider (users created on first login, editable display name, log in/out in the app's navbar on the start page and in the editor), saving situations in the personal area (Save button and Ctrl/Cmd+S, revisions, unique and numbered titles, a warning with Overwrite / Save as copy when someone else saved in between, created/changed by; the start page lists the saved situations to open or delete), and folders in the personal area (create, rename, delete when empty; each folder has its own page; "New situation" / "Import" from a folder save into it; situations are moved between the folders and the top level with "Move"). Without login the app works exactly as before (local mode). See [docs/roadmap.md](docs/roadmap.md).
+In progress (Phase 2): a backend with users and teams (per-team roles Admin, Editor, Reader) where a team organizes its saved situations into folders; later more sports. Done so far: the backend skeleton (modules, database, migrations, health endpoint, Docker Compose stack), the login through any OpenID Connect provider (users created on first login, editable display name, log in/out in the app's navbar on the start page and in the editor), saving situations in the personal area (Save button and Ctrl/Cmd+S, revisions, unique and numbered titles, a warning with Overwrite / Save as copy when someone else saved in between, created/changed by; the start page lists the saved situations to open or delete), folders in the personal area (create, rename, delete when empty; each folder has its own page; "New situation" / "Import" from a folder save into it; situations are moved between the folders and the top level with "Move"), and the UI in German and English (the browser's language at first, a language switcher in the navbar, remembered in the browser and in the account; server errors worded from stable codes). Without login the app works exactly as before (local mode). See [docs/roadmap.md](docs/roadmap.md).
 
 ## Structure
 
@@ -114,9 +114,13 @@ Stop with `docker compose down`; `docker compose down -v` also deletes the volum
 | `pnpm run check` | Type-check with svelte-check |
 | `pnpm test` | Run the Vitest test suite |
 
+## Translations
+
+System texts live in typed message catalogs, one file per language: `frontend/src/lib/i18n/locales/en.ts` (the reference and fallback) and `de.ts`. To add a language, copy `de.ts` to e.g. `fr.ts`, set `code`/`name` and translate every text â€” `pnpm run check` fails until every key is there; the new file is picked up automatically (language switcher, browser detection). No backend change is needed. Details: [arc42 ch. 8.18](docs/arc42/08_crosscutting_concepts.md), ADR-013.
+
 ## Tech stack
 
-- Frontend: SvelteKit 2 + Svelte 5 (static build), Konva / svelte-konva for the drawing canvas, Vitest + Testing Library for tests
+- Frontend: SvelteKit 2 + Svelte 5 (static build), Konva / svelte-konva for the drawing canvas, own typed i18n (German/English), Vitest + Testing Library for tests
 - Backend: .NET 10, ASP.NET Core (minimal APIs), EF Core with Npgsql (PostgreSQL), xUnit v3 + Testcontainers, NetArchTest for architecture rules
 - Deployment: OCI containers, Docker Compose, Caddy as reverse proxy and static file server
 

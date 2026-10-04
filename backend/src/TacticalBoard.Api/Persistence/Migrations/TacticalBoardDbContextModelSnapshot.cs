@@ -229,6 +229,11 @@ namespace TacticalBoard.Api.Persistence.Migrations
                         .HasColumnType("character varying(2048)")
                         .HasColumnName("issuer");
 
+                    b.Property<string>("PreferredLanguageValue")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)")
+                        .HasColumnName("preferred_language");
+
                     b.Property<string>("Subject")
                         .IsRequired()
                         .HasMaxLength(255)

@@ -27,6 +27,7 @@ open popover at the selected element's new on-screen position.
 -->
 <script lang="ts">
 	import { untrack } from "svelte";
+	import { t } from "$lib/i18n";
 	import { Group } from "svelte-konva";
 	import type { Point } from "$lib/model/Point";
 	import type { KonvaEventObject, Node } from "konva/lib/Node";
@@ -321,7 +322,7 @@ open popover at the selected element's new on-screen position.
 	onpointercancel={handleWindowPointerCancel}
 />
 
-<section class="field-area" aria-label="Field" use:observeSize={(next) => (size = next)}>
+<section class="field-area" aria-label={$t.editor.field} use:observeSize={(next) => (size = next)}>
 	{#if fit.width > 0}
 		<div bind:this={stageContainer} class="stage-container" style:width="{fit.width}px" style:height="{fit.height}px">
 			<BoardScene

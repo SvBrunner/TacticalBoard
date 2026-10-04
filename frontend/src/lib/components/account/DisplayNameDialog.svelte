@@ -9,6 +9,7 @@ message if saving fails; Escape or Cancel closes without saving.
 	import { modalDialog } from "$lib/actions/modalDialog";
 	import type { DisplayNameChange } from "$lib/auth/AuthSession";
 	import { DisplayNameForm } from "$lib/auth/DisplayNameForm.svelte";
+	import { t } from "$lib/i18n";
 
 	interface Props {
 		open: boolean;
@@ -57,10 +58,10 @@ message if saving fails; Escape or Cancel closes without saving.
 
 <dialog class="modal-dialog" aria-labelledby="{uid}-title" use:modalDialog={{ open, onCancel: cancel, initialFocus: () => input }}>
 	<form method="dialog" class="modal-form" novalidate onsubmit={handleSubmit}>
-		<h2 id="{uid}-title" class="modal-title">Change display name</h2>
+		<h2 id="{uid}-title" class="modal-title">{$t.account.changeDisplayName}</h2>
 
 		<p class="modal-field">
-			<label for="{uid}-name" class="modal-label">Display name</label>
+			<label for="{uid}-name" class="modal-label">{$t.account.displayName}</label>
 			<input
 				bind:this={input}
 				id="{uid}-name"
@@ -77,12 +78,12 @@ message if saving fails; Escape or Cancel closes without saving.
 			/>
 		</p>
 		{#if form.message}
-			<p id="{uid}-error" class="field-error" role="alert">{form.message}</p>
+			<p id="{uid}-error" class="field-error" role="alert">{form.message($t)}</p>
 		{/if}
 
 		<div class="modal-actions">
-			<button type="button" class="modal-btn secondary" onclick={cancel} disabled={form.saving}>Cancel</button>
-			<button type="submit" class="modal-btn primary" disabled={form.saving}>Save</button>
+			<button type="button" class="modal-btn secondary" onclick={cancel} disabled={form.saving}>{$t.common.cancel}</button>
+			<button type="submit" class="modal-btn primary" disabled={form.saving}>{$t.common.save}</button>
 		</div>
 	</form>
 </dialog>

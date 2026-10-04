@@ -3,7 +3,7 @@ import { render, screen, fireEvent, within } from "@testing-library/svelte";
 import { tick } from "svelte";
 import AccountMenu from "./AccountMenu.svelte";
 
-const USER = { id: "1", displayName: "Alice Example", isSystemAdministrator: false };
+const USER = { id: "1", displayName: "Alice Example", isSystemAdministrator: false, preferredLanguage: null };
 
 function props(overrides: Record<string, unknown> = {}) {
 	return {

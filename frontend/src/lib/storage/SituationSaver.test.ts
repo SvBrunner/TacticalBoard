@@ -1,3 +1,4 @@
+import { de, en, inEnglishDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
 import { SituationEditor } from "$lib/editor/SituationEditor";
@@ -5,14 +6,14 @@ import { FixedClock } from "$lib/model/Clock";
 import { SequentialIdGenerator } from "$lib/model/ids/IdGenerator";
 import { SituationSerializer } from "$lib/model/serialization/SituationSerializer";
 import { storedFrom, summaryOf } from "$lib/testing/storageFakes";
-import { SituationApi, type SituationOrigin, type StoredSituation } from "./SituationApi";
+import { SituationApi, type CreateOptions, type SituationOrigin, type StoredSituation } from "./SituationApi";
 import { SituationLink } from "./SituationLink";
 import { FolderApi } from "./FolderApi";
 import { inFolder, TOP_LEVEL, type SaveTarget } from "./SaveTarget";
 import { SituationSaver, type ConflictChoice, type SaveApi } from "./SituationSaver";
 
 class FakeApi implements SaveApi {
-	readonly creates: { document: unknown; origin: SituationOrigin; target: SaveTarget }[] = [];
+	readonly creates: { document: unknown; origin: SituationOrigin; target: SaveTarget; options?: CreateOptions }[] = [];
 	readonly updates: { id: string; revision: number; document: unknown }[] = [];
 	/** Answers (or errors) of the next calls, in order; otherwise the server echoes the document. */
 	readonly script: (StoredSituation | Error)[] = [];
@@ -20,8 +21,8 @@ class FakeApi implements SaveApi {
 
 	constructor(private readonly editor: SituationEditor) {}
 
-	async create(document: unknown, origin: SituationOrigin, target: SaveTarget): Promise<StoredSituation> {
-		this.creates.push({ document, origin, target });
+	async create(document: unknown, origin: SituationOrigin, target: SaveTarget, options?: CreateOptions): Promise<StoredSituation> {
+		this.creates.push({ document, origin, target, options });
 		return this.answer(origin === "copy" ? "server-copy" : "server-1", 1, target.folderId);
 	}
 
@@ -87,7 +88,7 @@ describe("SituationSaver", () => {
 			expect(editor.isDirty()).toBe(false);
 			expect(link.saved()).toMatchObject({ id: "server-1", revision: 1 });
 			expect(link.saved()).not.toHaveProperty("document");
-			expect(saver.current()).toEqual({ status: "saved", title: "Powerplay" });
+			expect(inEnglishDeep(saver.current())).toEqual({ status: "saved", title: "Powerplay" });
 			expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ id: "server-1" }));
 		});
 
@@ -116,6 +117,76 @@ describe("SituationSaver", () => {
 			await saver.save();
 
 			expect(api.creates[0]).toMatchObject({ origin: "imported", target: { folderId: "f2" } });
+		});
+	});
+
+	describe("default titles", () => {
+		const withDefaultTitles = () =>
+			new SituationSaver({
+				editor,
+				link,
+				api,
+				serializer: new SituationSerializer(),
+				chooseOnConflict: choice,
+				isDefaultTitle: (title) => ["UNTITLED SITUATION", "UNBENANNTE SITUATION"].includes(title.trim().toUpperCase()),
+			});
+
+		it("asks the server to number a new situation's default title (in any language)", async () => {
+			editor.createNew({ title: "Unbenannte Situation", fieldType: "full" });
+			link.startNew();
+
+			await withDefaultTitles().save();
+
+			expect(api.creates[0].options).toEqual({ titleIsDefault: true });
+		});
+
+		it("doesn't for another title", async () => {
+			await withDefaultTitles().save();
+
+			expect(api.creates[0].options).toBeUndefined();
+		});
+
+		it("doesn't for an import (the server numbers every taken title of an import anyway)", async () => {
+			editor.createNew({ title: "Untitled Situation", fieldType: "full" });
+			link.startImported();
+
+			await withDefaultTitles().save();
+
+			expect(api.creates[0].options).toBeUndefined();
+		});
+	});
+
+	describe("something to save", () => {
+		it("a never-saved situation can be saved even without edits", async () => {
+			editor.createNew({ title: "Fresh", fieldType: "full" });
+			link.startNew();
+
+			expect(editor.isDirty()).toBe(false);
+			expect(saver.hasChanges()).toBe(true);
+			await expect(saver.save()).resolves.toBe(true);
+		});
+
+		it("a saved situation without changes has nothing to save: saving does nothing", async () => {
+			await saver.save();
+
+			expect(saver.hasChanges()).toBe(false);
+			await expect(saver.save()).resolves.toBe(false);
+			expect(api.updates).toEqual([]);
+			expect(saver.current().status).toBe("saved");
+			expect(log.notify).toHaveBeenLastCalledWith("Nothing to save", "info");
+		});
+
+		it("a saved situation with changes can be saved again", async () => {
+			await saver.save();
+			editor.addElement(3, 3, "red", "Player");
+
+			expect(saver.hasChanges()).toBe(true);
+		});
+
+		it("the rule as a pure function: never saved, or dirty", () => {
+			expect(SituationSaver.hasChanges({ kind: "unsaved", origin: "new", target: TOP_LEVEL }, false)).toBe(true);
+			expect(SituationSaver.hasChanges({ kind: "saved", summary: summaryOf() }, false)).toBe(false);
+			expect(SituationSaver.hasChanges({ kind: "saved", summary: summaryOf() }, true)).toBe(true);
 		});
 	});
 
@@ -194,18 +265,30 @@ describe("SituationSaver", () => {
 
 			expect(editor.isDirty()).toBe(true);
 			expect(link.saved()?.revision).toBe(1);
-			expect(saver.current()).toEqual({ status: "idle" });
+			expect(inEnglishDeep(saver.current())).toEqual({ status: "idle" });
 		});
 	});
 
 	describe("failures", () => {
 		it.each<[string, Error, RegExp]>([
-			["a taken title", new ApiError(409, { type: SituationApi.DUPLICATE_TITLE }), /^A situation titled "Powerplay" already exists\. Choose another title/],
+			["a taken title", new ApiError(409, { type: SituationApi.DUPLICATE_TITLE }), /^A situation titled “Powerplay” already exists\. Choose another title/],
 			["a deleted situation", new ApiError(404, { type: SituationApi.NOT_FOUND }), /no longer exists on the server/],
 			["a deleted folder", new ApiError(404, { type: FolderApi.NOT_FOUND }), /^The folder to save in no longer exists \(it was deleted\)\. Export the situation to keep it\.$/],
 			["no server", new ApiUnavailableError(), /not reachable/],
-			["a validation problem", new ApiError(400, { errors: { "document.situation.title": ["expected at most 200 characters"] } }), /document\.situation\.title: expected at most 200 characters/],
-			["another problem", new ApiError(500, { detail: "Boom." }), /couldn't be saved: Boom\./],
+			[
+				"a validation problem (worded from its code)",
+				new ApiError(400, {
+					errors: { "document.situation.title": ["expected at most 200 characters"] },
+					fieldErrors: { "document.situation.title": [{ code: "too-long", maxLength: 200 }] },
+				}),
+				/^The situation couldn't be saved: document\.situation\.title must be at most 200 characters long$/,
+			],
+			[
+				"a known problem code",
+				new ApiError(400, { type: "https://tacticalboard/errors/field-type-changed", detail: "Server text." }),
+				/^The situation couldn't be saved: The field type of a situation can't be changed\.$/,
+			],
+			["another problem (never the server's English detail)", new ApiError(500, { detail: "Boom." }), /^The situation couldn't be saved\.$/],
 			["something unexpected", new TypeError("x"), /^The situation couldn't be saved\.$/],
 		])("shows %s as a message and keeps the situation unsaved", async (_name, error, message) => {
 			api.script.push(error as never);
@@ -214,7 +297,7 @@ describe("SituationSaver", () => {
 
 			const state = saver.current();
 			expect(state.status).toBe("failed");
-			expect(state.status === "failed" && state.message).toMatch(message);
+			expect(state.status === "failed" && state.message(en)).toMatch(message);
 			expect(editor.isDirty()).toBe(true);
 			expect(link.saved()).toBeNull();
 			expect(log.notify).toHaveBeenLastCalledWith(expect.stringMatching(/^Save failed: /), "error");
@@ -226,7 +309,7 @@ describe("SituationSaver", () => {
 			await saver.save();
 
 			expect(onSessionEnded).toHaveBeenCalledOnce();
-			expect(saver.current()).toMatchObject({ status: "failed", message: expect.stringMatching(/session has ended/) });
+			expect(inEnglishDeep(saver.current())).toMatchObject({ status: "failed", message: expect.stringMatching(/session has ended/) });
 		});
 
 		it("a blank title is reported as the default title", async () => {
@@ -235,7 +318,18 @@ describe("SituationSaver", () => {
 
 			await saver.save();
 
-			expect(saver.current()).toMatchObject({ message: expect.stringContaining('"Untitled Situation"') });
+			expect(inEnglishDeep(saver.current())).toMatchObject({ message: expect.stringContaining("“Untitled Situation”") });
+		});
+
+		it("words the failure in the UI language", async () => {
+			api.script.push(new ApiError(404, { type: FolderApi.NOT_FOUND }) as never);
+
+			await saver.save();
+
+			const state = saver.current();
+			expect(state.status === "failed" && state.message(de)).toBe(
+				"Der Ordner zum Speichern existiert nicht mehr (er wurde gelöscht). Exportiere die Situation, um sie zu behalten.",
+			);
 		});
 
 		it("dismissing forgets the message", async () => {
@@ -244,7 +338,7 @@ describe("SituationSaver", () => {
 
 			saver.dismiss();
 
-			expect(saver.current()).toEqual({ status: "idle" });
+			expect(inEnglishDeep(saver.current())).toEqual({ status: "idle" });
 		});
 	});
 

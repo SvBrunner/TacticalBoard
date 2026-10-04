@@ -37,6 +37,12 @@ internal sealed class User : SoftDeletableEntity
 
     public bool IsSystemAdministrator { get; private set; }
 
+    /// <summary>The UI language the user chose (arc42 ch. 8.18), or <c>null</c> if they never chose one (persisted column).</summary>
+    public string? PreferredLanguageValue { get; private set; }
+
+    /// <summary>The UI language the user chose, or <c>null</c>.</summary>
+    public LanguageTag? PreferredLanguage => PreferredLanguageValue is null ? null : LanguageTag.FromTrusted(PreferredLanguageValue);
+
     /// <summary>A blocked user can't log in or call the API (arc42 ch. 8.1).</summary>
     public bool IsBlocked { get; private set; }
 
@@ -62,6 +68,13 @@ internal sealed class User : SoftDeletableEntity
     {
         ArgumentNullException.ThrowIfNull(displayName);
         DisplayNameValue = displayName.Value;
+    }
+
+    /// <summary>Stores the UI language the user chose; it applies on their next logins too.</summary>
+    public void ChangePreferredLanguage(LanguageTag language)
+    {
+        ArgumentNullException.ThrowIfNull(language);
+        PreferredLanguageValue = language.Value;
     }
 
     public void GrantSystemAdministrator() => IsSystemAdministrator = true;

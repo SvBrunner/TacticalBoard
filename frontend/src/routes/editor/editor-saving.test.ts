@@ -13,6 +13,7 @@ import { FakeResizeObserver } from "$lib/testing/FakeResizeObserver";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse, type RecordedRequest } from "$lib/testing/fakeFetch";
 import { summaryOf } from "$lib/testing/storageFakes";
 import EditorPage from "./+page.svelte";
+import { i18n } from "$lib/i18n";
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
 
@@ -48,7 +49,7 @@ describe("editor page: saving on the server", () => {
 	let server: FakeFetch;
 
 	async function logIn() {
-		server.on("GET", "/api/me", jsonResponse(200, { id: "u1", displayName: "Alice", isSystemAdministrator: false }));
+		server.on("GET", "/api/me", jsonResponse(200, { id: "u1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null }));
 		await authSession.refresh();
 	}
 
@@ -148,7 +149,7 @@ describe("editor page: saving on the server", () => {
 			await settle();
 
 			const info = within(screen.getByRole("complementary", { name: "Details" })).getAllByRole("definition");
-			expect(info[0]).toHaveTextContent(`by Alice, ${SavedSituationFormat.dateTime("2026-10-04T08:00:00.000Z")}`);
+			expect(info[0]).toHaveTextContent(`by Alice, ${SavedSituationFormat.dateTime("2026-10-04T08:00:00.000Z", "en")}`);
 			expect(info[1]).toHaveTextContent("by Alice,");
 		});
 
@@ -197,7 +198,7 @@ describe("editor page: saving on the server", () => {
 			await settle();
 
 			const alert = within(screen.getByRole("banner")).getByRole("alert");
-			expect(alert).toHaveTextContent('A situation titled "Breakout" already exists. Choose another title and save again.');
+			expect(alert).toHaveTextContent("A situation titled “Breakout” already exists. Choose another title and save again.");
 			expect(situationEditor.isDirty()).toBe(true);
 
 			await fireEvent.click(within(alert).getByRole("button", { name: "Dismiss" }));
@@ -207,6 +208,7 @@ describe("editor page: saving on the server", () => {
 		describe("when someone else saved in the meantime", () => {
 			beforeEach(async () => {
 				situationLink.attach(summaryOf({ id: "s1", revision: 1, title: "Breakout" }));
+				situationEditor.addElement(7, 7, "red", "Player");
 				server.on("PUT", "/api/situations/s1", (request) =>
 					request.headers["If-Match"] === '"1"'
 						? problemResponse(412, { type: SituationApi.SAVE_CONFLICT, currentRevision: 4 })
@@ -280,6 +282,90 @@ describe("editor page: saving on the server", () => {
 			await fireEvent.click(screen.getByRole("button", { name: "Situation file (JSON)" }));
 
 			expect(situationEditor.isDirty()).toBe(true);
+		});
+
+		it("exporting a new, never-saved situation doesn't count as saving it either (logged in)", async () => {
+			situationEditor.addElement(5, 5, "red", "Player");
+			vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => undefined }));
+			render(EditorPage);
+
+			await fireEvent.click(screen.getByRole("button", { name: "Export" }));
+			await fireEvent.click(screen.getByRole("button", { name: "Situation file (JSON)" }));
+
+			expect(situationEditor.isDirty()).toBe(true);
+			expect(saveButton()).toBeEnabled();
+		});
+
+		it("a never-saved situation can be saved without edits", () => {
+			render(EditorPage);
+
+			expect(situationEditor.isDirty()).toBe(false);
+			expect(saveButton()).toBeEnabled();
+		});
+
+		it("Save is disabled without unsaved changes; Ctrl+S then only keeps the browser's dialog away", async () => {
+			render(EditorPage);
+			await fireEvent.click(saveButton());
+			await settle();
+
+			expect(saveButton()).toBeDisabled();
+			expect(saveButton()).toHaveAttribute("title", "Save (no unsaved changes)");
+			const notPrevented = await fireEvent.keyDown(document.body, { key: "s", ctrlKey: true });
+			await settle();
+			expect(notPrevented).toBe(false);
+			expect(posts()).toHaveLength(1);
+			expect(server.requestsTo("/api/situations/s1")).toHaveLength(0);
+
+			situationEditor.addElement(5, 5, "red", "Player");
+			await tick();
+			expect(saveButton()).toBeEnabled();
+		});
+
+		it("asks the server to number a default title of any language", async () => {
+			situationEditor.createNew({ title: "Unbenannte Situation", fieldType: "full" });
+			situationLink.startNew();
+			render(EditorPage);
+
+			await fireEvent.click(saveButton());
+			await settle();
+
+			expect(JSON.parse(posts()[0].body!)).toMatchObject({ origin: "new", titleIsDefault: true });
+		});
+
+		it("is German in German: tools, and a server error worded from its code", async () => {
+			i18n.select("de");
+			server.on(
+				"POST",
+				SituationApi.PERSONAL_AREA_PATH,
+				problemResponse(400, { type: "https://tacticalboard/errors/field-type-changed", detail: "English detail." }),
+			);
+			render(EditorPage);
+
+			expect(screen.getByRole("button", { name: "Rückgängig" })).toBeInTheDocument();
+			expect(screen.getByRole("group", { name: "Verlauf" })).toBeInTheDocument();
+			expect(screen.getByRole("complementary", { name: "Werkzeuge" })).toBeInTheDocument();
+			expect(screen.getByRole("region", { name: "Wiedergabe" })).toBeInTheDocument();
+			expect(screen.getByRole("navigation", { name: "Bilder" })).toBeInTheDocument();
+			expect(screen.getByRole("textbox", { name: "Titel" })).toBeInTheDocument();
+			expect(document.title).toBe("Breakout · Tactical Board");
+
+			await fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+			await settle();
+
+			const alert = within(screen.getByRole("banner")).getByRole("alert");
+			expect(alert).toHaveTextContent(
+				"Die Situation konnte nicht gespeichert werden: Das Spielfeld einer Situation kann nicht geändert werden.",
+			);
+			expect(alert).not.toHaveTextContent("English detail.");
+		});
+
+		it("shows a blank title as the default title of the UI language", async () => {
+			situationEditor.changeTitle("  ");
+			i18n.select("de");
+			render(EditorPage);
+
+			expect(within(screen.getByRole("banner")).getByRole("heading", { level: 1 })).toHaveTextContent("Unbenannte Situation");
+			expect(screen.getByRole("textbox", { name: "Titel" })).toHaveAttribute("placeholder", "Unbenannte Situation");
 		});
 
 		it("starting a new situation drops the saved situation from the URL", async () => {

@@ -12,6 +12,8 @@ running export). The owner opens it through `open` after `flow.begin()`.
 	import { modalDialog } from "$lib/actions/modalDialog";
 	import type { AnimationExport } from "$lib/export/AnimationExport.svelte";
 	import { ExportResolution } from "$lib/export/ExportResolution";
+	import { t } from "$lib/i18n";
+	import type { Messages } from "$lib/i18n/Messages";
 
 	interface Props {
 		open: boolean;
@@ -52,17 +54,15 @@ running export). The owner opens it through `open` after `flow.begin()`.
 		void flow.create();
 	}
 
-	function seconds(ms: number): string {
-		return `${ms / 1000} s`;
-	}
-
-	function sizeLabel(resolution: ExportResolution): string {
+	function sizeLabel(resolution: ExportResolution, m: Messages): string {
 		const size = flow.sizeAt(resolution);
-		return size ? `${size.width} × ${size.height} px` : "";
+		return size ? m.exportGif.size(size.width, size.height) : "";
 	}
 
-	function fileSize(bytes: number): string {
-		return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+	function fileSize(bytes: number, m: Messages): string {
+		return bytes >= 1024 * 1024
+			? m.exportGif.megabytes(bytes / (1024 * 1024))
+			: m.exportGif.kilobytes(Math.max(1, Math.round(bytes / 1024)));
 	}
 </script>
 
@@ -73,10 +73,10 @@ running export). The owner opens it through `open` after `flow.begin()`.
 	use:modalDialog={{ open, onCancel: close, initialFocus: () => createButton }}
 >
 	<form method="dialog" class="modal-form" onsubmit={handleSubmit}>
-		<h2 id="{uid}-title" class="modal-title">Export animated GIF</h2>
+		<h2 id="{uid}-title" class="modal-title">{$t.exportGif.heading}</h2>
 
 		<fieldset class="modal-fieldset" disabled={busy}>
-			<legend class="modal-label">Resolution</legend>
+			<legend class="modal-label">{$t.exportGif.resolution}</legend>
 			<ul class="choices">
 				{#each ExportResolution.ALL as resolution (resolution.id)}
 					<li>
@@ -89,8 +89,8 @@ running export). The owner opens it through `open` after `flow.begin()`.
 								onchange={() => flow.chooseResolution(resolution)}
 							/>
 							<span class="choice-text">
-								<span>{resolution.label}</span>
-								<span class="choice-detail">{sizeLabel(resolution)}</span>
+								<span>{$t.exportGif.resolutions[resolution.id]}</span>
+								<span class="choice-detail">{sizeLabel(resolution, $t)}</span>
 							</span>
 						</label>
 					</li>
@@ -100,14 +100,14 @@ running export). The owner opens it through `open` after `flow.begin()`.
 
 		<dl class="facts">
 			<div>
-				<dt>Frames</dt>
+				<dt>{$t.exportGif.frames}</dt>
 				<dd>{flow.frameCount}</dd>
 			</div>
 			<div>
-				<dt>Frame duration</dt>
+				<dt>{$t.exportGif.frameDuration}</dt>
 				<dd>
-					{flow.frameDurationMs === null ? "" : seconds(flow.frameDurationMs)}
-					<span class="hint">(playback setting)</span>
+					{flow.frameDurationMs === null ? "" : $t.playback.seconds(flow.frameDurationMs / 1000)}
+					<span class="hint">{$t.exportGif.playbackSetting}</span>
 				</dd>
 			</div>
 		</dl>
@@ -115,34 +115,35 @@ running export). The owner opens it through `open` after `flow.begin()`.
 		{#if phase.kind === "rendering"}
 			<p class="modal-field">
 				<label class="modal-label" for="{uid}-progress">
-					Creating GIF… frame {Math.min(phase.done + 1, phase.total)} of {phase.total}
+					{$t.exportGif.progress(Math.min(phase.done + 1, phase.total), phase.total)}
 				</label>
 				<progress id="{uid}-progress" class="progress" max={phase.total} value={phase.done}></progress>
 			</p>
 		{:else if phase.kind === "ready"}
 			<p class="modal-text" role="status">
-				<strong class="file-name">{phase.file.name}</strong> is ready ({fileSize(phase.file.size)}).
+				<strong class="file-name">{phase.file.name}</strong>
+				{$t.exportGif.ready(fileSize(phase.file.size, $t))}
 			</p>
 			{#if flow.shareError}
-				<p class="modal-text error" role="alert">Sharing failed: {flow.shareError}</p>
+				<p class="modal-text error" role="alert">{$t.exportGif.shareFailed(flow.shareError)}</p>
 			{/if}
 		{:else if phase.kind === "failed"}
-			<p class="modal-text error" role="alert">The GIF could not be created: {phase.message}</p>
+			<p class="modal-text error" role="alert">{$t.exportGif.failed(phase.message)}</p>
 		{/if}
 
 		<div class="modal-actions">
 			{#if phase.kind === "rendering"}
-				<button bind:this={cancelButton} type="button" class="modal-btn secondary" onclick={() => flow.cancel()}>Cancel</button>
+				<button bind:this={cancelButton} type="button" class="modal-btn secondary" onclick={() => flow.cancel()}>{$t.common.cancel}</button>
 			{:else if phase.kind === "ready"}
-				<button type="button" class="modal-btn secondary" onclick={close}>Close</button>
+				<button type="button" class="modal-btn secondary" onclick={close}>{$t.common.close}</button>
 				{#if flow.canShare}
-					<button type="button" class="modal-btn secondary" onclick={() => flow.share()}>Share</button>
+					<button type="button" class="modal-btn secondary" onclick={() => flow.share()}>{$t.exportGif.share}</button>
 				{/if}
-				<button bind:this={downloadButton} type="button" class="modal-btn primary" onclick={() => flow.download()}>Download</button>
+				<button bind:this={downloadButton} type="button" class="modal-btn primary" onclick={() => flow.download()}>{$t.exportGif.download}</button>
 			{:else}
-				<button type="button" class="modal-btn secondary" onclick={close}>Close</button>
+				<button type="button" class="modal-btn secondary" onclick={close}>{$t.common.close}</button>
 				<button bind:this={createButton} type="submit" class="modal-btn primary">
-					{phase.kind === "failed" ? "Try again" : "Create GIF"}
+					{phase.kind === "failed" ? $t.common.tryAgain : $t.exportGif.create}
 				</button>
 			{/if}
 		</div>

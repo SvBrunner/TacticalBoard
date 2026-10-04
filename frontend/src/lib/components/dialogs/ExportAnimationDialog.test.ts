@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { i18n } from "$lib/i18n";
 import { cleanup, render, screen, fireEvent, within } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { AnimationExport } from "$lib/export/AnimationExport.svelte";
@@ -302,5 +303,22 @@ describe("ExportAnimationDialog", () => {
 		for (const each of within(dialog()).getAllByRole("button")) {
 			expect(each).toHaveAttribute("type", each.textContent?.trim() === "Create GIF" ? "submit" : "button");
 		}
+	});
+
+	it("is German in German", async () => {
+		i18n.select("de");
+		const s = setup();
+		const german = screen.getByRole("dialog", { name: "Animiertes GIF exportieren" });
+
+		expect(within(german).getByRole("radio", { name: /Mittel/ })).toBeChecked();
+		expect(within(german).getByText("(Wiedergabe-Einstellung)")).toBeInTheDocument();
+		expect(within(german).getByText("3 s")).toBeInTheDocument();
+		await fireEvent.click(within(german).getByRole("button", { name: "GIF erstellen" }));
+		s.exporter.finish();
+		await settle();
+
+		expect(within(german).getByRole("status")).toHaveTextContent(/ist bereit \(\d+ KB\)\./);
+		expect(within(german).getByRole("button", { name: "Herunterladen" })).toBeInTheDocument();
+		expect(within(german).getByRole("button", { name: "Schließen" })).toBeInTheDocument();
 	});
 });

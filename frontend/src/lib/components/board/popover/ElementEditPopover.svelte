@@ -12,6 +12,7 @@ screens; a bottom sheet on phones (pure CSS, see the media query).
 	import type { BoardElement } from "$lib/model/elements/BoardElement";
 	import { PointElement } from "$lib/model/elements/PointElement";
 	import { PositionCatalog } from "$lib/model/positions/PositionCatalog";
+	import { t } from "$lib/i18n";
 	import { elementCatalog, type ElementKind } from "../ElementCatalog";
 	import ElementIcon from "../ElementIcon.svelte";
 	import type { ElementEditActions } from "./ElementEditActions";
@@ -57,9 +58,9 @@ screens; a bottom sheet on phones (pure CSS, see the media query).
 	);
 	const openFor = $derived(element?.id ?? null);
 	const arrow = $derived(element instanceof ArrowElement ? element : null);
-	const noun = $derived(arrow ? "arrow" : "marker");
+
 	const kinds = $derived(element ? elementCatalog.kindsLike(element.type) : []);
-	const colorLegend = $derived(element?.type === "Player" ? "Player color" : "Color");
+	const colorLegend = $derived(element?.type === "Player" ? $t.popover.playerColor : $t.popover.color);
 	const activeBend = $derived(arrow && bendIndex !== null && bendIndex < arrow.bends.length ? bendIndex : null);
 
 	// Measure after every content change (e.g. the position picker or a bend button appearing).
@@ -134,8 +135,8 @@ screens; a bottom sheet on phones (pure CSS, see the media query).
 		onkeydown={handleKeydown}
 	>
 		<header class="header">
-			<h2 id={headingId} class="title">Edit {noun}</h2>
-			<button type="button" class="icon-btn" onclick={onClose} aria-label="Close">
+			<h2 id={headingId} class="title">{arrow ? $t.popover.editArrow : $t.popover.editMarker}</h2>
+			<button type="button" class="icon-btn" onclick={onClose} aria-label={$t.common.close}>
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"
 					><path d="M6 6l12 12M18 6L6 18" /></svg
 				>
@@ -143,7 +144,7 @@ screens; a bottom sheet on phones (pure CSS, see the media query).
 		</header>
 
 		<fieldset>
-			<legend class="section-title">Type</legend>
+			<legend class="section-title">{$t.popover.type}</legend>
 			<ul class="grid">
 				{#each kinds as kind (kind.type)}
 					<li>
@@ -155,7 +156,7 @@ screens; a bottom sheet on phones (pure CSS, see the media query).
 							onclick={() => pickType(kind)}
 						>
 							<ElementIcon type={kind.type} size={17} />
-							<span class="label">{kind.name}</span>
+							<span class="label">{$t.elements[kind.type]}</span>
 						</button>
 					</li>
 				{/each}
@@ -172,8 +173,8 @@ screens; a bottom sheet on phones (pure CSS, see the media query).
 							class="swatch"
 							class:selected={element.color === color.value}
 							aria-pressed={element.color === color.value}
-							aria-label={color.name}
-							title={color.name}
+							aria-label={$t.colors[color.id]}
+							title={$t.colors[color.id]}
 							style:background={color.value}
 							onclick={() => pickColor(color.value)}
 						></button>
@@ -188,23 +189,23 @@ screens; a bottom sheet on phones (pure CSS, see the media query).
 
 		{#if arrow}
 			<fieldset>
-				<legend class="section-title">Bends</legend>
-				<p class="hint">Drag a + on the arrow to add a bend, drag a bend to move it. Double-tap a bend to remove it.</p>
+				<legend class="section-title">{$t.popover.bends}</legend>
+				<p class="hint">{$t.popover.bendsHint}</p>
 				{#if onEditShape || activeBend !== null || arrow.bends.length > 0}
 					<ul class="bend-actions">
 						{#if onEditShape}
 							<li>
-								<button type="button" class="action-btn" onclick={onEditShape}>Edit shape</button>
+								<button type="button" class="action-btn" onclick={onEditShape}>{$t.popover.editShape}</button>
 							</li>
 						{/if}
 						{#if activeBend !== null}
 							<li>
-								<button type="button" class="action-btn" onclick={removeBend}>Remove bend</button>
+								<button type="button" class="action-btn" onclick={removeBend}>{$t.popover.removeBend}</button>
 							</li>
 						{/if}
 						{#if arrow.bends.length > 0}
 							<li>
-								<button type="button" class="action-btn" onclick={straighten}>Straighten</button>
+								<button type="button" class="action-btn" onclick={straighten}>{$t.popover.straighten}</button>
 							</li>
 						{/if}
 					</ul>
@@ -216,7 +217,7 @@ screens; a bottom sheet on phones (pure CSS, see the media query).
 			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 				<path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
 			</svg>
-			Delete {noun}
+			{arrow ? $t.popover.deleteArrow : $t.popover.deleteMarker}
 		</button>
 	</dialog>
 {/if}

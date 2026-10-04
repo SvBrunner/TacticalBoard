@@ -10,6 +10,7 @@ its own.
 <script lang="ts">
 	import type { PointElement } from "$lib/model/elements/PointElement";
 	import { PositionCatalog } from "$lib/model/positions/PositionCatalog";
+	import { t } from "$lib/i18n";
 	import type { ElementEditActions } from "./ElementEditActions";
 
 	interface Props {
@@ -58,17 +59,17 @@ its own.
 </script>
 
 <fieldset class="position-picker">
-	<legend class="section-title">Position</legend>
+	<legend class="section-title">{$t.popover.position}</legend>
 	<ul class="chips">
 		<li class="none">
 			<label class="chip">
 				<input type="radio" name={groupName} value="" checked={element.label === ""} onchange={() => pick("")} />
-				<span>None</span>
+				<span>{$t.popover.noPosition}</span>
 			</label>
 		</li>
 		{#each positions.positions as position (position.code)}
 			<li>
-				<label class="chip" title={position.name}>
+				<label class="chip" title={positions.nameOf(position.code, $t.positions)}>
 					<input
 						type="radio"
 						name={groupName}
@@ -76,14 +77,14 @@ its own.
 						checked={element.label === position.code}
 						onchange={() => pick(position.code)}
 					/>
-					<span>{position.code}</span> <span class="visually-hidden">({position.name})</span>
+					<span>{position.code}</span> <span class="visually-hidden">({positions.nameOf(position.code, $t.positions)})</span>
 				</label>
 			</li>
 		{/each}
 	</ul>
 
 	<p class="custom">
-		<label for={inputId}>Custom</label>
+		<label for={inputId}>{$t.popover.customPosition}</label>
 		<input
 			id={inputId}
 			type="text"
@@ -99,7 +100,7 @@ its own.
 			onkeydown={handleKeydown}
 		/>
 	</p>
-	<p id={hintId} class="hint">Up to {PositionCatalog.MAX_LABEL_LENGTH} letters or digits</p>
+	<p id={hintId} class="hint">{$t.popover.positionHint(PositionCatalog.MAX_LABEL_LENGTH)}</p>
 </fieldset>
 
 <style>

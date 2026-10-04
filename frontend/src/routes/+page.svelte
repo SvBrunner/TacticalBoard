@@ -30,6 +30,7 @@ delete); otherwise it explains why there are none. Teams follow later
 	import type { SituationSummary } from "$lib/storage/SituationApi";
 	import { situationLink } from "$lib/storage/SituationLink";
 	import { folderApi, situationApi, situationOpener } from "$lib/storage/situationStorage";
+	import { t } from "$lib/i18n";
 
 	const prompt = new ConfirmationPrompt();
 	const workflow = new SituationWorkflow({
@@ -37,6 +38,7 @@ delete); otherwise it explains why there are none. Teams follow later
 		files: new SituationFileTransfer(),
 		link: situationLink,
 		confirm: (request) => prompt.request(request),
+		isLoggedIn: () => authSession.current().status === "authenticated",
 		log: notifications,
 	});
 
@@ -88,39 +90,39 @@ delete); otherwise it explains why there are none. Teams follow later
 </script>
 
 <svelte:head>
-	<title>Tactical Board</title>
-	<meta name="description" content="Tactics board for floorball situations." />
+	<title>{$t.app.name}</title>
+	<meta name="description" content={$t.app.description} />
 </svelte:head>
 
-<AppNavbar title="Tactical Board" home loginReturnTo="/" {loginNotice} />
+<AppNavbar title={$t.app.name} home loginReturnTo="/" {loginNotice} />
 
 <main class="start">
 	<section class="panel" aria-labelledby="start-heading">
-		<h2 id="start-heading" class="panel-title">Start</h2>
+		<h2 id="start-heading" class="panel-title">{$t.start.heading}</h2>
 		<StartActions {workflow} {prompt} target={TOP_LEVEL} onOpened={openEditor} />
 	</section>
 
 	<section class="panel" aria-labelledby="saved-heading">
-		<h2 id="saved-heading" class="panel-title">Saved situations</h2>
+		<h2 id="saved-heading" class="panel-title">{$t.start.saved}</h2>
 		{#if $actionState.error}
-			<p class="open-error" role="alert">{$actionState.error}</p>
+			<p class="open-error" role="alert">{$actionState.error($t)}</p>
 		{/if}
 		{#if authenticated}
 			<section class="part" aria-labelledby="folders-heading">
 				<div class="part-head">
-					<h3 id="folders-heading" class="part-title">Folders</h3>
+					<h3 id="folders-heading" class="part-title">{$t.start.folders}</h3>
 					<button type="button" class="new-folder" onclick={() => (creatingFolder = true)}>
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 							<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
 							<path d="M12 11v5M9.5 13.5h5" />
 						</svg>
-						New folder
+						{$t.start.newFolder}
 					</button>
 				</div>
 				<SavedFolders list={$folderState} onRetry={() => void folders.load()} />
 			</section>
 			<section class="part" aria-labelledby="top-level-heading">
-				<h3 id="top-level-heading" class="part-title">Situations</h3>
+				<h3 id="top-level-heading" class="part-title">{$t.start.situations}</h3>
 				{@render situationList()}
 			</section>
 		{:else}
@@ -134,7 +136,7 @@ delete); otherwise it explains why there are none. Teams follow later
 		session={$sessionState}
 		list={$savedState}
 		busy={$actionState.opening}
-		emptyMessage={hasFolders ? "No situations outside the folders." : undefined}
+		emptyMessage={hasFolders ? $t.start.noTopLevelSituations : undefined}
 		onOpen={(situation) => void actions.open(situation)}
 		onDelete={(situation) => void actions.delete(situation)}
 		onMove={(situation) => (moving = situation)}
@@ -144,8 +146,8 @@ delete); otherwise it explains why there are none. Teams follow later
 
 <FolderNameDialog
 	open={creatingFolder}
-	title="New folder"
-	submitLabel="Create"
+	title={$t.folders.newHeading}
+	submitLabel={$t.common.create}
 	onSubmit={(name) => folders.create(name)}
 	onClose={() => (creatingFolder = false)}
 />

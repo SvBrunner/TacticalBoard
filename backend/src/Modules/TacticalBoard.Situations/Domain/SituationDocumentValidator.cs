@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using TacticalBoard.SharedKernel.Validation;
 
 namespace TacticalBoard.Situations.Domain;
 
@@ -15,6 +16,7 @@ namespace TacticalBoard.Situations.Domain;
 /// messages. <b>Keep the two in sync</b>: a format change updates both (ch. 8.3). The only
 /// difference: the frontend validates after migrating older versions, so it accepts any positive
 /// <c>formatVersion</c>; the backend stores the current version only (ADR-009) and rejects others.
+/// Every issue also has a stable code (<see cref="Issues"/>, arc42 ch. 8.2) that the frontend words.
 /// </para>
 /// </summary>
 internal sealed partial class SituationDocumentValidator
@@ -31,33 +33,33 @@ internal sealed partial class SituationDocumentValidator
     public IReadOnlyList<DocumentIssue> Validate(JsonElement root)
     {
         var issues = new List<DocumentIssue>();
-        void Report(string path, string message) => issues.Add(new DocumentIssue(path, message));
+        void Report(string path, FieldError error) => issues.Add(new DocumentIssue(path, error));
 
         if (root.ValueKind != JsonValueKind.Object)
         {
-            Report("(root)", "expected object");
+            Report("(root)", Issues.ExpectedObject());
             return issues;
         }
 
         if (StringOf(root, "format") != SituationDocument.Format)
         {
-            Report("format", $"expected \"{SituationDocument.Format}\"");
+            Report("format", Issues.ExpectedValue(SituationDocument.Format));
         }
 
         var version = Property(root, "formatVersion");
         if (!IsPositiveInteger(version))
         {
-            Report("formatVersion", "expected positive integer");
+            Report("formatVersion", Issues.ExpectedPositiveInteger());
         }
         else if (version!.Value.GetDouble() != SituationDocument.CurrentFormatVersion)
         {
-            Report("formatVersion", $"expected {SituationDocument.CurrentFormatVersion} (the current format version)");
+            Report("formatVersion", Issues.ExpectedCurrentVersion(SituationDocument.CurrentFormatVersion));
         }
 
         var situation = Property(root, "situation");
         if (situation?.ValueKind != JsonValueKind.Object)
         {
-            Report("situation", "expected object");
+            Report("situation", Issues.ExpectedObject());
             return issues;
         }
 
@@ -65,19 +67,19 @@ internal sealed partial class SituationDocumentValidator
         return issues;
     }
 
-    private static void ValidateSituation(JsonElement situation, string path, Action<string, string> report)
+    private static void ValidateSituation(JsonElement situation, string path, Action<string, FieldError> report)
     {
         CheckNonEmptyString(situation, "id", path, report);
         CheckString(situation, "title", path, report);
         CheckString(situation, "description", path, report);
         if (!Sports.Contains(StringOf(situation, "sport")))
         {
-            report($"{path}.sport", "expected supported sport");
+            report($"{path}.sport", Issues.ExpectedSupportedSport());
         }
 
         if (!FieldTypes.Contains(StringOf(situation, "fieldType")))
         {
-            report($"{path}.fieldType", "expected \"full\" or \"half\"");
+            report($"{path}.fieldType", Issues.ExpectedFieldType());
         }
 
         CheckTimestamp(situation, "createdAt", path, report);
@@ -86,13 +88,13 @@ internal sealed partial class SituationDocumentValidator
         var frames = Property(situation, "frames");
         if (frames?.ValueKind != JsonValueKind.Array)
         {
-            report($"{path}.frames", "expected array");
+            report($"{path}.frames", Issues.ExpectedArray());
             return;
         }
 
         if (frames.Value.GetArrayLength() == 0)
         {
-            report($"{path}.frames", "expected at least one frame");
+            report($"{path}.frames", Issues.ExpectedFrame());
             return;
         }
 
@@ -103,21 +105,21 @@ internal sealed partial class SituationDocumentValidator
             var framePath = $"{path}.frames[{index++}]";
             if (frame.ValueKind != JsonValueKind.Object)
             {
-                report(framePath, "expected object");
+                report(framePath, Issues.ExpectedObject());
                 continue;
             }
 
             var id = StringOf(frame, "id");
             if (!string.IsNullOrEmpty(id) && !seenFrameIds.Add(id))
             {
-                report($"{framePath}.id", $"duplicate frame id \"{id}\"");
+                report($"{framePath}.id", Issues.DuplicateFrameId(id));
             }
 
             ValidateFrame(frame, framePath, report);
         }
     }
 
-    private static void ValidateFrame(JsonElement frame, string path, Action<string, string> report)
+    private static void ValidateFrame(JsonElement frame, string path, Action<string, FieldError> report)
     {
         CheckNonEmptyString(frame, "id", path, report);
         CheckString(frame, "description", path, report);
@@ -125,7 +127,7 @@ internal sealed partial class SituationDocumentValidator
         var elements = Property(frame, "elements");
         if (elements?.ValueKind != JsonValueKind.Array)
         {
-            report($"{path}.elements", "expected array");
+            report($"{path}.elements", Issues.ExpectedArray());
             return;
         }
 
@@ -136,14 +138,14 @@ internal sealed partial class SituationDocumentValidator
             var elementPath = $"{path}.elements[{index++}]";
             if (element.ValueKind != JsonValueKind.Object)
             {
-                report(elementPath, "expected object");
+                report(elementPath, Issues.ExpectedObject());
                 continue;
             }
 
             var id = StringOf(element, "id");
             if (!string.IsNullOrEmpty(id) && !seenElementIds.Add(id))
             {
-                report($"{elementPath}.id", $"duplicate element id \"{id}\" in frame");
+                report($"{elementPath}.id", Issues.DuplicateElementId(id));
             }
 
             ValidateElement(element, elementPath, report);
@@ -154,13 +156,13 @@ internal sealed partial class SituationDocumentValidator
     /// Arrow types have <c>start</c>, <c>end</c> and <c>bends</c>; every other type (also an
     /// unknown one, so its other problems are reported too) is checked as a point element.
     /// </summary>
-    private static void ValidateElement(JsonElement element, string path, Action<string, string> report)
+    private static void ValidateElement(JsonElement element, string path, Action<string, FieldError> report)
     {
         CheckNonEmptyString(element, "id", path, report);
         var type = StringOf(element, "type");
         if (!PointElementTypes.Contains(type) && !ArrowElementTypes.Contains(type))
         {
-            report($"{path}.type", "expected known element type");
+            report($"{path}.type", Issues.ExpectedElementType());
         }
 
         CheckNonEmptyString(element, "color", path, report);
@@ -174,25 +176,25 @@ internal sealed partial class SituationDocumentValidator
         }
     }
 
-    private static void ValidatePointElement(JsonElement element, string path, Action<string, string> report)
+    private static void ValidatePointElement(JsonElement element, string path, Action<string, FieldError> report)
     {
         CheckFiniteNumber(Property(element, "x"), $"{path}.x", report);
         CheckFiniteNumber(Property(element, "y"), $"{path}.y", report);
         var label = Property(element, "label");
         if (label?.ValueKind != JsonValueKind.String || !IsValidLabel(label.Value.GetString()!))
         {
-            report($"{path}.label", "expected string of at most 2 letters or digits");
+            report($"{path}.label", Issues.ExpectedLabel());
         }
     }
 
-    private static void ValidateArrow(JsonElement element, string path, Action<string, string> report)
+    private static void ValidateArrow(JsonElement element, string path, Action<string, FieldError> report)
     {
         CheckPoint(Property(element, "start"), $"{path}.start", report);
         CheckPoint(Property(element, "end"), $"{path}.end", report);
         var bends = Property(element, "bends");
         if (bends?.ValueKind != JsonValueKind.Array)
         {
-            report($"{path}.bends", "expected array");
+            report($"{path}.bends", Issues.ExpectedArray());
             return;
         }
 
@@ -232,35 +234,35 @@ internal sealed partial class SituationDocumentValidator
         value is { ValueKind: JsonValueKind.Number } number
         && number.TryGetDouble(out var parsed) && double.IsFinite(parsed) && Math.Floor(parsed) == parsed && parsed > 0;
 
-    private static void CheckString(JsonElement owner, string name, string path, Action<string, string> report)
+    private static void CheckString(JsonElement owner, string name, string path, Action<string, FieldError> report)
     {
         if (Property(owner, name)?.ValueKind != JsonValueKind.String)
         {
-            report($"{path}.{name}", "expected string");
+            report($"{path}.{name}", Issues.ExpectedString());
         }
     }
 
-    private static void CheckNonEmptyString(JsonElement owner, string name, string path, Action<string, string> report)
+    private static void CheckNonEmptyString(JsonElement owner, string name, string path, Action<string, FieldError> report)
     {
         if (string.IsNullOrEmpty(StringOf(owner, name)))
         {
-            report($"{path}.{name}", "expected non-empty string");
+            report($"{path}.{name}", Issues.ExpectedNonEmptyString());
         }
     }
 
-    private static void CheckFiniteNumber(JsonElement? value, string path, Action<string, string> report)
+    private static void CheckFiniteNumber(JsonElement? value, string path, Action<string, FieldError> report)
     {
         if (value is not { ValueKind: JsonValueKind.Number } number || !number.TryGetDouble(out var parsed) || !double.IsFinite(parsed))
         {
-            report(path, "expected finite number");
+            report(path, Issues.ExpectedFiniteNumber());
         }
     }
 
-    private static void CheckPoint(JsonElement? value, string path, Action<string, string> report)
+    private static void CheckPoint(JsonElement? value, string path, Action<string, FieldError> report)
     {
         if (value?.ValueKind != JsonValueKind.Object)
         {
-            report(path, "expected object with x and y");
+            report(path, Issues.ExpectedPoint());
             return;
         }
 
@@ -268,18 +270,59 @@ internal sealed partial class SituationDocumentValidator
         CheckFiniteNumber(Property(value.Value, "y"), $"{path}.y", report);
     }
 
-    private static void CheckTimestamp(JsonElement owner, string name, string path, Action<string, string> report)
+    private static void CheckTimestamp(JsonElement owner, string name, string path, Action<string, FieldError> report)
     {
         var value = StringOf(owner, name);
         if (value is null
             || !IsoTimestamp().IsMatch(value)
             || !DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _))
         {
-            report($"{path}.{name}", "expected ISO 8601 timestamp");
+            report($"{path}.{name}", Issues.ExpectedTimestamp());
         }
     }
 
     // Same pattern as the frontend (with ASCII digits only, as in JavaScript).
     [GeneratedRegex(@"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?(Z|[+-][0-9]{2}:[0-9]{2})$", RegexOptions.CultureInvariant)]
     private static partial Regex IsoTimestamp();
+
+    /// <summary>The issues with their stable codes and English messages (the frontend's messages).</summary>
+    internal static class Issues
+    {
+        public static FieldError ExpectedObject() => FieldError.Of("expected-object", "expected object");
+
+        public static FieldError ExpectedValue(string expected) =>
+            FieldError.Of("expected-value", $"expected \"{expected}\"", ("expected", expected));
+
+        public static FieldError ExpectedPositiveInteger() => FieldError.Of("expected-positive-integer", "expected positive integer");
+
+        public static FieldError ExpectedCurrentVersion(int version) =>
+            FieldError.Of("expected-current-version", $"expected {version} (the current format version)", ("version", version));
+
+        public static FieldError ExpectedSupportedSport() => FieldError.Of("expected-supported-sport", "expected supported sport");
+
+        public static FieldError ExpectedFieldType() => FieldError.Of("expected-field-type", "expected \"full\" or \"half\"");
+
+        public static FieldError ExpectedArray() => FieldError.Of("expected-array", "expected array");
+
+        public static FieldError ExpectedFrame() => FieldError.Of("expected-frame", "expected at least one frame");
+
+        public static FieldError DuplicateFrameId(string id) => FieldError.Of("duplicate-id", $"duplicate frame id \"{id}\"", ("id", id));
+
+        public static FieldError DuplicateElementId(string id) =>
+            FieldError.Of("duplicate-id", $"duplicate element id \"{id}\" in frame", ("id", id));
+
+        public static FieldError ExpectedElementType() => FieldError.Of("expected-element-type", "expected known element type");
+
+        public static FieldError ExpectedLabel() => FieldError.Of("expected-label", "expected string of at most 2 letters or digits");
+
+        public static FieldError ExpectedString() => FieldError.Of("expected-string", "expected string");
+
+        public static FieldError ExpectedNonEmptyString() => FieldError.Of("expected-non-empty-string", "expected non-empty string");
+
+        public static FieldError ExpectedFiniteNumber() => FieldError.Of("expected-finite-number", "expected finite number");
+
+        public static FieldError ExpectedPoint() => FieldError.Of("expected-point", "expected object with x and y");
+
+        public static FieldError ExpectedTimestamp() => FieldError.Of("expected-timestamp", "expected ISO 8601 timestamp");
+    }
 }

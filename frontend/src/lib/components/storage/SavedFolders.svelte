@@ -5,6 +5,7 @@ link to its own page (`/folders/<id>`, deep-linkable), in the server's order
 (by name). Shows loading, a failure with "Try again", or "No folders yet.".
 -->
 <script lang="ts">
+	import { t } from "$lib/i18n";
 	import type { FolderListState } from "$lib/storage/FolderList";
 	import { FolderRoute } from "$lib/storage/FolderRoute";
 
@@ -17,14 +18,14 @@ link to its own page (`/folders/<id>`, deep-linkable), in the server's order
 </script>
 
 {#if list.status === "loading" || list.status === "idle"}
-	<p class="hint" role="status">Loading folders…</p>
+	<p class="hint" role="status">{$t.folders.loading}</p>
 {:else if list.status === "failed"}
 	<div class="failure" role="alert">
-		<p class="hint">{list.message}</p>
-		<button type="button" class="retry" onclick={onRetry}>Try again</button>
+		<p class="hint">{list.message($t)}</p>
+		<button type="button" class="retry" onclick={onRetry}>{$t.common.tryAgain}</button>
 	</div>
 {:else if list.folders.length === 0}
-	<p class="hint">No folders yet.</p>
+	<p class="hint">{$t.folders.none}</p>
 {:else}
 	<ul class="folder-list">
 		{#each list.folders as folder (folder.id)}

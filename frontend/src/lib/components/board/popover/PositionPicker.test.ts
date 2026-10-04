@@ -5,6 +5,7 @@ import { render, screen, fireEvent, within } from "@testing-library/svelte";
 import PositionPicker from "./PositionPicker.svelte";
 import { PointElement } from "$lib/model/elements/PointElement";
 import { PositionCatalog } from "$lib/model/positions/PositionCatalog";
+import { i18n } from "$lib/i18n";
 
 const player = new PointElement("el-1", 10, 20, "red", "Player");
 const positions = PositionCatalog.forSport("floorball");
@@ -37,16 +38,28 @@ describe("PositionPicker", () => {
 			expect(radios.map((radio) => radio.closest("label")?.textContent?.trim())).toEqual([
 				"None",
 				"G (Goalie)",
-				"V (Verteidiger)",
+				"V (Defender)",
 				"C (Center)",
-				"F (Flügel)",
-				"LV (Linker Verteidiger)",
-				"RV (Rechter Verteidiger)",
-				"LF (Linker Flügel)",
-				"RF (Rechter Flügel)",
+				"F (Wing)",
+				"LV (Left defender)",
+				"RV (Right defender)",
+				"LF (Left wing)",
+				"RF (Right wing)",
 			]);
 			expect(screen.getByRole("radio", { name: "None" })).toBeInTheDocument();
-			expect(screen.getByRole("radio", { name: "LV (Linker Verteidiger)" })).toBeInTheDocument();
+			expect(screen.getByRole("radio", { name: "LV (Left defender)" })).toBeInTheDocument();
+		});
+
+		it("names the positions in the UI language; the codes stay", async () => {
+			i18n.select("de");
+			render(PositionPicker, { props: props() });
+
+			const group = screen.getByRole("group", { name: "Position" });
+			expect(within(group).getByRole("radio", { name: "Keine" })).toBeInTheDocument();
+			expect(within(group).getByRole("radio", { name: "LV (Linker Verteidiger)" })).toBeInTheDocument();
+			expect(within(group).getByRole("radio", { name: "F (Flügel)" })).toBeInTheDocument();
+			expect(screen.getByLabelText("Eigene")).toBeInTheDocument();
+			expect(screen.getByText("Bis zu 2 Buchstaben oder Ziffern")).toBeInTheDocument();
 		});
 
 		it("the radios form one group (shared name), separate from another picker's group", () => {

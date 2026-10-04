@@ -37,6 +37,9 @@ public class SituationEndpointsTests
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
+    private static IReadOnlyDictionary<string, object>[] CodesOf(ValidationProblem problem, string field) =>
+        Assert.IsAssignableFrom<IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>[]>>(problem.ProblemDetails.Extensions["fieldErrors"])[field];
+
     private static JsonElement Document(string title = "Powerplay") => SituationDocuments.Element(SituationDocuments.Minimal(title));
 
     private async Task<SituationResponse> CreateAsync(string title = "Powerplay", string? origin = null)
@@ -72,12 +75,32 @@ public class SituationEndpointsTests
     }
 
     [Fact]
+    public async Task Post_numbers_a_default_title_of_the_clients_language_when_it_says_so()
+    {
+        await CreateAsync("Unbenannte Situation");
+
+        var result = await SituationEndpoints.CreatePersonalAsync(
+            new CreateSituationRequest(Document("Unbenannte Situation"), "new", TitleIsDefault: true), _service, _areas, _http.Response, Cancellation);
+
+        Assert.Equal("Unbenannte Situation (2)", Assert.IsType<CreatedAtRoute<SituationResponse>>(result.Result).Value!.Title);
+    }
+
+    [Fact]
+    public async Task Post_rejects_a_taken_title_of_a_new_situation_without_the_default_flag()
+    {
+        await CreateAsync("Unbenannte Situation");
+
+        await Assert.ThrowsAsync<DuplicateSituationTitleException>(() => CreateAsync("Unbenannte Situation", "new"));
+    }
+
+    [Fact]
     public async Task Post_rejects_an_unknown_origin()
     {
         var result = await SituationEndpoints.CreatePersonalAsync(new CreateSituationRequest(Document(), "stolen"), _service, _areas, _http.Response, Cancellation);
 
         var problem = Assert.IsType<ValidationProblem>(result.Result);
         Assert.Equal(["expected \"new\", \"imported\" or \"copy\""], problem.ProblemDetails.Errors[SituationEndpoints.OriginField]);
+        Assert.Equal("invalid-value", CodesOf(problem, SituationEndpoints.OriginField).Single()["code"]);
         Assert.Empty(_repository.Situations);
     }
 
@@ -88,6 +111,7 @@ public class SituationEndpointsTests
 
         var problem = Assert.IsType<ValidationProblem>(result.Result);
         Assert.Equal(["The situation document is missing."], problem.ProblemDetails.Errors["document"]);
+        Assert.Equal("required", CodesOf(problem, "document").Single()["code"]);
     }
 
     [Fact]
@@ -99,9 +123,12 @@ public class SituationEndpointsTests
 
         var result = await SituationEndpoints.CreatePersonalAsync(new CreateSituationRequest(SituationDocuments.Element(file), null), _service, _areas, _http.Response, Cancellation);
 
-        var errors = Assert.IsType<ValidationProblem>(result.Result).ProblemDetails.Errors;
+        var problem = Assert.IsType<ValidationProblem>(result.Result);
+        var errors = problem.ProblemDetails.Errors;
         Assert.Equal(["expected \"full\" or \"half\""], errors["document.situation.fieldType"]);
         Assert.Equal(["expected finite number"], errors["document.situation.frames[0].elements[0].x"]);
+        Assert.Equal("expected-field-type", CodesOf(problem, "document.situation.fieldType").Single()["code"]);
+        Assert.Equal("expected-finite-number", CodesOf(problem, "document.situation.frames[0].elements[0].x").Single()["code"]);
     }
 
     [Fact]
@@ -118,7 +145,10 @@ public class SituationEndpointsTests
         var result = await SituationEndpoints.CreatePersonalAsync(
             new CreateSituationRequest(Document(new string('a', SituationTitle.MaxLength + 1)), null), _service, _areas, _http.Response, Cancellation);
 
-        Assert.Equal(["expected at most 200 characters"], Assert.IsType<ValidationProblem>(result.Result).ProblemDetails.Errors["document.situation.title"]);
+        var problem = Assert.IsType<ValidationProblem>(result.Result);
+        Assert.Equal(["expected at most 200 characters"], problem.ProblemDetails.Errors["document.situation.title"]);
+        var code = CodesOf(problem, "document.situation.title").Single();
+        Assert.Equal(("too-long", 200), (code["code"], code["maxLength"]));
     }
 
     [Fact]

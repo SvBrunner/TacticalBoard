@@ -7,6 +7,7 @@ technology (the Save button and the cleared unsaved-changes state show it
 visually).
 -->
 <script lang="ts">
+	import { t } from "$lib/i18n";
 	import type { SaveState } from "$lib/storage/SituationSaver";
 
 	interface Props {
@@ -17,7 +18,7 @@ visually).
 	let { state, onDismiss }: Props = $props();
 
 	const announcement = $derived(
-		state.status === "saving" ? "Saving…" : state.status === "saved" ? `Saved "${state.title}".` : "",
+		state.status === "saving" ? $t.editor.saving : state.status === "saved" ? $t.saving.saved(state.title) : "",
 	);
 </script>
 
@@ -25,8 +26,8 @@ visually).
 
 {#if state.status === "failed"}
 	<div class="save-error" role="alert">
-		<p class="message">{state.message}</p>
-		<button type="button" class="dismiss" onclick={onDismiss}>Dismiss</button>
+		<p class="message">{state.message($t)}</p>
+		<button type="button" class="dismiss" onclick={onDismiss}>{$t.common.dismiss}</button>
 	</div>
 {/if}
 

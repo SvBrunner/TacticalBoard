@@ -1,4 +1,7 @@
-import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
+import { ApiError } from "$lib/api/ApiClient";
+import { inEnglish } from "$lib/i18n";
+import type { Translatable } from "$lib/i18n/Messages";
+import { ProblemText } from "$lib/i18n/ProblemText";
 import type { Situation } from "$lib/model/Situation";
 import { SituationImportError } from "$lib/model/serialization/SituationImportErrors";
 import type { SituationSummary, StoredSituation } from "./SituationApi";
@@ -7,7 +10,7 @@ import type { SituationSummary, StoredSituation } from "./SituationApi";
 export type OpenOutcome =
 	| { readonly status: "opened"; readonly situation: Situation }
 	| { readonly status: "cancelled" }
-	| { readonly status: "failed"; readonly message: string };
+	| { readonly status: "failed"; readonly message: Translatable };
 
 export interface SituationOpenerDependencies {
 	readonly editor: { load(situation: Situation): void };
@@ -38,7 +41,7 @@ export class SituationOpener {
 			situation = this.deps.serializer.fromDocument(stored.document);
 		} catch (error) {
 			const message = SituationOpener.messageFor(error);
-			this.log(`Opening situation ${id} failed: ${message}`, "error");
+			this.log(`Opening situation ${id} failed: ${inEnglish(message)}`, "error");
 			return { status: "failed", message };
 		}
 		if (!(await confirmDiscard())) {
@@ -52,22 +55,14 @@ export class SituationOpener {
 		return { status: "opened", situation };
 	}
 
-	private static messageFor(error: unknown): string {
-		if (error instanceof ApiUnavailableError) {
-			return "The server is not reachable.";
-		}
-		if (error instanceof ApiError) {
-			if (error.status === 401) {
-				return "Your session has ended. Please log in again.";
-			}
-			if (error.status === 404) {
-				return "This situation no longer exists.";
-			}
+	private static messageFor(error: unknown): Translatable {
+		if (error instanceof ApiError && error.status === 404) {
+			return (m) => m.saved.notFound;
 		}
 		if (error instanceof SituationImportError) {
-			return "The saved situation can't be read by this version of the app.";
+			return (m) => m.saved.unreadable;
 		}
-		return "The situation couldn't be opened.";
+		return ProblemText.describe(error, (m) => m.saved.openGenericFailure);
 	}
 
 	private log(message: string, level: "info" | "error" = "info"): void {

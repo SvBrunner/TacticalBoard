@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Net.Http.Headers;
 using TacticalBoard.Areas.Contracts;
+using TacticalBoard.SharedKernel.Validation;
 using TacticalBoard.Situations.Application;
 using TacticalBoard.Situations.Domain;
 
@@ -160,11 +161,11 @@ internal static class SituationEndpoints
                 detail: $"The header {HeaderNames.IfMatch} must be one revision tag, e.g. \"7\".");
         }
 
-        var errors = new Dictionary<string, string[]>();
+        var errors = new FieldErrors();
         var parsed = ParseDocument(request.Document, errors);
         if (parsed is null)
         {
-            return TypedResults.ValidationProblem(errors);
+            return ValidationProblem(errors);
         }
 
         var view = await service.UpdateAsync(id, expectedRevision, parsed.Value.Title, parsed.Value.Document, cancellationToken);
@@ -185,12 +186,12 @@ internal static class SituationEndpoints
         Func<SituationTitle, SituationDocument, SituationOrigin, Task<SituationView>> create,
         HttpResponse response)
     {
-        var errors = new Dictionary<string, string[]>();
-        var origin = ParseOrigin(request.Origin, errors);
+        var errors = new FieldErrors();
+        var origin = ParseOrigin(request.Origin, request.TitleIsDefault ?? false, errors);
         var parsed = ParseDocument(request.Document, errors);
-        if (errors.Count > 0 || parsed is null)
+        if (errors.Any || parsed is null)
         {
-            return TypedResults.ValidationProblem(errors);
+            return ValidationProblem(errors);
         }
 
         var view = await create(parsed.Value.Title, parsed.Value.Document, origin);
@@ -198,36 +199,40 @@ internal static class SituationEndpoints
         return TypedResults.CreatedAtRoute(SituationResponse.From(view), GetSituationRoute, new { id = view.Summary.Id });
     }
 
-    private static SituationOrigin ParseOrigin(string? origin, Dictionary<string, string[]> errors)
+    /// <summary>The problems as a <c>validation-failed</c> problem: messages in <c>errors</c>, codes in <c>fieldErrors</c> (ch. 8.2).</summary>
+    private static ValidationProblem ValidationProblem(FieldErrors errors) =>
+        TypedResults.ValidationProblem(errors.Messages(), extensions: errors.Extensions());
+
+    private static SituationOrigin ParseOrigin(string? origin, bool titleIsDefault, FieldErrors errors)
     {
         switch (origin)
         {
             case null or "new":
-                return SituationOrigin.New;
+                return titleIsDefault ? SituationOrigin.NewWithDefaultTitle : SituationOrigin.New;
             case "imported":
                 return SituationOrigin.Imported;
             case "copy":
                 return SituationOrigin.Copy;
             default:
-                errors[OriginField] = ["expected \"new\", \"imported\" or \"copy\""];
+                errors.Add(OriginField, FieldError.Of("invalid-value", "expected \"new\", \"imported\" or \"copy\""));
                 return SituationOrigin.New;
         }
     }
 
     /// <summary>The document and its title, or <c>null</c> with the problems added to <paramref name="errors"/> (keys <c>document.{path}</c>).</summary>
-    private static (SituationDocument Document, SituationTitle Title)? ParseDocument(JsonElement? json, Dictionary<string, string[]> errors)
+    private static (SituationDocument Document, SituationTitle Title)? ParseDocument(JsonElement? json, FieldErrors errors)
     {
         if (json is null || json.Value.ValueKind == JsonValueKind.Null)
         {
-            errors[DocumentField] = ["The situation document is missing."];
+            errors.Add(DocumentField, FieldError.Required("The situation document is missing."));
             return null;
         }
 
         if (!SituationDocument.TryParse(json.Value, out var document, out var issues))
         {
-            foreach (var group in issues.GroupBy(issue => FieldKey(issue.Path)))
+            foreach (var issue in issues)
             {
-                errors[group.Key] = group.Select(issue => issue.Message).ToArray();
+                errors.Add(FieldKey(issue.Path), issue.Error);
             }
 
             return null;
@@ -235,7 +240,7 @@ internal static class SituationEndpoints
 
         if (!SituationTitle.TryCreate(document.Title, out var title, out var error))
         {
-            errors[FieldKey("situation.title")] = [error];
+            errors.Add(FieldKey("situation.title"), error);
             return null;
         }
 

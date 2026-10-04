@@ -10,6 +10,7 @@ button), or when focus or a press goes elsewhere.
 -->
 <script lang="ts">
 	import { AuthSession, type CurrentUser, type FormField } from "$lib/auth/AuthSession";
+	import { t } from "$lib/i18n";
 
 	interface Props {
 		user: CurrentUser;
@@ -29,7 +30,7 @@ button), or when focus or a press goes elsewhere.
 	let tokenField: HTMLInputElement;
 	let open = $state(false);
 	let loggingOut = $state(false);
-	let logoutError = $state<string | null>(null);
+	let logoutFailed = $state(false);
 
 	function close(focusToggle: boolean) {
 		open = false;
@@ -74,14 +75,14 @@ button), or when focus or a press goes elsewhere.
 		}
 		const form = event.currentTarget as HTMLFormElement;
 		loggingOut = true;
-		logoutError = null;
+		logoutFailed = false;
 		try {
 			const field = await prepareLogout();
 			tokenField.name = field.name;
 			tokenField.value = field.value;
 			submitForm(form);
 		} catch {
-			logoutError = "Logging out failed. Please try again.";
+			logoutFailed = true;
 			loggingOut = false;
 		}
 	}
@@ -108,19 +109,19 @@ button), or when focus or a press goes elsewhere.
 			<path d="M6 9l6 6 6-6" />
 		</svg>
 	</button>
-	<ul id="{uid}-account-options" class="account-options" aria-label="Account" hidden={!open}>
+	<ul id="{uid}-account-options" class="account-options" aria-label={$t.account.menu} hidden={!open}>
 		<li>
-			<button type="button" class="account-option" onclick={chooseChangeDisplayName} onkeydown={handleKeydown}>Change display name</button>
+			<button type="button" class="account-option" onclick={chooseChangeDisplayName} onkeydown={handleKeydown}>{$t.account.changeDisplayName}</button>
 		</li>
 		<li>
 			<form method="post" action={AuthSession.LOGOUT_PATH} onsubmit={handleLogout}>
 				<input bind:this={tokenField} type="hidden" />
-				<button type="submit" class="account-option" disabled={loggingOut} onkeydown={handleKeydown}>Log out</button>
+				<button type="submit" class="account-option" disabled={loggingOut} onkeydown={handleKeydown}>{$t.account.logOut}</button>
 			</form>
 		</li>
 	</ul>
-	{#if logoutError}
-		<p class="account-error" role="alert">{logoutError}</p>
+	{#if logoutFailed}
+		<p class="account-error" role="alert">{$t.account.logoutFailed}</p>
 	{/if}
 </div>
 

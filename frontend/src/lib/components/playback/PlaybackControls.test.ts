@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { i18n } from "$lib/i18n";
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
 import PlaybackControls from "./PlaybackControls.svelte";
 import type { PlaybackStatus } from "$lib/playback/SlideshowPlayer";
@@ -226,5 +227,32 @@ describe("PlaybackControls", () => {
 
 			expect(seen).toEqual(["Escape", "ArrowRight"]);
 		});
+	});
+
+	it("is German in German", () => {
+		i18n.select("de");
+		render(PlaybackControls, {
+			props: {
+				status: "stopped" as PlaybackStatus,
+				frameNumber: 1,
+				frameCount: 3,
+				canPlay: true,
+				frameDurationMs: 2000,
+				loop: true,
+				onTogglePlay: vi.fn(),
+				onPrevious: vi.fn(),
+				onNext: vi.fn(),
+				onStop: vi.fn(),
+				onFrameDurationChange: vi.fn(),
+				onLoopChange: vi.fn(),
+			},
+		});
+
+		const region = screen.getByRole("region", { name: "Wiedergabe" });
+		expect(within(region).getByRole("button", { name: "Abspielen" })).toHaveAttribute("title", "Abspielen (Leertaste)");
+		expect(within(region).getByRole("button", { name: "Vorheriges Bild" })).toBeInTheDocument();
+		expect(within(region).getByRole("button", { name: "Stopp" })).toBeInTheDocument();
+		expect(within(region).getByRole("combobox", { name: "Bilddauer" })).toHaveDisplayValue("2 s");
+		expect(within(region).getByRole("button", { name: "Endlos" })).toHaveAttribute("title", expect.stringContaining("Endlos ist an"));
 	});
 });

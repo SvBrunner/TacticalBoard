@@ -9,6 +9,8 @@ without changes.
 -->
 <script lang="ts">
 	import { modalDialog } from "$lib/actions/modalDialog";
+	import { t } from "$lib/i18n";
+	import type { Translatable } from "$lib/i18n/Messages";
 	import { FolderApi } from "$lib/storage/FolderApi";
 	import { FolderNameForm } from "$lib/storage/FolderNameForm.svelte";
 
@@ -20,7 +22,7 @@ without changes.
 		submitLabel: string;
 		initialName?: string;
 		/** Creates or renames with the trimmed name; a message when it failed. */
-		onSubmit: (name: string) => Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
+		onSubmit: (name: string) => Promise<{ readonly ok: true } | { readonly ok: false; readonly message: Translatable }>;
 		/** The dialog is done (submitted or cancelled); the owner closes it by flipping `open`. */
 		onClose: () => void;
 	}
@@ -66,7 +68,7 @@ without changes.
 		<h2 id="{uid}-title" class="modal-title">{title}</h2>
 
 		<p class="modal-field">
-			<label for="{uid}-name" class="modal-label">Folder name</label>
+			<label for="{uid}-name" class="modal-label">{$t.folders.name}</label>
 			<input
 				bind:this={input}
 				id="{uid}-name"
@@ -83,11 +85,11 @@ without changes.
 			/>
 		</p>
 		{#if form.message}
-			<p id="{uid}-error" class="field-error" role="alert">{form.message}</p>
+			<p id="{uid}-error" class="field-error" role="alert">{form.message($t)}</p>
 		{/if}
 
 		<div class="modal-actions">
-			<button type="button" class="modal-btn secondary" onclick={cancel} disabled={form.saving}>Cancel</button>
+			<button type="button" class="modal-btn secondary" onclick={cancel} disabled={form.saving}>{$t.common.cancel}</button>
 			<button type="submit" class="modal-btn primary" disabled={form.saving}>{submitLabel}</button>
 		</div>
 	</form>

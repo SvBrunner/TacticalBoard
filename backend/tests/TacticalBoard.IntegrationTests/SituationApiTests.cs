@@ -170,6 +170,34 @@ public sealed class SituationApiTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_copy_of_a_numbered_title_gets_the_next_number()
+    {
+        using var alice = await LoggedInAsync("alice", "Alice");
+        await CreateAsync(alice, "Powerplay");
+        await CreateAsync(alice, "Powerplay (2)");
+
+        var copy = await CreateAsync(alice, "Powerplay (2)", origin: "copy");
+
+        Assert.Equal("Powerplay (3)", copy.GetProperty("title").GetString());
+    }
+
+    [Fact]
+    public async Task A_default_title_of_the_clients_language_is_numbered_when_flagged()
+    {
+        using var alice = await LoggedInAsync("alice", "Alice");
+        await CreateAsync(alice, "Unbenannte Situation");
+
+        using var flagged = await alice.SendJsonAsync(
+            HttpMethod.Post, PersonalArea, new { document = Document("Unbenannte Situation"), origin = "new", titleIsDefault = true }, await alice.AntiforgeryTokenAsync());
+        using var unflagged = await alice.SendJsonAsync(
+            HttpMethod.Post, PersonalArea, new { document = Document("Unbenannte Situation"), origin = "new" }, await alice.AntiforgeryTokenAsync());
+
+        Assert.Equal(HttpStatusCode.Created, flagged.StatusCode);
+        Assert.Equal("Unbenannte Situation (2)", (await JsonAsync(flagged)).GetProperty("title").GetString());
+        await AssertProblemAsync(unflagged, HttpStatusCode.Conflict, "duplicate-title");
+    }
+
+    [Fact]
     public async Task Default_titles_are_numbered_and_a_deleted_title_is_free_again()
     {
         using var alice = await LoggedInAsync("alice", "Alice");
@@ -280,9 +308,14 @@ public sealed class SituationApiTests(PostgresFixture postgres) : IAsyncLifetime
 
         using var response = await alice.SendJsonAsync(HttpMethod.Post, PersonalArea, new { document }, await alice.AntiforgeryTokenAsync());
 
-        var errors = (await AssertProblemAsync(response, HttpStatusCode.BadRequest, "validation-failed")).GetProperty("errors");
+        var problem = await AssertProblemAsync(response, HttpStatusCode.BadRequest, "validation-failed");
+        var errors = problem.GetProperty("errors");
         Assert.Equal("expected 3 (the current format version)", errors.GetProperty("document.formatVersion")[0].GetString());
         Assert.Equal("expected string of at most 2 letters or digits", errors.GetProperty("document.situation.frames[0].elements[0].label")[0].GetString());
+        var codes = problem.GetProperty("fieldErrors");
+        var version = codes.GetProperty("document.formatVersion")[0];
+        Assert.Equal(("expected-current-version", 3), (version.GetProperty("code").GetString(), version.GetProperty("version").GetInt32()));
+        Assert.Equal("expected-label", codes.GetProperty("document.situation.frames[0].elements[0].label")[0].GetProperty("code").GetString());
     }
 
     [Fact]

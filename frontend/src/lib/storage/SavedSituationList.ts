@@ -1,5 +1,8 @@
 import { get, writable, type Readable } from "svelte/store";
-import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
+import { ApiError } from "$lib/api/ApiClient";
+import { inEnglish } from "$lib/i18n";
+import type { Translatable } from "$lib/i18n/Messages";
+import { ProblemText } from "$lib/i18n/ProblemText";
 import { FolderApi } from "./FolderApi";
 import type { SituationSummary } from "./SituationApi";
 import type { SaveTarget } from "./SaveTarget";
@@ -9,7 +12,7 @@ export type SavedListState =
 	| { readonly status: "idle" }
 	| { readonly status: "loading" }
 	| { readonly status: "loaded"; readonly situations: readonly SituationSummary[] }
-	| { readonly status: "failed"; readonly message: string };
+	| { readonly status: "failed"; readonly message: Translatable };
 
 export interface SavedSituationListDependencies {
 	readonly api: {
@@ -56,7 +59,7 @@ export class SavedSituationList {
 			const situations = await this.deps.api.list(this.deps.place);
 			this.store.set({ status: "loaded", situations });
 		} catch (error) {
-			this.store.set({ status: "failed", message: this.messageFor(error, "The saved situations couldn't be loaded.") });
+			this.store.set({ status: "failed", message: this.messageFor(error, (m) => m.saved.loadFailed) });
 		}
 	}
 
@@ -67,7 +70,7 @@ export class SavedSituationList {
 			this.log(`Deleted "${situation.title}"`);
 		} catch (error) {
 			if (!(error instanceof ApiError && error.status === 404)) {
-				this.store.set({ status: "failed", message: this.messageFor(error, `"${situation.title}" couldn't be deleted.`) });
+				this.store.set({ status: "failed", message: this.messageFor(error, (m) => m.saved.deleteFailed(situation.title)) });
 				return false;
 			}
 			// Already gone (e.g. deleted in another tab): the reload shows that.
@@ -94,25 +97,28 @@ export class SavedSituationList {
 		return true;
 	}
 
-	private moveFailure(error: unknown, situation: SituationSummary): string {
+	private moveFailure(error: unknown, situation: SituationSummary): Translatable {
 		if (error instanceof ApiError && error.type === FolderApi.NOT_FOUND) {
-			return `"${situation.title}" couldn't be moved: the folder no longer exists.`;
+			return (m) => m.saved.moveFolderGone(situation.title);
 		}
 		if (error instanceof ApiError && error.status === 404) {
-			return `"${situation.title}" couldn't be moved: it no longer exists.`;
+			return (m) => m.saved.moveSituationGone(situation.title);
 		}
-		return this.messageFor(error, `"${situation.title}" couldn't be moved.`);
+		return this.messageFor(error, (m) => m.saved.moveFailed(situation.title));
 	}
 
-	private messageFor(error: unknown, fallback: string): string {
-		if (error instanceof ApiUnavailableError) {
-			return "The server is not reachable. Please try again later.";
-		}
-		if (error instanceof ApiError && error.status === 401) {
+	/** The unreachable server or an ended session, otherwise `fallback` (a known problem code is not more helpful here). */
+	private messageFor(error: unknown, fallback: Translatable): Translatable {
+		if (ProblemText.isSessionEnded(error)) {
 			this.deps.onSessionEnded?.();
-			return "Your session has ended. Please log in again.";
+			return ProblemText.SESSION_ENDED;
 		}
-		this.log(fallback, "error");
+		if (!(error instanceof ApiError)) {
+			const message = ProblemText.describe(error, fallback);
+			this.log(inEnglish(message), "error");
+			return message;
+		}
+		this.log(inEnglish(fallback), "error");
 		return fallback;
 	}
 

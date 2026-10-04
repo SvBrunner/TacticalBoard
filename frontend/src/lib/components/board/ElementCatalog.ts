@@ -1,37 +1,43 @@
+import type { Messages } from "$lib/i18n/Messages";
 import { sameFamily, type ElementType } from "$lib/model/elements/ElementType";
 
+/** An element kind; its name in the UI is `messages.elements[type]`. */
 export interface ElementKind {
 	readonly type: ElementType;
-	readonly name: string;
 }
 
+/** The key of a color's name in the catalog (`messages.colors`). */
+export type ColorId = keyof Messages["colors"];
+
+/** A color of the palette; its name in the UI is `messages.colors[id]`. */
 export interface NamedColor {
-	readonly name: string;
+	readonly id: ColorId;
 	readonly value: string;
 }
 
 /**
  * The element kinds and colors offered in the UI, shared by the tool panel,
- * the board and the edit popover so they always show the same choices.
+ * the board and the edit popover so they always show the same choices. Their
+ * names are system texts in the message catalog (arc42 ch. 8.18).
  */
 export class ElementCatalog {
 	readonly kinds: readonly ElementKind[] = [
-		{ type: "Player", name: "Player" },
-		{ type: "Ball", name: "Ball" },
-		{ type: "Pass", name: "Pass" },
-		{ type: "Run", name: "Run" },
-		{ type: "Shot", name: "Shot" },
-		{ type: "Rectangle", name: "Rectangle" },
-		{ type: "Triangle", name: "Triangle" },
-		{ type: "Circle", name: "Circle" },
+		{ type: "Player" },
+		{ type: "Ball" },
+		{ type: "Pass" },
+		{ type: "Run" },
+		{ type: "Shot" },
+		{ type: "Rectangle" },
+		{ type: "Triangle" },
+		{ type: "Circle" },
 	];
 
 	/** The colors new players can get (tool panel). */
 	readonly playerColors: readonly NamedColor[] = [
-		{ name: "Team A", value: "oklch(62% 0.16 230)" },
-		{ name: "Team B", value: "oklch(64% 0.16 32)" },
-		{ name: "Team C", value: "oklch(64% 0.14 150)" },
-		{ name: "Team D", value: "oklch(78% 0.14 90)" },
+		{ id: "teamA", value: "oklch(62% 0.16 230)" },
+		{ id: "teamB", value: "oklch(64% 0.16 32)" },
+		{ id: "teamC", value: "oklch(64% 0.14 150)" },
+		{ id: "teamD", value: "oklch(78% 0.14 90)" },
 	];
 
 	/** Color of every newly placed point element that isn't a Player. */
@@ -47,8 +53,8 @@ export class ElementCatalog {
 	 */
 	readonly colors: readonly NamedColor[] = [
 		...this.playerColors,
-		{ name: "Grey", value: this.neutralColor },
-		{ name: "Black", value: this.arrowColor },
+		{ id: "grey", value: this.neutralColor },
+		{ id: "black", value: this.arrowColor },
 	];
 
 	get defaultPlayerColor(): string {
@@ -60,9 +66,10 @@ export class ElementCatalog {
 		return this.kinds.filter((kind) => sameFamily(kind.type, type));
 	}
 
-	/** The display name of a color value, or the value itself when it isn't in the palette. */
-	colorName(value: string): string {
-		return this.colors.find((color) => color.value === value)?.name ?? value;
+	/** The name of a color value in `messages`, or the value itself when it isn't in the palette. */
+	colorName(value: string, messages: Messages): string {
+		const color = this.colors.find((candidate) => candidate.value === value);
+		return color ? messages.colors[color.id] : value;
 	}
 }
 

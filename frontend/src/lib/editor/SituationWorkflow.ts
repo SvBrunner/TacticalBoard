@@ -39,29 +39,36 @@ export interface SituationWorkflowDependencies {
 	readonly link: WorkflowLink;
 	/** Asks the user a yes/no question, e.g. through `ConfirmationPrompt`. */
 	readonly confirm: (request: ConfirmationRequest) => Promise<boolean>;
+	/**
+	 * Whether a user is logged in (saving on the server is possible). Then
+	 * only saving on the server counts as saved, not an export (arc42 ch.
+	 * 8.7). Default: never (local mode).
+	 */
+	readonly isLoggedIn?: () => boolean;
 	readonly log?: WorkflowLog;
 }
 
-/** The question asked before unsaved changes would be thrown away. */
+/** The question asked before unsaved changes would be thrown away (in local mode: "haven't been exported"). */
 export const DISCARD_CHANGES_REQUEST: ConfirmationRequest = {
-	title: "Discard changes?",
-	message: "The current situation has changes that haven't been exported. They will be lost.",
-	confirmLabel: "Discard",
-	cancelLabel: "Cancel",
+	title: (m) => m.discard.title,
+	message: (m) => m.discard.notExported,
+	confirmLabel: (m) => m.discard.confirm,
+	cancelLabel: (m) => m.common.cancel,
 };
 
-/** The same question for a situation saved on the server. */
+/** The same question when only saving on the server counts as saved ("haven't been saved"). */
 export const DISCARD_SAVED_CHANGES_REQUEST: ConfirmationRequest = {
 	...DISCARD_CHANGES_REQUEST,
-	message: "The current situation has changes that haven't been saved. They will be lost.",
+	message: (m) => m.discard.notSaved,
 };
 
 /**
  * The situation-level use cases shared by the start page and the editor:
  * new, import, export, undo/redo. Replacing a situation with unsaved
  * changes asks first. "Saved" (arc42 ch. 8.7) means saved on the server for
- * a server situation, otherwise exported; so exporting marks only a
- * situation that isn't on the server as saved.
+ * a server situation and for every situation while logged in; only in
+ * local mode (not logged in) a situation that isn't on the server counts as
+ * saved once it is exported.
  */
 export class SituationWorkflow {
 	constructor(private readonly deps: SituationWorkflowDependencies) {}
@@ -71,7 +78,7 @@ export class SituationWorkflow {
 		if (!this.deps.editor.isDirty()) {
 			return true;
 		}
-		return this.deps.confirm(this.deps.link.saved() ? DISCARD_SAVED_CHANGES_REQUEST : DISCARD_CHANGES_REQUEST);
+		return this.deps.confirm(this.exportCountsAsSaved() ? DISCARD_CHANGES_REQUEST : DISCARD_SAVED_CHANGES_REQUEST);
 	}
 
 	/**
@@ -131,13 +138,14 @@ export class SituationWorkflow {
 	}
 
 	/**
-	 * Downloads the current situation. It then counts as saved, unless it is
-	 * a server situation: that is saved only by saving it on the server.
+	 * Downloads the current situation. In local mode it then counts as saved;
+	 * a server situation, and any situation while logged in, is saved only by
+	 * saving it on the server.
 	 */
 	exportCurrent(): string {
 		const situation = this.deps.editor.current();
 		const filename = this.deps.files.export(situation);
-		if (!this.deps.link.saved()) {
+		if (this.exportCountsAsSaved()) {
 			this.deps.editor.markSaved();
 		}
 		this.log(`Exported ${situation.frames.length} frame(s) to ${filename}`);
@@ -158,6 +166,11 @@ export class SituationWorkflow {
 		if (label) {
 			this.log(`Redo: ${label}`);
 		}
+	}
+
+	/** Local mode with a situation that isn't on the server: exporting it saves it (arc42 ch. 8.7). */
+	private exportCountsAsSaved(): boolean {
+		return !this.deps.link.saved() && !(this.deps.isLoggedIn?.() ?? false);
 	}
 
 	private log(message: string, level: "info" | "error" = "info"): void {

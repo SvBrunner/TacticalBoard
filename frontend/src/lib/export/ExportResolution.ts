@@ -13,17 +13,17 @@ export type ExportResolutionId = "small" | "medium" | "large";
  * floorball's half), so the field is never distorted or letterboxed.
  */
 export class ExportResolution {
-	static readonly SMALL = new ExportResolution("small", "Small", 600);
-	static readonly MEDIUM = new ExportResolution("medium", "Medium", 1200);
-	static readonly LARGE = new ExportResolution("large", "Large", 1800);
+	static readonly SMALL = new ExportResolution("small", 600);
+	static readonly MEDIUM = new ExportResolution("medium", 1200);
+	static readonly LARGE = new ExportResolution("large", 1800);
 
 	/** All presets, smallest first. */
 	static readonly ALL: readonly ExportResolution[] = [ExportResolution.SMALL, ExportResolution.MEDIUM, ExportResolution.LARGE];
 	static readonly DEFAULT = ExportResolution.MEDIUM;
 
 	private constructor(
+		/** Also the key of its name in the message catalog (`exportGif.resolutions`). */
 		readonly id: ExportResolutionId,
-		readonly label: string,
 		/** Length of the long side in pixels. */
 		readonly longSide: number,
 	) {}

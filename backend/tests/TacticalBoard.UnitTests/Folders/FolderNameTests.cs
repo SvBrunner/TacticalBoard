@@ -23,7 +23,8 @@ public class FolderNameTests
     {
         Assert.False(FolderName.TryCreate(input, out var name, out var error));
         Assert.Null(name);
-        Assert.Equal("must not be empty", error);
+        Assert.Equal("must not be empty", error?.Message);
+        Assert.Equal("required", error?.Code);
     }
 
     [Fact]
@@ -31,7 +32,9 @@ public class FolderNameTests
     {
         Assert.True(FolderName.TryCreate(" " + new string('a', FolderName.MaxLength) + " ", out _, out _));
         Assert.False(FolderName.TryCreate(new string('a', FolderName.MaxLength + 1), out _, out var error));
-        Assert.Equal("expected at most 100 characters", error);
+        Assert.Equal("expected at most 100 characters", error?.Message);
+        Assert.Equal("too-long", error?.Code);
+        Assert.Equal(100, error?.Values["maxLength"]);
     }
 
     [Theory]
@@ -41,7 +44,8 @@ public class FolderNameTests
     public void Rejects_control_characters(string input)
     {
         Assert.False(FolderName.TryCreate(input, out _, out var error));
-        Assert.Equal("must not contain control characters", error);
+        Assert.Equal("must not contain control characters", error?.Message);
+        Assert.Equal("control-characters", error?.Code);
     }
 
     [Fact]

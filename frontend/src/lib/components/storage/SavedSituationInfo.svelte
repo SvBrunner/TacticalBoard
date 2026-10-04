@@ -4,6 +4,7 @@ Who created a saved situation and who changed it last, and when (arc42 ch. 1,
 8.15), for the details panel. A deleted user is shown as "Deleted user".
 -->
 <script lang="ts">
+	import { language, t } from "$lib/i18n";
 	import type { SituationSummary } from "$lib/storage/SituationApi";
 	import { SavedSituationFormat } from "$lib/storage/SavedSituationFormat";
 
@@ -14,19 +15,19 @@ Who created a saved situation and who changed it last, and when (arc42 ch. 1,
 	let { summary }: Props = $props();
 </script>
 
-<dl class="saved-info" aria-label="Saved on the server">
+<dl class="saved-info" aria-label={$t.saved.info}>
 	<div class="row">
-		<dt>Created</dt>
+		<dt>{$t.saved.created}</dt>
 		<dd>
-			by {SavedSituationFormat.userName(summary.createdBy)},
-			<time datetime={summary.createdAt}>{SavedSituationFormat.dateTime(summary.createdAt)}</time>
+			{$t.saved.by(SavedSituationFormat.userName(summary.createdBy, $t))}
+			<time datetime={summary.createdAt}>{SavedSituationFormat.dateTime(summary.createdAt, $language)}</time>
 		</dd>
 	</div>
 	<div class="row">
-		<dt>Last changed</dt>
+		<dt>{$t.saved.lastChanged}</dt>
 		<dd>
-			by {SavedSituationFormat.userName(summary.updatedBy)},
-			<time datetime={summary.updatedAt}>{SavedSituationFormat.dateTime(summary.updatedAt)}</time>
+			{$t.saved.by(SavedSituationFormat.userName(summary.updatedBy, $t))}
+			<time datetime={summary.updatedAt}>{SavedSituationFormat.dateTime(summary.updatedAt, $language)}</time>
 		</dd>
 	</div>
 </dl>

@@ -83,9 +83,12 @@ public class UsersModuleTests
         Assert.Equal("display_name", entity.FindProperty(nameof(User.DisplayNameValue))!.GetColumnName());
         Assert.Equal(DisplayName.MaxLength, entity.FindProperty(nameof(User.DisplayNameValue))!.GetMaxLength());
         Assert.Equal(ExternalIdentity.MaxSubjectLength, entity.FindProperty(nameof(User.Subject))!.GetMaxLength());
+        Assert.Equal("preferred_language", entity.FindProperty(nameof(User.PreferredLanguageValue))!.GetColumnName());
+        Assert.Equal(LanguageTag.MaxLength, entity.FindProperty(nameof(User.PreferredLanguageValue))!.GetMaxLength());
+        Assert.True(entity.FindProperty(nameof(User.PreferredLanguageValue))!.IsNullable);
         Assert.NotNull(entity.FindDeclaredQueryFilter(TacticalBoard.Infrastructure.Persistence.SoftDeleteQueryFilter.Name));
         Assert.Equal(
-            ["CreatedAt", "DeletedAt", "DisplayNameValue", "Id", "IsBlocked", "IsSystemAdministrator", "Issuer", "Subject"],
+            ["CreatedAt", "DeletedAt", "DisplayNameValue", "Id", "IsBlocked", "IsSystemAdministrator", "Issuer", "PreferredLanguageValue", "Subject"],
             entity.GetProperties().Select(property => property.Name).Order(StringComparer.Ordinal));
     }
 }

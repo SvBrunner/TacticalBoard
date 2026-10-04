@@ -1,3 +1,4 @@
+import { inEnglishDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
 import type { ConfirmationRequest } from "$lib/dialogs/ConfirmationPrompt";
@@ -48,12 +49,12 @@ describe("CurrentFolder", () => {
 	});
 
 	it("is loading until loaded, then holds the folder", async () => {
-		expect(folder.current()).toEqual({ status: "loading" });
+		expect(inEnglishDeep(folder.current())).toEqual({ status: "loading" });
 		expect(folder.name()).toBeNull();
 
 		await folder.load();
 
-		expect(folder.current()).toEqual({ status: "loaded", folder: setPieces });
+		expect(inEnglishDeep(folder.current())).toEqual({ status: "loaded", folder: setPieces });
 		expect(folder.name()).toBe("Set pieces");
 		expect(calls).toEqual(["get f1"]);
 	});
@@ -63,7 +64,7 @@ describe("CurrentFolder", () => {
 
 		await folder.load();
 
-		expect(folder.current()).toEqual({ status: "missing" });
+		expect(inEnglishDeep(folder.current())).toEqual({ status: "missing" });
 	});
 
 	it.each<[string, Error, string]>([
@@ -75,7 +76,7 @@ describe("CurrentFolder", () => {
 
 		await folder.load();
 
-		expect(folder.current()).toEqual({ status: "failed", message });
+		expect(inEnglishDeep(folder.current())).toEqual({ status: "failed", message });
 	});
 
 	it("an ended session refreshes the login state", async () => {
@@ -94,7 +95,7 @@ describe("CurrentFolder", () => {
 		it("renames and shows the new name", async () => {
 			const result = await folder.rename("Breakouts");
 
-			expect(result).toEqual({ ok: true, folder: { ...setPieces, name: "Breakouts" } });
+			expect(inEnglishDeep(result)).toEqual({ ok: true, folder: { ...setPieces, name: "Breakouts" } });
 			expect(folder.name()).toBe("Breakouts");
 			expect(log.notify).toHaveBeenCalledWith('Renamed folder to "Breakouts"', "info");
 		});
@@ -104,7 +105,7 @@ describe("CurrentFolder", () => {
 
 			const result = await folder.rename("Breakouts");
 
-			expect(result).toEqual({ ok: false, message: "A folder named “Breakouts” already exists. Choose another name." });
+			expect(inEnglishDeep(result)).toEqual({ ok: false, message: "A folder named “Breakouts” already exists. Choose another name." });
 			expect(folder.name()).toBe("Set pieces");
 		});
 
@@ -113,8 +114,8 @@ describe("CurrentFolder", () => {
 
 			const result = await folder.rename("Breakouts");
 
-			expect(result).toEqual({ ok: false, message: "This folder no longer exists." });
-			expect(folder.current()).toEqual({ status: "missing" });
+			expect(inEnglishDeep(result)).toEqual({ ok: false, message: "This folder no longer exists." });
+			expect(inEnglishDeep(folder.current())).toEqual({ status: "missing" });
 		});
 	});
 
@@ -124,17 +125,17 @@ describe("CurrentFolder", () => {
 		});
 
 		it("deletes the folder", async () => {
-			await expect(folder.delete()).resolves.toEqual({ ok: true });
+			expect(inEnglishDeep(await folder.delete())).toEqual({ ok: true });
 
 			expect(calls).toContain("delete f1");
-			expect(folder.current()).toEqual({ status: "missing" });
+			expect(inEnglishDeep(folder.current())).toEqual({ status: "missing" });
 			expect(log.notify).toHaveBeenCalledWith('Deleted folder "Set pieces"', "info");
 		});
 
 		it("passes on why a folder with situations can't be deleted", async () => {
 			deleteError = new ApiError(409, { type: FolderApi.NOT_EMPTY });
 
-			await expect(folder.delete()).resolves.toEqual({
+			expect(inEnglishDeep(await folder.delete())).toEqual({
 				ok: false,
 				message: "“Set pieces” can't be deleted because it still contains situations. Move or delete them first.",
 			});
@@ -144,23 +145,23 @@ describe("CurrentFolder", () => {
 		it("treats a folder that is already gone as deleted", async () => {
 			deleteError = new ApiError(404, { type: FolderApi.NOT_FOUND });
 
-			await expect(folder.delete()).resolves.toEqual({ ok: true });
-			expect(folder.current()).toEqual({ status: "missing" });
+			expect(inEnglishDeep(await folder.delete())).toEqual({ ok: true });
+			expect(inEnglishDeep(folder.current())).toEqual({ status: "missing" });
 		});
 
 		it("reports other failures", async () => {
 			deleteError = new ApiUnavailableError();
 
-			await expect(folder.delete()).resolves.toEqual({ ok: false, message: "The server is not reachable. Please try again later." });
+			expect(inEnglishDeep(await folder.delete())).toEqual({ ok: false, message: "The server is not reachable. Please try again later." });
 
 			deleteError = new ApiError(500, {});
-			await expect(folder.delete()).resolves.toEqual({ ok: false, message: "“Set pieces” couldn't be deleted." });
+			expect(inEnglishDeep(await folder.delete())).toEqual({ ok: false, message: "“Set pieces” couldn't be deleted." });
 		});
 
 		it("refuses at once, with the reason, when the folder is known to contain situations", async () => {
 			const outcome = await folder.requestDelete({ containsSituations: true, confirm });
 
-			expect(outcome).toEqual({ status: "refused", message: expect.stringContaining("still contains situations") });
+			expect(inEnglishDeep(outcome)).toEqual({ status: "refused", message: expect.stringContaining("still contains situations") });
 			expect(confirm).not.toHaveBeenCalled();
 			expect(calls).not.toContain("delete f1");
 		});
@@ -168,27 +169,27 @@ describe("CurrentFolder", () => {
 		it("asks “Delete folder?” before deleting an empty folder", async () => {
 			const outcome = await folder.requestDelete({ containsSituations: false, confirm });
 
-			expect(confirm).toHaveBeenCalledWith({
+			expect(inEnglishDeep(confirm.mock.calls[0][0])).toEqual({
 				title: "Delete folder?",
 				message: "“Set pieces” will be deleted.",
 				confirmLabel: "Delete",
 				cancelLabel: "Cancel",
 			});
-			expect(outcome).toEqual({ status: "deleted" });
+			expect(inEnglishDeep(outcome)).toEqual({ status: "deleted" });
 			expect(calls).toContain("delete f1");
 		});
 
 		it("keeps the folder when the question is cancelled", async () => {
 			confirm.mockResolvedValue(false);
 
-			await expect(folder.requestDelete({ containsSituations: false, confirm })).resolves.toEqual({ status: "cancelled" });
+			expect(inEnglishDeep(await folder.requestDelete({ containsSituations: false, confirm }))).toEqual({ status: "cancelled" });
 			expect(calls).not.toContain("delete f1");
 		});
 
 		it("passes on the server's refusal (situations got into it meanwhile)", async () => {
 			deleteError = new ApiError(409, { type: FolderApi.NOT_EMPTY });
 
-			await expect(folder.requestDelete({ containsSituations: false, confirm })).resolves.toEqual({
+			expect(inEnglishDeep(await folder.requestDelete({ containsSituations: false, confirm }))).toEqual({
 				status: "refused",
 				message: expect.stringContaining("still contains situations"),
 			});
@@ -196,7 +197,7 @@ describe("CurrentFolder", () => {
 	});
 
 	it("names an unloaded folder generically", async () => {
-		await expect(folder.requestDelete({ containsSituations: true, confirm })).resolves.toEqual({
+		expect(inEnglishDeep(await folder.requestDelete({ containsSituations: true, confirm }))).toEqual({
 			status: "refused",
 			message: "The folder can't be deleted because it still contains situations. Move or delete them first.",
 		});

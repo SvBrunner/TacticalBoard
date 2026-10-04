@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { i18n } from "$lib/i18n";
 import { cleanup, render, screen, fireEvent } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { ApiClient } from "$lib/api/ApiClient";
@@ -7,7 +8,7 @@ import { installDialogPolyfill } from "$lib/testing/dialogPolyfill";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
 import AccountArea from "./AccountArea.svelte";
 
-const ALICE = { id: "1", displayName: "Alice", isSystemAdministrator: false };
+const ALICE = { id: "1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null };
 
 async function settle() {
 	for (let i = 0; i < 10; i++) {
@@ -123,5 +124,15 @@ describe("AccountArea", () => {
 			const form = submitForm.mock.calls[0][0] as HTMLFormElement;
 			expect(form.querySelector<HTMLInputElement>("input[type=hidden]")!.value).toBe("token-1");
 		});
+	});
+
+	it("is German in German", async () => {
+		server.on("GET", "/api/me", problemResponse(401, {}));
+		await session.refresh();
+		i18n.select("de");
+		render(AccountArea, { props: { session, loginNotice: "blocked" } });
+
+		expect(screen.getByRole("link", { name: "Anmelden" })).toBeInTheDocument();
+		expect(screen.getByRole("status")).toHaveTextContent("Konto gesperrt.");
 	});
 });

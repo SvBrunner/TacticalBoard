@@ -23,7 +23,9 @@ public class SituationTitleTests
         Assert.True(SituationTitle.TryCreate(" " + new string('a', SituationTitle.MaxLength) + " ", out _, out _));
         Assert.False(SituationTitle.TryCreate(new string('a', SituationTitle.MaxLength + 1), out var title, out var error));
         Assert.Null(title);
-        Assert.Equal("expected at most 200 characters", error);
+        Assert.Equal("expected at most 200 characters", error?.Message);
+        Assert.Equal("too-long", error?.Code);
+        Assert.Equal(200, error?.Values["maxLength"]);
     }
 
     [Theory]
@@ -65,10 +67,50 @@ public class SituationTitleTests
     }
 
     [Fact]
-    public void A_numbered_title_gets_its_own_suffix() =>
+    public void A_taken_numbered_title_gets_the_next_number_instead_of_a_second_suffix() =>
         Assert.Equal(
-            "Powerplay (2) (2)",
+            "Powerplay (3)",
             SituationTitle.FromTrusted("Powerplay (2)").FirstFree(new HashSet<string> { "POWERPLAY (2)" }).Value);
+
+    [Fact]
+    public void Numbering_on_skips_taken_numbers_and_never_goes_back()
+    {
+        var taken = new HashSet<string> { "POWERPLAY (2)", "POWERPLAY (3)", "POWERPLAY (4)" };
+
+        Assert.Equal("Powerplay (5)", SituationTitle.FromTrusted("Powerplay (2)").FirstFree(taken).Value);
+        Assert.Equal(
+            "Powerplay (6)",
+            SituationTitle.FromTrusted("Powerplay (5)").FirstFree(new HashSet<string> { "POWERPLAY (5)" }).Value);
+    }
+
+    [Fact]
+    public void A_numbered_default_title_is_numbered_on_too() =>
+        Assert.Equal(
+            "Untitled Situation (3)",
+            SituationTitle.FromTrusted("Untitled Situation (2)").FirstFree(new HashSet<string> { "UNTITLED SITUATION (2)" }).Value);
+
+    [Fact]
+    public void A_free_numbered_title_stays_as_it_is() =>
+        Assert.Equal("Powerplay (2)", SituationTitle.FromTrusted("Powerplay (2)").FirstFree(new HashSet<string> { "POWERPLAY" }).Value);
+
+    [Theory]
+    [InlineData("Powerplay (2)", "Powerplay", 3)]
+    [InlineData("Powerplay (1)", "Powerplay", 2)]
+    [InlineData("Powerplay (10)", "Powerplay", 11)]
+    [InlineData("Powerplay", "Powerplay", 2)]
+    [InlineData("Powerplay (0)", "Powerplay (0)", 2)]
+    [InlineData("Powerplay (x)", "Powerplay (x)", 2)]
+    [InlineData("Powerplay(2)", "Powerplay(2)", 2)]
+    [InlineData("(2)", "(2)", 2)]
+    [InlineData("Powerplay (2) (3)", "Powerplay (2)", 4)]
+    [InlineData("Powerplay (1234567890)", "Powerplay (1234567890)", 2)]
+    public void Knows_where_numbering_starts(string title, string expectedBase, int expectedNumber)
+    {
+        var (numberedBase, number) = SituationTitle.FromTrusted(title).NumberingStart;
+
+        Assert.Equal(expectedBase, numberedBase.Value);
+        Assert.Equal(expectedNumber, number);
+    }
 
     [Fact]
     public void Restores_a_trusted_title_and_rejects_a_blank_one()

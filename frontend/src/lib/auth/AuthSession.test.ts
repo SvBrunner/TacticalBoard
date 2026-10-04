@@ -3,8 +3,9 @@ import { get } from "svelte/store";
 import { ApiClient } from "$lib/api/ApiClient";
 import { AuthSession, authSession, apiClient } from "./AuthSession";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
+import { de, inEnglishDeep, translateDeep } from "$lib/testing/i18n";
 
-const ALICE = { id: "0199a6d0-0000-7000-8000-000000000001", displayName: "Alice", isSystemAdministrator: false };
+const ALICE = { id: "0199a6d0-0000-7000-8000-000000000001", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null };
 
 describe("AuthSession", () => {
 	let server: FakeFetch;
@@ -96,21 +97,54 @@ describe("AuthSession", () => {
 			expect(request.headers["X-CSRF-TOKEN"]).toBe("token-1");
 		});
 
-		it("returns the server's validation message", async () => {
+		it("words the server's validation code in the UI language", async () => {
 			server.on(
 				"PUT",
 				"/api/me/display-name",
-				problemResponse(400, { type: "https://tacticalboard/errors/validation-failed", errors: { displayName: ["The display name must not be empty."] } }),
+				problemResponse(400, {
+					type: "https://tacticalboard/errors/validation-failed",
+					errors: { displayName: ["The display name must be at most 100 characters long."] },
+					fieldErrors: { displayName: [{ code: "too-long", maxLength: 100 }] },
+				}),
 			);
 
-			await expect(session.changeDisplayName(" ")).resolves.toEqual({ ok: false, message: "The display name must not be empty." });
+			const result = await session.changeDisplayName("x".repeat(101));
+
+			expect(inEnglishDeep(result)).toEqual({ ok: false, message: "The display name must be at most 100 characters long." });
+			expect(translateDeep(result, de)).toEqual({ ok: false, message: "Der Anzeigename darf höchstens 100 Zeichen lang sein." });
+		});
+
+		it("words an empty name from its code, never the server's English text", async () => {
+			server.on(
+				"PUT",
+				"/api/me/display-name",
+				problemResponse(400, {
+					type: "https://tacticalboard/errors/validation-failed",
+					errors: { displayName: ["Server text."] },
+					fieldErrors: { displayName: [{ code: "required" }] },
+				}),
+			);
+
+			const result = await session.changeDisplayName(" ");
+
+			expect(inEnglishDeep(result)).toEqual({ ok: false, message: "The display name must not be empty." });
 			expect(get(session.state)).toEqual({ status: "authenticated", user: ALICE });
 		});
 
 		it("falls back to a generic message for other errors", async () => {
 			server.on("PUT", "/api/me/display-name", problemResponse(500, {}));
 
-			await expect(session.changeDisplayName("Coach")).resolves.toEqual({ ok: false, message: "The display name couldn't be saved." });
+			expect(inEnglishDeep(await session.changeDisplayName("Coach"))).toEqual({ ok: false, message: "The display name couldn't be saved." });
+		});
+
+		it("falls back to the generic message for a validation problem without codes", async () => {
+			server.on(
+				"PUT",
+				"/api/me/display-name",
+				problemResponse(400, { type: "https://tacticalboard/errors/validation-failed", errors: { displayName: ["English only."] } }),
+			);
+
+			expect(inEnglishDeep(await session.changeDisplayName("Coach"))).toEqual({ ok: false, message: "Some of the data is invalid." });
 		});
 
 		it("becomes anonymous when the session has ended", async () => {
@@ -118,17 +152,57 @@ describe("AuthSession", () => {
 
 			const result = await session.changeDisplayName("Coach");
 
-			expect(result).toEqual({ ok: false, message: "Your session has ended. Please log in again." });
+			expect(inEnglishDeep(result)).toEqual({ ok: false, message: "Your session has ended. Please log in again." });
 			expect(get(session.state)).toEqual({ status: "anonymous" });
 		});
 
 		it("reports an unreachable server", async () => {
 			server.failOn("PUT", "/api/me/display-name");
 
-			await expect(session.changeDisplayName("Coach")).resolves.toEqual({
+			expect(inEnglishDeep(await session.changeDisplayName("Coach"))).toEqual({
 				ok: false,
 				message: "The server is not reachable. Please try again later.",
 			});
+		});
+	});
+
+	describe("changeLanguage", () => {
+		beforeEach(async () => {
+			server.on("GET", "/api/me", jsonResponse(200, ALICE));
+			await session.refresh();
+		});
+
+		it("stores the language in the account and carries it in the state", async () => {
+			server.on("PUT", "/api/me/language", jsonResponse(200, { ...ALICE, preferredLanguage: "de" }));
+
+			await expect(session.changeLanguage("de")).resolves.toBe(true);
+
+			expect(get(session.state)).toEqual({ status: "authenticated", user: { ...ALICE, preferredLanguage: "de" } });
+			const [request] = server.requestsTo("/api/me/language");
+			expect(request.method).toBe("PUT");
+			expect(JSON.parse(request.body!)).toEqual({ language: "de" });
+			expect(request.headers["X-CSRF-TOKEN"]).toBe("token-1");
+		});
+
+		it("reports a failure without changing the state", async () => {
+			server.on("PUT", "/api/me/language", problemResponse(500, {}));
+
+			await expect(session.changeLanguage("de")).resolves.toBe(false);
+			expect(get(session.state)).toEqual({ status: "authenticated", user: ALICE });
+		});
+
+		it("reports no server without changing the state", async () => {
+			server.failOn("PUT", "/api/me/language");
+
+			await expect(session.changeLanguage("de")).resolves.toBe(false);
+			expect(get(session.state)).toEqual({ status: "authenticated", user: ALICE });
+		});
+
+		it("becomes anonymous when the session has ended", async () => {
+			server.on("PUT", "/api/me/language", problemResponse(401, {}));
+
+			await expect(session.changeLanguage("de")).resolves.toBe(false);
+			expect(get(session.state)).toEqual({ status: "anonymous" });
 		});
 	});
 

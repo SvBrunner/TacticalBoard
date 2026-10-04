@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using TacticalBoard.Areas.Contracts;
 using TacticalBoard.Folders.Application;
 using TacticalBoard.Folders.Domain;
+using TacticalBoard.SharedKernel.Validation;
 
 namespace TacticalBoard.Folders.Endpoints;
 
@@ -100,6 +101,9 @@ internal static class FolderEndpoints
         return TypedResults.NoContent();
     }
 
-    private static ValidationProblem NameProblem(string error) =>
-        TypedResults.ValidationProblem(new Dictionary<string, string[]> { [NameField] = [error] });
+    private static ValidationProblem NameProblem(FieldError error)
+    {
+        var errors = new FieldErrors().Add(NameField, error);
+        return TypedResults.ValidationProblem(errors.Messages(), extensions: errors.Extensions());
+    }
 }

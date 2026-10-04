@@ -72,6 +72,15 @@ describe("SituationApi", () => {
 		expect(JSON.parse(request.body!)).toEqual({ document: { format: "doc" }, origin: "new" });
 	});
 
+	it("tells the server when a new situation has a default title", async () => {
+		server.on("POST", SituationApi.PERSONAL_AREA_PATH, jsonResponse(201, { ...summary, revision: 1, document: {} }));
+
+		await api.create({ format: "doc" }, "new", TOP_LEVEL, { titleIsDefault: true });
+
+		const [request] = server.requestsTo(SituationApi.PERSONAL_AREA_PATH);
+		expect(JSON.parse(request.body!)).toEqual({ document: { format: "doc" }, origin: "new", titleIsDefault: true });
+	});
+
 	it("moves with the target folder (or null) and no If-Match", async () => {
 		server.on("PUT", "/api/situations/s1/folder", jsonResponse(200, { ...summary, folderId: "f1" }));
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { i18n } from "$lib/i18n";
 import { render, fireEvent, screen, within } from "@testing-library/svelte";
 import TopBar from "./TopBar.svelte";
 import { theme } from "$lib/theme";
@@ -372,5 +373,24 @@ describe("TopBar", () => {
 				expect(onHome).not.toHaveBeenCalled();
 			},
 		);
+	});
+
+	it("is German in German", () => {
+		i18n.select("de");
+		render(TopBar, { props: props({ onSave: vi.fn() }) });
+
+		expect(screen.getByRole("button", { name: "Rückgängig" })).toHaveAttribute("title", "Rückgängig (Strg+Z)");
+		expect(screen.getByRole("button", { name: "Speichern" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Neu" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Laden" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Exportieren" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Situationsdatei (JSON)", hidden: true })).toBeInTheDocument();
+	});
+
+	it("disables Save when there is nothing to save", () => {
+		render(TopBar, { props: props({ onSave: vi.fn(), hasChanges: false }) });
+
+		expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+		expect(screen.getByRole("button", { name: "Save" })).toHaveAttribute("title", "Save (no unsaved changes)");
 	});
 });

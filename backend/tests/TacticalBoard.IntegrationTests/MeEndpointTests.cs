@@ -89,7 +89,51 @@ public sealed class MeEndpointTests(PostgresFixture postgres) : IAsyncLifetime
         var problem = await ProblemAsync(response);
         Assert.Equal("https://tacticalboard/errors/validation-failed", problem.GetProperty("type").GetString());
         Assert.Equal(JsonValueKind.Array, problem.GetProperty("errors").GetProperty("displayName").ValueKind);
+        var code = problem.GetProperty("fieldErrors").GetProperty("displayName")[0].GetProperty("code").GetString();
+        Assert.True(code is "required" or "too-long", code);
         Assert.Equal("Alice", (await browser.MeAsync()).GetProperty("displayName").GetString());
+    }
+
+    [Fact]
+    public async Task A_new_user_has_no_language_until_they_choose_one_and_it_survives_a_new_login()
+    {
+        using var browser = _factory.CreateBrowser();
+        await browser.LoginSuccessfullyAsync("alice", TestClaims.Profile("Alice"));
+        Assert.Equal(JsonValueKind.Null, (await browser.MeAsync()).GetProperty("preferredLanguage").ValueKind);
+
+        using var response = await browser.SendJsonAsync(HttpMethod.Put, "/api/me/language", new { language = "de-CH" }, await browser.AntiforgeryTokenAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+        Assert.Equal("de-ch", body.GetProperty("preferredLanguage").GetString());
+        using var again = _factory.CreateBrowser();
+        await again.LoginSuccessfullyAsync("alice", TestClaims.Profile("Alice"));
+        Assert.Equal("de-ch", (await again.MeAsync()).GetProperty("preferredLanguage").GetString());
+    }
+
+    [Fact]
+    public async Task Rejects_an_invalid_language_with_a_stable_code()
+    {
+        using var browser = _factory.CreateBrowser();
+        await browser.LoginSuccessfullyAsync("alice", TestClaims.Profile("Alice"));
+
+        using var response = await browser.SendJsonAsync(HttpMethod.Put, "/api/me/language", new { language = "Deutsch!" }, await browser.AntiforgeryTokenAsync());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await ProblemAsync(response);
+        Assert.Equal("https://tacticalboard/errors/validation-failed", problem.GetProperty("type").GetString());
+        Assert.Equal("unsupported-language", problem.GetProperty("fieldErrors").GetProperty("language")[0].GetProperty("code").GetString());
+        Assert.Equal(JsonValueKind.Null, (await browser.MeAsync()).GetProperty("preferredLanguage").ValueKind);
+    }
+
+    [Fact]
+    public async Task Changing_the_language_needs_a_session()
+    {
+        using var browser = _factory.CreateBrowser();
+
+        using var response = await browser.SendJsonAsync(HttpMethod.Put, "/api/me/language", new { language = "de" }, await browser.AntiforgeryTokenAsync());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]

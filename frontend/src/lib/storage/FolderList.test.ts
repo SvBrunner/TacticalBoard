@@ -1,3 +1,4 @@
+import { inEnglishDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
 import { FolderApi, type Folder } from "./FolderApi";
@@ -40,14 +41,14 @@ describe("FolderList", () => {
 	});
 
 	it("is idle until loaded, then holds the server's folders", async () => {
-		expect(list.current()).toEqual({ status: "idle" });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "idle" });
 		expect(list.folders()).toEqual([]);
 
 		const loading = list.load();
-		expect(list.current()).toEqual({ status: "loading" });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "loading" });
 		await loading;
 
-		expect(list.current()).toEqual({ status: "loaded", folders });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "loaded", folders });
 		expect(list.folders()).toEqual(folders);
 	});
 
@@ -60,7 +61,7 @@ describe("FolderList", () => {
 
 		await list.load();
 
-		expect(list.current()).toEqual({ status: "failed", message });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "failed", message });
 	});
 
 	it("an ended session refreshes the login state", async () => {
@@ -76,7 +77,7 @@ describe("FolderList", () => {
 
 		const result = await list.create("Set pieces");
 
-		expect(result).toEqual({ ok: true, folder: folderOf("f2", "Set pieces") });
+		expect(inEnglishDeep(result)).toEqual({ ok: true, folder: folderOf("f2", "Set pieces") });
 		expect(list.folders().map((folder) => folder.name)).toEqual(["Breakouts", "Set pieces"]);
 		expect(log.notify).toHaveBeenCalledWith('Created folder "Set pieces"', "info");
 	});
@@ -87,21 +88,21 @@ describe("FolderList", () => {
 
 		const result = await list.create("breakouts");
 
-		expect(result).toEqual({ ok: false, message: "A folder named “breakouts” already exists. Choose another name." });
-		expect(list.current()).toEqual({ status: "loaded", folders });
+		expect(inEnglishDeep(result)).toEqual({ ok: false, message: "A folder named “breakouts” already exists. Choose another name." });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "loaded", folders });
 	});
 
 	it("reports an ended session on create", async () => {
 		createError = new ApiError(401, {});
 
-		await expect(list.create("Set pieces")).resolves.toEqual({ ok: false, message: "Your session has ended. Please log in again." });
+		expect(inEnglishDeep(await list.create("Set pieces"))).toEqual({ ok: false, message: "Your session has ended. Please log in again." });
 		expect(onSessionEnded).toHaveBeenCalledOnce();
 	});
 
 	it("reports any other failure on create", async () => {
 		createError = new ApiError(500, {});
 
-		await expect(list.create("Set pieces")).resolves.toEqual({ ok: false, message: "The folder couldn't be created." });
+		expect(inEnglishDeep(await list.create("Set pieces"))).toEqual({ ok: false, message: "The folder couldn't be created." });
 		expect(log.notify).toHaveBeenCalledWith("The folder couldn't be created.", "error");
 	});
 

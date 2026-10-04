@@ -1,6 +1,8 @@
 import { get, writable, type Readable } from "svelte/store";
 import { ApiError } from "$lib/api/ApiClient";
 import type { ConfirmationRequest } from "$lib/dialogs/ConfirmationPrompt";
+import { inEnglish } from "$lib/i18n";
+import type { Translatable } from "$lib/i18n/Messages";
 import { FolderApi, type Folder } from "./FolderApi";
 import { FolderMessages, type FolderChange, type FolderDeletion } from "./FolderMessages";
 
@@ -9,7 +11,7 @@ export type DeleteRequestOutcome =
 	| { readonly status: "deleted" }
 	| { readonly status: "cancelled" }
 	/** Not deleted, and why (e.g. it still contains situations). */
-	| { readonly status: "refused"; readonly message: string };
+	| { readonly status: "refused"; readonly message: Translatable };
 
 /** The state of the folder shown on its page. */
 export type CurrentFolderState =
@@ -17,7 +19,7 @@ export type CurrentFolderState =
 	| { readonly status: "loaded"; readonly folder: Folder }
 	/** It doesn't exist (any more), or belongs to someone else. */
 	| { readonly status: "missing" }
-	| { readonly status: "failed"; readonly message: string };
+	| { readonly status: "failed"; readonly message: Translatable };
 
 export interface CurrentFolderDependencies {
 	readonly api: {
@@ -63,7 +65,7 @@ export class CurrentFolder {
 				this.store.set({ status: "missing" });
 				return;
 			}
-			this.store.set({ status: "failed", message: this.failure(error, "The folder couldn't be loaded.") });
+			this.store.set({ status: "failed", message: this.failure(error, (m) => m.folders.loadOneFailed) });
 		}
 	}
 
@@ -76,7 +78,7 @@ export class CurrentFolder {
 			return { ok: true, folder };
 		} catch (error) {
 			this.markMissingOn(error);
-			return { ok: false, message: this.failure(error, "The folder couldn't be renamed.", name) };
+			return { ok: false, message: this.failure(error, (m) => m.folders.renameFailed, name) };
 		}
 	}
 
@@ -96,10 +98,10 @@ export class CurrentFolder {
 			return { status: "refused", message: FolderMessages.notEmpty(name) };
 		}
 		const confirmed = await options.confirm({
-			title: "Delete folder?",
-			message: `${FolderMessages.subject(name)} will be deleted.`,
-			confirmLabel: "Delete",
-			cancelLabel: "Cancel",
+			title: (m) => m.folders.deleteQuestion,
+			message: (m) => m.folders.deleteMessage(name),
+			confirmLabel: (m) => m.common.delete,
+			cancelLabel: (m) => m.common.cancel,
 		});
 		if (!confirmed) {
 			return { status: "cancelled" };
@@ -125,7 +127,7 @@ export class CurrentFolder {
 				this.store.set({ status: "missing" });
 				return { ok: true };
 			}
-			return { ok: false, message: this.failure(error, `${FolderMessages.subject(name)} couldn't be deleted.`) };
+			return { ok: false, message: this.failure(error, (m) => m.folders.deleteFailed(name)) };
 		}
 	}
 
@@ -135,12 +137,12 @@ export class CurrentFolder {
 		}
 	}
 
-	private failure(error: unknown, fallback: string, name?: string): string {
+	private failure(error: unknown, fallback: Translatable, name?: string): Translatable {
 		if (FolderMessages.isSessionEnded(error)) {
 			this.deps.onSessionEnded?.();
 		}
 		const message = name === undefined ? FolderMessages.general(error, fallback) : FolderMessages.forNameChange(error, name, fallback);
-		this.log(message, "error");
+		this.log(inEnglish(message), "error");
 		return message;
 	}
 

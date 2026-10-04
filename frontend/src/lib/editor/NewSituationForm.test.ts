@@ -12,14 +12,7 @@ describe("NewSituationForm", () => {
 	});
 
 	it("offers full and half field, full first", () => {
-		expect(NewSituationForm.fieldTypeOptions).toEqual([
-			{ value: "full", label: "Full field" },
-			{ value: "half", label: "Half field" },
-		]);
-	});
-
-	it("uses the default title as placeholder", () => {
-		expect(NewSituationForm.titlePlaceholder).toBe("Untitled Situation");
+		expect(NewSituationForm.fieldTypeOptions).toEqual([{ value: "full" }, { value: "half" }]);
 	});
 
 	it("converts its values into the editor input", () => {
@@ -27,22 +20,23 @@ describe("NewSituationForm", () => {
 		form.title = "Powerplay";
 		form.fieldType = "half";
 
-		expect(form.toInput()).toEqual({ title: "Powerplay", fieldType: "half" });
+		expect(form.toInput("Untitled Situation")).toEqual({ title: "Powerplay", fieldType: "half" });
 	});
 
 	it("trims the title", () => {
 		const form = new NewSituationForm();
 		form.title = "  Breakout  ";
 
-		expect(form.toInput().title).toBe("Breakout");
+		expect(form.toInput("Untitled Situation").title).toBe("Breakout");
 	});
 
-	it("allows a blank title (the editor stores the default title)", () => {
+	it("allows a blank title, which becomes the given default title (that of the UI language)", () => {
 		const form = new NewSituationForm();
 		form.title = "   ";
 
 		expect(form.isValid).toBe(true);
-		expect(form.toInput().title).toBe("");
+		expect(form.toInput("Untitled Situation").title).toBe("Untitled Situation");
+		expect(form.toInput("Unbenannte Situation").title).toBe("Unbenannte Situation");
 	});
 
 	it("is invalid with an unknown field type", () => {
@@ -50,7 +44,7 @@ describe("NewSituationForm", () => {
 		form.fieldType = "quarter" as FieldType;
 
 		expect(form.isValid).toBe(false);
-		expect(() => form.toInput()).toThrow(/field type/);
+		expect(() => form.toInput("Untitled Situation")).toThrow(/field type/);
 	});
 
 	it("reset restores the defaults", () => {

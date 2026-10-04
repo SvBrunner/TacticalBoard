@@ -285,7 +285,8 @@ internal sealed class SituationService(
         Guid? exceptSituationId,
         CancellationToken cancellationToken)
     {
-        var taken = await situations.FindTakenTitlesAsync(area, title.Normalized, exceptSituationId, cancellationToken);
+        // The numbered variants share the base of the title ("Powerplay (2)" → "Powerplay (3)").
+        var taken = await situations.FindTakenTitlesAsync(area, title.NumberingStart.Base.Normalized, exceptSituationId, cancellationToken);
         if (numbered)
         {
             return title.FirstFree(taken);

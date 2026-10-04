@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ElementCatalog, elementCatalog } from "./ElementCatalog";
 import { ARROW_ELEMENT_TYPES, ELEMENT_TYPES, POINT_ELEMENT_TYPES } from "$lib/model/elements/ElementType";
+import { de, en } from "$lib/testing/i18n";
 
 describe("ElementCatalog", () => {
 	const catalog = new ElementCatalog();
@@ -18,9 +19,19 @@ describe("ElementCatalog", () => {
 		]);
 	});
 
-	it("offers every model element type exactly once, named after it", () => {
+	it("offers every model element type exactly once, each with a name in every language", () => {
 		expect(catalog.kinds.map((kind) => kind.type).sort()).toEqual([...ELEMENT_TYPES].sort());
-		expect(catalog.kinds.every((kind) => kind.name === kind.type)).toBe(true);
+		expect(catalog.kinds.every((kind) => en.elements[kind.type] === kind.type)).toBe(true);
+		expect(catalog.kinds.map((kind) => de.elements[kind.type])).toEqual([
+			"Spieler",
+			"Ball",
+			"Pass",
+			"Lauf",
+			"Schuss",
+			"Rechteck",
+			"Dreieck",
+			"Kreis",
+		]);
 	});
 
 	it("kindsLike returns the kinds of the same family, in display order", () => {
@@ -31,7 +42,7 @@ describe("ElementCatalog", () => {
 	});
 
 	it("has four named player colors, the first being the default", () => {
-		expect(catalog.playerColors.map((color) => color.name)).toEqual(["Team A", "Team B", "Team C", "Team D"]);
+		expect(catalog.playerColors.map((color) => en.colors[color.id])).toEqual(["Team A", "Team B", "Team C", "Team D"]);
 		expect(catalog.defaultPlayerColor).toBe(catalog.playerColors[0].value);
 	});
 
@@ -44,7 +55,8 @@ describe("ElementCatalog", () => {
 	});
 
 	it("offers the player colors, grey and black as the edit palette, so every initial color is in it", () => {
-		expect(catalog.colors.map((color) => color.name)).toEqual(["Team A", "Team B", "Team C", "Team D", "Grey", "Black"]);
+		expect(catalog.colors.map((color) => en.colors[color.id])).toEqual(["Team A", "Team B", "Team C", "Team D", "Grey", "Black"]);
+		expect(catalog.colors.map((color) => de.colors[color.id])).toEqual(["Team A", "Team B", "Team C", "Team D", "Grau", "Schwarz"]);
 		const values = catalog.colors.map((color) => color.value);
 		expect(values).toContain(catalog.neutralColor);
 		expect(values).toContain(catalog.arrowColor);
@@ -52,9 +64,10 @@ describe("ElementCatalog", () => {
 	});
 
 	it("colorName names palette colors and falls back to the value", () => {
-		expect(catalog.colorName(catalog.arrowColor)).toBe("Black");
-		expect(catalog.colorName("oklch(64% 0.16 32)")).toBe("Team B");
-		expect(catalog.colorName("hotpink")).toBe("hotpink");
+		expect(catalog.colorName(catalog.arrowColor, en)).toBe("Black");
+		expect(catalog.colorName(catalog.arrowColor, de)).toBe("Schwarz");
+		expect(catalog.colorName("oklch(64% 0.16 32)", en)).toBe("Team B");
+		expect(catalog.colorName("hotpink", en)).toBe("hotpink");
 	});
 
 	it("exports a shared instance", () => {

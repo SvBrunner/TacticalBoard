@@ -6,6 +6,6 @@ public enum AreaKind
     /// <summary>A user's personal area; only its owner may read and write it.</summary>
     Personal,
 
-    /// <summary>A team's area (Phase 2 step 7; no access rule is registered yet, so access is denied).</summary>
+    /// <summary>A team's area (Phase 2 step 8; no access rule is registered yet, so access is denied).</summary>
     Team,
 }

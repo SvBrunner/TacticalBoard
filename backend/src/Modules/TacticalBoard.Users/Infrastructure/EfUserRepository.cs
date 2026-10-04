@@ -31,7 +31,7 @@ internal sealed class EfUserRepository(TacticalBoardDbContext context) : IUserRe
         Users
             .AsNoTracking()
             .Where(user => user.Id == id)
-            .Select(user => new SessionUser(user.Id, user.DisplayNameValue, user.IsSystemAdministrator, user.IsBlocked))
+            .Select(user => new SessionUser(user.Id, user.DisplayNameValue, user.IsSystemAdministrator, user.IsBlocked, user.PreferredLanguageValue))
             .SingleOrDefaultAsync(cancellationToken);
 
     public async Task<IReadOnlyDictionary<Guid, string>> FindDisplayNamesAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)

@@ -1,3 +1,4 @@
+import { inEnglishDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { ConfirmationRequest } from "$lib/dialogs/ConfirmationPrompt";
 import { Frame } from "$lib/model/Frame";
@@ -48,7 +49,7 @@ describe("SavedSituationActions", () => {
 
 			expect(opener.open).toHaveBeenCalledWith("s1", confirmDiscard);
 			expect(navigate).toHaveBeenCalledWith("/editor?situation=s1");
-			expect(actions.current()).toEqual({ opening: false, error: null });
+			expect(inEnglishDeep(actions.current())).toEqual({ opening: false, error: null });
 		});
 
 		it("is busy while opening", async () => {
@@ -73,11 +74,11 @@ describe("SavedSituationActions", () => {
 		});
 
 		it("shows why it couldn't be opened and reloads the list", async () => {
-			outcome = { status: "failed", message: "This situation no longer exists." };
+			outcome = { status: "failed", message: () => "This situation no longer exists." };
 
 			await actions.open(powerplay);
 
-			expect(actions.current()).toEqual({ opening: false, error: '"Powerplay" couldn\'t be opened. This situation no longer exists.' });
+			expect(inEnglishDeep(actions.current())).toEqual({ opening: false, error: '“Powerplay” couldn\'t be opened. This situation no longer exists.' });
 			expect(list.load).toHaveBeenCalledOnce();
 			expect(navigate).not.toHaveBeenCalled();
 		});
@@ -87,7 +88,7 @@ describe("SavedSituationActions", () => {
 		it("asks “Delete situation?” and deletes", async () => {
 			await expect(actions.delete(powerplay)).resolves.toBe(true);
 
-			expect(confirm).toHaveBeenCalledWith({
+			expect(inEnglishDeep(confirm.mock.calls[0][0])).toEqual({
 				title: "Delete situation?",
 				message: "“Powerplay” will be deleted.",
 				confirmLabel: "Delete",
@@ -104,7 +105,7 @@ describe("SavedSituationActions", () => {
 		});
 
 		it("clears an earlier open failure", async () => {
-			outcome = { status: "failed", message: "Gone." };
+			outcome = { status: "failed", message: () => "Gone." };
 			await actions.open(powerplay);
 
 			await actions.delete(powerplay);
@@ -121,7 +122,7 @@ describe("SavedSituationActions", () => {
 		});
 
 		it("passes on a failed move and clears an earlier open failure", async () => {
-			outcome = { status: "failed", message: "Gone." };
+			outcome = { status: "failed", message: () => "Gone." };
 			await actions.open(powerplay);
 			list.move.mockResolvedValue(false);
 

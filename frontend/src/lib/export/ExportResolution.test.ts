@@ -1,3 +1,4 @@
+import { de, en } from "$lib/testing/i18n";
 import { describe, it, expect } from "vitest";
 import { BoardViewport } from "$lib/board/BoardViewport";
 import { FieldDimensions } from "$lib/model/FieldDimensions";
@@ -5,12 +6,13 @@ import { ExportResolution } from "./ExportResolution";
 
 describe("ExportResolution", () => {
 	it("offers Small, Medium and Large, smallest first, with Medium as the default", () => {
-		expect(ExportResolution.ALL.map((resolution) => [resolution.id, resolution.label, resolution.longSide])).toEqual([
+		expect(ExportResolution.ALL.map((resolution) => [resolution.id, en.exportGif.resolutions[resolution.id], resolution.longSide])).toEqual([
 			["small", "Small", 600],
 			["medium", "Medium", 1200],
 			["large", "Large", 1800],
 		]);
 		expect(ExportResolution.DEFAULT).toBe(ExportResolution.MEDIUM);
+		expect(ExportResolution.ALL.map((resolution) => de.exportGif.resolutions[resolution.id])).toEqual(["Klein", "Mittel", "Groß"]);
 	});
 
 	it("finds a preset by id and rejects unknown ids", () => {

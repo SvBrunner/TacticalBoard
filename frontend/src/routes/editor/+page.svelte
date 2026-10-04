@@ -27,7 +27,6 @@
 	import { SituationFileTransfer } from "$lib/editor/SituationFileTransfer";
 	import { SituationWorkflow } from "$lib/editor/SituationWorkflow";
 	import { FrameWorkflow } from "$lib/editor/FrameWorkflow";
-	import { DEFAULT_SITUATION_TITLE } from "$lib/model/Situation";
 	import { notifications } from "$lib/debug/Notifications";
 	import { UndoRedoShortcuts } from "$lib/history/UndoRedoShortcuts";
 	import { PlaybackWorkflow } from "$lib/editor/PlaybackWorkflow";
@@ -52,11 +51,15 @@
 	import { situationLink } from "$lib/storage/SituationLink";
 	import { SituationSaver, type ConflictChoice } from "$lib/storage/SituationSaver";
 	import { situationApi, situationSerializer } from "$lib/storage/situationStorage";
+	import { defaultTitles, englishMessages, t } from "$lib/i18n";
 
 	const elements = situationEditor.elements;
 	const situation = situationEditor.situation;
 	const history = situationEditor.history;
 	const activeFrame = situationEditor.activeFrame;
+	const unsavedChanges = situationEditor.hasUnsavedChanges;
+	/** The title as shown: a blank title as the default title of the UI language. */
+	const shownTitle = $derived($situation.title.trim() === "" ? $t.situation.defaultTitle : $situation.title);
 	const activeFrameNumber = $derived($situation.indexOfFrame($activeFrame.id) + 1);
 	const frameCount = $derived($situation.frames.length);
 
@@ -98,6 +101,7 @@
 		files: new SituationFileTransfer(),
 		link: situationLink,
 		confirm: (request) => prompt.request(request),
+		isLoggedIn: () => authSession.current().status === "authenticated",
 		log: notifications,
 	});
 
@@ -105,6 +109,8 @@
 	const sessionState = authSession.state;
 	const canSave = $derived($sessionState.status === "authenticated");
 	const linkState = situationLink.state;
+	/** Something to save: never saved on the server, or changed since (arc42 ch. 8.7). */
+	const hasChanges = $derived(SituationSaver.hasChanges($linkState, $unsavedChanges));
 	const conflictPrompt = new ChoicePrompt<true, ConflictChoice>("cancel");
 	const conflictPending = conflictPrompt.pending;
 	const saver = new SituationSaver({
@@ -114,6 +120,7 @@
 		serializer: situationSerializer,
 		chooseOnConflict: () => conflictPrompt.request(true),
 		onSessionEnded: () => void authSession.refresh(),
+		isDefaultTitle: (title) => defaultTitles.matches(title),
 		// The URL names the saved situation, so a reload restores it.
 		onSaved: (saved) => void goto(EditorRoute.forSaved(saved.id), { replaceState: true, keepFocus: true, noScroll: true }),
 		log: notifications,
@@ -236,7 +243,7 @@
 			return;
 		}
 		tools.selectPlayerColor(color);
-		notifications.notify(`Player color: ${elementCatalog.colorName(color)}`);
+		notifications.notify(`Player color: ${elementCatalog.colorName(color, englishMessages)}`);
 	}
 
 	function handleUndo() {
@@ -288,12 +295,12 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <svelte:head>
-	<title>{$situation.displayTitle} · Tactical Board</title>
+	<title>{$t.app.pageTitle(shownTitle)}</title>
 </svelte:head>
 
 <div class="editor">
 	<TopBar
-		title={$situation.displayTitle}
+		title={shownTitle}
 		onHome={handleHome}
 		onNew={() => dialogs.startNew()}
 		onExportJson={() => workflow.exportCurrent()}
@@ -306,6 +313,7 @@
 		onSave={canSave ? handleSave : undefined}
 		loginReturnTo={$linkState.kind === "saved" ? EditorRoute.forSaved($linkState.summary.id) : "/"}
 		saving={$saveState.status === "saving"}
+		{hasChanges}
 	>
 		{#snippet status()}
 			<SaveStatus state={$saveState} onDismiss={() => saver.dismiss()} />
@@ -362,7 +370,7 @@
 		<SituationDetails
 			title={$situation.title}
 			description={$situation.description}
-			titlePlaceholder={DEFAULT_SITUATION_TITLE}
+			titlePlaceholder={$t.situation.defaultTitle}
 			onTitleChange={(title) => !player.isActive() && situationEditor.changeTitle(title)}
 			onDescriptionChange={(description) => !player.isActive() && situationEditor.changeDescription(description)}
 			disabled={playing}

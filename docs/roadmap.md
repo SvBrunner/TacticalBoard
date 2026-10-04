@@ -42,11 +42,13 @@ Next, in this order:
 3. [x] **Personal area — situations**: save (button, Ctrl+S), open, delete; revisions and metadata, title uniqueness and default titles, conflict warning (overwrite / save as copy), created/changed by; the start page lists the saved situations.
    *First real use of the backend; establishes the save flow that teams reuse.*
 4. [x] **Personal area — folders**: create, rename (unique names), delete (only if empty); situations in folders or at the top level, moving them between folders; "New situation"/"Import" from a folder saves there.
-5. [ ] **Teams**: create (unique name, optional logo, generated code), overview page with search (logged in), team page via link; the start page lists the user's teams.
-6. [ ] **Membership**: join requests (accept/reject, re-request after rejection), roles and member management, member list, leaving, deleting a team (with confirmation).
-7. [ ] **Team situations and folders** with the permission matrix (ch. 8.1).
-8. [ ] **System administration**: user list, block/unblock, delete users, grant/revoke system administrator, team management.
-9. [ ] **Account deletion** (by the user and by a system administrator), incl. the last-Admin rule.
+5. [x] **Localization**: German and English (English the fallback; another language needs only a new translation file); all system texts translated, user content never; the browser's language at the start, a language switcher in the navbar, remembered in the browser and in the account (the account's language wins on login); the backend sends stable error codes (also per invalid field) that the frontend words. Plus the step-3 follow-ups: an export no longer counts as saved while logged in, numbered titles are numbered on ("Powerplay (2)" → "Powerplay (3)"), Save is disabled without unsaved changes.
+   *Before teams, so every later screen is built translatable from the start.*
+6. [ ] **Teams**: create (unique name, optional logo, generated code), overview page with search (logged in), team page via link; the start page lists the user's teams.
+7. [ ] **Membership**: join requests (accept/reject, re-request after rejection), roles and member management, member list, leaving, deleting a team (with confirmation).
+8. [ ] **Team situations and folders** with the permission matrix (ch. 8.1).
+9. [ ] **System administration**: user list, block/unblock, delete users, grant/revoke system administrator, team management.
+10. [ ] **Account deletion** (by the user and by a system administrator), incl. the last-Admin rule.
 
 ## Later
 
@@ -58,4 +60,7 @@ Next, in this order:
 
 ## Open questions
 
-_None at the moment._
+- **Localization (step 5):** When a user logs in whose account has no language yet, the browser's current language stays and nothing is written to the account until the user picks one in the switcher. Should the current language be stored in the account automatically instead?
+- **Localization (step 5):** A new situation's default title is stored in the UI language of the moment ("Unbenannte Situation") and stays so when the language changes later (it is user content then). Is that wanted, or should default titles always be stored in one language?
+- **Localization (step 5):** The technical detail of a failed GIF export or share (a browser/encoder message) is shown in English inside the localized message, and server field errors name the field by its technical path (e.g. "document.situation.title darf höchstens 200 Zeichen lang sein"). Good enough, or should these be worded differently?
+- **Numbered titles (step 5):** A title ending with " (n)" is numbered on from n + 1 ("Powerplay (5)" → "Powerplay (6)", even if "Powerplay (2)" is free). Confirm that lower free numbers are not to be reused.

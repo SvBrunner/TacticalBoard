@@ -4,7 +4,7 @@ import { tick } from "svelte";
 import { installDialogPolyfill, pressEscapeIn } from "$lib/testing/dialogPolyfill";
 import FolderNameDialog from "./FolderNameDialog.svelte";
 
-type Outcome = { ok: true } | { ok: false; message: string };
+type Outcome = { ok: true } | { ok: false; message: (m: unknown) => string };
 
 function props(overrides: Record<string, unknown> = {}) {
 	return {
@@ -99,7 +99,7 @@ describe("FolderNameDialog", () => {
 	});
 
 	it("shows the server's message (e.g. a taken name) and stays open", async () => {
-		const p = props({ onSubmit: vi.fn(async (): Promise<Outcome> => ({ ok: false, message: "A folder named “A” already exists." })) });
+		const p = props({ onSubmit: vi.fn(async (): Promise<Outcome> => ({ ok: false, message: () => "A folder named “A” already exists." })) });
 		render(FolderNameDialog, { props: p });
 
 		await fireEvent.input(input(), { target: { value: "A" } });

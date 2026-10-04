@@ -8,6 +8,7 @@ button; the active tool stays marked.
 -->
 <script lang="ts">
 	import type { Tool } from "$lib/board/ToolState";
+	import { t } from "$lib/i18n";
 	import { elementCatalog } from "./ElementCatalog";
 	import ElementIcon from "./ElementIcon.svelte";
 
@@ -32,25 +33,25 @@ button; the active tool stays marked.
 	}
 </script>
 
-<aside class="tool-panel" aria-label="Tools">
+<aside class="tool-panel" aria-label={$t.tools.panel}>
 	<div class="tools-row">
 		<button
 			type="button"
 			class="tool-btn move-btn"
 			class:active={activeTool === "Move"}
 			aria-pressed={activeTool === "Move"}
-			title="Move"
+			title={$t.tools.move}
 			{disabled}
 			onclick={() => selectTool("Move")}
 		>
 			<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"
 				><path d="M4 3.5l16 6.6-6.4 2-2 6.4z" /></svg
 			>
-			<span class="label">Move</span>
+			<span class="label">{$t.tools.move}</span>
 		</button>
 
 		<section class="section" aria-labelledby="tool-panel-elements">
-			<h2 id="tool-panel-elements" class="section-title">Elements</h2>
+			<h2 id="tool-panel-elements" class="section-title">{$t.tools.elements}</h2>
 			<ul class="grid">
 				{#each elementCatalog.kinds as kind (kind.type)}
 					<li>
@@ -59,12 +60,12 @@ button; the active tool stays marked.
 							class="tool-btn type-btn"
 							class:active={activeTool === kind.type}
 							aria-pressed={activeTool === kind.type}
-							title={kind.name}
+							title={$t.elements[kind.type]}
 							{disabled}
 							onclick={() => selectTool(kind.type)}
 						>
 							<ElementIcon type={kind.type} />
-							<span class="label">{kind.name}</span>
+							<span class="label">{$t.elements[kind.type]}</span>
 						</button>
 					</li>
 				{/each}
@@ -74,7 +75,7 @@ button; the active tool stays marked.
 
 	{#if activeTool === "Player"}
 		<section class="section colors" aria-labelledby="tool-panel-colors">
-			<h2 id="tool-panel-colors" class="section-title">Player color</h2>
+			<h2 id="tool-panel-colors" class="section-title">{$t.tools.playerColor}</h2>
 			<ul class="swatches">
 				{#each elementCatalog.playerColors as color (color.value)}
 					<li>
@@ -83,8 +84,8 @@ button; the active tool stays marked.
 							class="swatch"
 							class:selected={playerColor === color.value}
 							aria-pressed={playerColor === color.value}
-							aria-label={color.name}
-							title={color.name}
+							aria-label={$t.colors[color.id]}
+							title={$t.colors[color.id]}
 							style:background={color.value}
 							{disabled}
 							onclick={() => selectPlayerColor(color.value)}

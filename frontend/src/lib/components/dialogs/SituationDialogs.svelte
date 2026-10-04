@@ -9,6 +9,7 @@ level of the personal area).
 -->
 <script lang="ts">
 	import type { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
+	import { t } from "$lib/i18n";
 	import type { NewSituationInput } from "$lib/editor/SituationEditor";
 	import type { SituationWorkflow } from "$lib/editor/SituationWorkflow";
 	import { TOP_LEVEL, type SaveTarget } from "$lib/storage/SaveTarget";
@@ -52,10 +53,10 @@ level of the personal area).
 
 <ConfirmDialog
 	open={$question !== null}
-	title={$question?.title ?? ""}
-	message={$question?.message ?? ""}
-	confirmLabel={$question?.confirmLabel ?? "OK"}
-	cancelLabel={$question?.cancelLabel}
+	title={$question?.title($t) ?? ""}
+	message={$question?.message($t) ?? ""}
+	confirmLabel={$question?.confirmLabel($t) ?? $t.common.ok}
+	cancelLabel={$question?.cancelLabel?.($t)}
 	onConfirm={() => prompt.answer(true)}
 	onCancel={() => prompt.answer(false)}
 />

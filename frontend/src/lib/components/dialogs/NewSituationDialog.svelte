@@ -9,6 +9,7 @@ Cancel cancels. The owner opens and closes it through `open`.
 	import { modalDialog } from "$lib/actions/modalDialog";
 	import { NewSituationForm } from "$lib/editor/NewSituationForm.svelte";
 	import type { NewSituationInput } from "$lib/editor/SituationEditor";
+	import { t } from "$lib/i18n";
 
 	interface Props {
 		open: boolean;
@@ -34,7 +35,7 @@ Cancel cancels. The owner opens and closes it through `open`.
 		// The owner closes the dialog by flipping `open`.
 		event.preventDefault();
 		if (form.isValid) {
-			onCreate(form.toInput());
+			onCreate(form.toInput($t.situation.defaultTitle));
 		}
 	}
 </script>
@@ -45,10 +46,10 @@ Cancel cancels. The owner opens and closes it through `open`.
 	use:modalDialog={{ open, onCancel, initialFocus: () => titleInput }}
 >
 	<form method="dialog" class="modal-form" onsubmit={handleSubmit}>
-		<h2 id="{uid}-title" class="modal-title">New situation</h2>
+		<h2 id="{uid}-title" class="modal-title">{$t.newSituation.heading}</h2>
 
 		<p class="modal-field">
-			<label for="{uid}-name" class="modal-label">Title</label>
+			<label for="{uid}-name" class="modal-label">{$t.newSituation.title}</label>
 			<input
 				bind:this={titleInput}
 				id="{uid}-name"
@@ -56,19 +57,19 @@ Cancel cancels. The owner opens and closes it through `open`.
 				type="text"
 				name="title"
 				autocomplete="off"
-				placeholder={NewSituationForm.titlePlaceholder}
+				placeholder={$t.situation.defaultTitle}
 				bind:value={form.title}
 			/>
 		</p>
 
 		<fieldset class="modal-fieldset">
-			<legend class="modal-label">Field</legend>
+			<legend class="modal-label">{$t.newSituation.field}</legend>
 			<ul class="choices">
 				{#each NewSituationForm.fieldTypeOptions as option (option.value)}
 					<li>
 						<label class="choice">
 							<input type="radio" name="fieldType" value={option.value} bind:group={form.fieldType} />
-							<span>{option.label}</span>
+							<span>{$t.situation.fieldTypes[option.value]}</span>
 						</label>
 					</li>
 				{/each}
@@ -76,8 +77,8 @@ Cancel cancels. The owner opens and closes it through `open`.
 		</fieldset>
 
 		<div class="modal-actions">
-			<button type="button" class="modal-btn secondary" onclick={onCancel}>Cancel</button>
-			<button type="submit" class="modal-btn primary">Create</button>
+			<button type="button" class="modal-btn secondary" onclick={onCancel}>{$t.common.cancel}</button>
+			<button type="submit" class="modal-btn primary">{$t.common.create}</button>
 		</div>
 	</form>
 </dialog>

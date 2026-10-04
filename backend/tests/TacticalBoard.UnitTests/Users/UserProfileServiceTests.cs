@@ -45,4 +45,32 @@ public class UserProfileServiceTests
     public async Task Requires_a_name() =>
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
             new UserProfileService(_repository, _currentUser).ChangeDisplayNameAsync(null!, Cancellation));
+
+    [Fact]
+    public async Task Changes_and_saves_the_current_users_language()
+    {
+        var user = TestUsers.Create("alice", "Alice");
+        _repository.Users.Add(user);
+        _currentUser.Set(new SessionUser(user.Id, "Alice", IsSystemAdministrator: false, IsBlocked: false));
+
+        var updated = await new UserProfileService(_repository, _currentUser)
+            .ChangePreferredLanguageAsync(LanguageTag.FromTrusted("de"), Cancellation);
+
+        Assert.Equal("de", user.PreferredLanguage?.Value);
+        Assert.Equal(1, _repository.SaveCount);
+        Assert.Equal("de", updated.PreferredLanguage);
+        Assert.Equal("de", _currentUser.User.PreferredLanguage);
+        Assert.Equal("Alice", updated.DisplayName);
+    }
+
+    [Fact]
+    public async Task Changing_the_language_fails_when_the_user_vanished()
+    {
+        _currentUser.Set(new SessionUser(Guid.NewGuid(), "Ghost", IsSystemAdministrator: false, IsBlocked: false));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new UserProfileService(_repository, _currentUser).ChangePreferredLanguageAsync(LanguageTag.FromTrusted("de"), Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            new UserProfileService(_repository, _currentUser).ChangePreferredLanguageAsync(null!, Cancellation));
+    }
 }

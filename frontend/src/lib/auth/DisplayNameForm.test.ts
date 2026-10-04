@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { de, en } from "$lib/testing/i18n";
 import { DisplayNameForm } from "./DisplayNameForm.svelte";
 
 describe("DisplayNameForm", () => {
@@ -24,10 +25,10 @@ describe("DisplayNameForm", () => {
 		const form = new DisplayNameForm();
 		form.value = "   ";
 
-		expect(form.problem).toBe("Enter a display name.");
+		expect(form.problem?.(en)).toBe("Enter a display name.");
 		expect(form.message).toBeNull();
 		expect(form.attemptSubmit()).toBe(false);
-		expect(form.message).toBe("Enter a display name.");
+		expect(form.message?.(en)).toBe("Enter a display name.");
 	});
 
 	it("accepts exactly the maximum length after trimming", () => {
@@ -42,15 +43,16 @@ describe("DisplayNameForm", () => {
 		form.value = "a".repeat(DisplayNameForm.MAX_LENGTH + 1);
 
 		expect(form.attemptSubmit()).toBe(false);
-		expect(form.message).toBe("Use at most 100 characters.");
+		expect(form.message?.(en)).toBe("Use at most 100 characters.");
+		expect(form.message?.(de)).toBe("Verwende höchstens 100 Zeichen.");
 	});
 
 	it("shows a server error until the input changes", () => {
 		const form = new DisplayNameForm();
 		form.reset("Alice");
-		form.serverError = "Not reachable.";
+		form.serverError = () => "Not reachable.";
 
-		expect(form.message).toBe("Not reachable.");
+		expect(form.message?.(en)).toBe("Not reachable.");
 		form.edited();
 		expect(form.message).toBeNull();
 	});
@@ -58,7 +60,7 @@ describe("DisplayNameForm", () => {
 	it("clears a server error on the next attempt", () => {
 		const form = new DisplayNameForm();
 		form.reset("Alice");
-		form.serverError = "Not reachable.";
+		form.serverError = () => "Not reachable.";
 
 		expect(form.attemptSubmit()).toBe(true);
 		expect(form.message).toBeNull();

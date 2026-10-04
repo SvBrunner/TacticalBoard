@@ -24,10 +24,13 @@ sequenceDiagram
     B->>DB: Find user by issuer + subject, create on first login
     B-->>U: Set session cookie, redirect to returnUrl
     F->>B: GET /api/me (cookie)
-    B-->>F: Current user (name, system admin flag)
+    B-->>F: Current user (name, system admin flag, preferred language)
+    F->>F: Apply the account's language, if it has one (ch. 8.18)
 ```
 
 A blocked user gets no session: the callback redirects to `/?login=blocked` ("Account blocked."); other failures to `/?login=failed`. A deleted account's identity gets a new, empty account. Every later request with the session cookie checks the user again (ch. 8.13).
+
+**UI language** (ch. 8.18): before the first render the frontend starts in the remembered or the browser's language. Once `/api/me` reports a logged-in user, `AccountLanguage` applies the account's `preferredLanguage` (once per login). Choosing a language in the navbar applies it at once, remembers it in `localStorage`, and when logged in sends `PUT /api/me/language`, so the next login (in any browser) starts in it.
 
 ## 6.2 Save a team situation
 

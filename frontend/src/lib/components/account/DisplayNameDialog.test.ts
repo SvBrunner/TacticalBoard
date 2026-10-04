@@ -5,7 +5,7 @@ import { installDialogPolyfill, pressEscapeIn } from "$lib/testing/dialogPolyfil
 import type { DisplayNameChange } from "$lib/auth/AuthSession";
 import DisplayNameDialog from "./DisplayNameDialog.svelte";
 
-const USER = { id: "1", displayName: "Coach", isSystemAdministrator: false };
+const USER = { id: "1", displayName: "Coach", isSystemAdministrator: false, preferredLanguage: null };
 
 function props(overrides: Record<string, unknown> = {}) {
 	return {
@@ -100,7 +100,7 @@ describe("DisplayNameDialog", () => {
 	});
 
 	it("shows the server's message and stays open when saving fails", async () => {
-		const p = props({ onSave: vi.fn(async (): Promise<DisplayNameChange> => ({ ok: false, message: "The server is not reachable." })) });
+		const p = props({ onSave: vi.fn(async (): Promise<DisplayNameChange> => ({ ok: false, message: () => "The server is not reachable." })) });
 		render(DisplayNameDialog, { props: p });
 
 		await fireEvent.click(save());
@@ -112,7 +112,7 @@ describe("DisplayNameDialog", () => {
 	});
 
 	it("clears the server's message when the input changes", async () => {
-		const p = props({ onSave: vi.fn(async (): Promise<DisplayNameChange> => ({ ok: false, message: "Nope." })) });
+		const p = props({ onSave: vi.fn(async (): Promise<DisplayNameChange> => ({ ok: false, message: () => "Nope." })) });
 		render(DisplayNameDialog, { props: p });
 		await fireEvent.click(save());
 		await settle();

@@ -1,3 +1,4 @@
+import { de, en, inEnglishDeep, translateDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { FixedClock } from "$lib/model/Clock";
 import { Frame } from "$lib/model/Frame";
@@ -99,15 +100,30 @@ describe("SituationWorkflow", () => {
 			await workflow.confirmDiscardIfDirty();
 
 			expect(confirm).toHaveBeenCalledWith(DISCARD_SAVED_CHANGES_REQUEST);
-			expect(DISCARD_SAVED_CHANGES_REQUEST).toMatchObject({ title: "Discard changes?", confirmLabel: "Discard" });
-			expect(DISCARD_SAVED_CHANGES_REQUEST.message).toContain("haven't been saved");
+			expect(inEnglishDeep(DISCARD_SAVED_CHANGES_REQUEST)).toMatchObject({ title: "Discard changes?", confirmLabel: "Discard" });
+			expect(DISCARD_SAVED_CHANGES_REQUEST.message(en)).toContain("haven't been saved");
+		});
+
+		it("when logged in, the question for a never-saved situation speaks of saving too (export doesn't count)", async () => {
+			const loggedIn = new SituationWorkflow({ editor, files, link, confirm, isLoggedIn: () => true });
+			editor.addElement(0, 0, "red", "Player");
+
+			await loggedIn.confirmDiscardIfDirty();
+
+			expect(confirm).toHaveBeenCalledWith(DISCARD_SAVED_CHANGES_REQUEST);
 		});
 
 		it("the question is 'Discard changes?' with Discard/Cancel", () => {
-			expect(DISCARD_CHANGES_REQUEST).toMatchObject({
+			expect(inEnglishDeep(DISCARD_CHANGES_REQUEST)).toMatchObject({
 				title: "Discard changes?",
+				message: "The current situation has changes that haven't been exported. They will be lost.",
 				confirmLabel: "Discard",
 				cancelLabel: "Cancel",
+			});
+			expect(translateDeep(DISCARD_CHANGES_REQUEST, de)).toMatchObject({
+				title: "Änderungen verwerfen?",
+				confirmLabel: "Verwerfen",
+				cancelLabel: "Abbrechen",
 			});
 		});
 	});
@@ -226,6 +242,27 @@ describe("SituationWorkflow", () => {
 
 			expect(files.exported).toHaveLength(1);
 			expect(editor.isDirty()).toBe(true);
+		});
+
+		it("when logged in, doesn't mark a new, never-saved situation saved either", () => {
+			const loggedIn = new SituationWorkflow({ editor, files, link, confirm, isLoggedIn: () => true });
+			editor.createNew({ title: "Breakout", fieldType: "full" });
+			link.startNew();
+			editor.addElement(0, 0, "red", "Player");
+
+			loggedIn.exportCurrent();
+
+			expect(files.exported).toHaveLength(1);
+			expect(editor.isDirty()).toBe(true);
+		});
+
+		it("in local mode (not logged in) an export still counts as saved", () => {
+			const localMode = new SituationWorkflow({ editor, files, link, confirm, isLoggedIn: () => false });
+			editor.addElement(0, 0, "red", "Player");
+
+			localMode.exportCurrent();
+
+			expect(editor.isDirty()).toBe(false);
 		});
 	});
 

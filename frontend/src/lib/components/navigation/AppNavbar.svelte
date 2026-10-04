@@ -3,8 +3,9 @@
 The app's navigation bar, shared by the start page and the editor: the
 banner with the app badge (a link to the start page, in the "Main"
 navigation), the page title (the page's h1), the page's own `actions` (e.g.
-the editor's tools), and the account corner (in the "Account" navigation:
-"Log in", the user's menu, or "Local mode"; arc42 ch. 8.8, 8.13). `status`
+the editor's tools), the language switcher (arc42 ch. 8.18), and the account
+corner (in the "Account" navigation: "Log in", the user's menu, or "Local
+mode"; arc42 ch. 8.8, 8.13). `status`
 is rendered at the end (e.g. save feedback hanging below the bar).
 
 On narrow phones the bar wraps: badge, title and account in the first row,
@@ -14,6 +15,8 @@ the page's actions in a second row, so every control keeps its 44 px target.
 	import type { Snippet } from "svelte";
 	import type { LoginNotice } from "$lib/auth/AuthSession";
 	import AccountArea from "$lib/components/account/AccountArea.svelte";
+	import { t } from "$lib/i18n";
+	import LanguageSwitcher from "./LanguageSwitcher.svelte";
 
 	interface Props {
 		title: string;
@@ -43,8 +46,8 @@ the page's actions in a second row, so every control keeps its 44 px target.
 </script>
 
 <header class="navbar" class:with-actions={actions !== undefined}>
-	<nav class="nav-main" aria-label="Main">
-		<a class="badge" href="/" aria-label="Start page" title="Start page" aria-current={home ? "page" : undefined} onclick={handleHome}>
+	<nav class="nav-main" aria-label={$t.navbar.main}>
+		<a class="badge" href="/" aria-label={$t.navbar.startPage} title={$t.navbar.startPage} aria-current={home ? "page" : undefined} onclick={handleHome}>
 			<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--accent-contrast)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 				<circle cx="12" cy="12" r="9" />
 				<path d="M12 3v18M3 12h18" />
@@ -60,7 +63,9 @@ the page's actions in a second row, so every control keeps its 44 px target.
 		</div>
 	{/if}
 
-	<nav class="nav-account" aria-label="Account">
+	<LanguageSwitcher />
+
+	<nav class="nav-account" aria-label={$t.navbar.account}>
 		<AccountArea returnTo={loginReturnTo} {loginNotice} />
 	</nav>
 

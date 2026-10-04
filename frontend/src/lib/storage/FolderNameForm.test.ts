@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { en } from "$lib/testing/i18n";
 import { FolderNameForm } from "./FolderNameForm.svelte";
 
 describe("FolderNameForm", () => {
@@ -29,10 +30,10 @@ describe("FolderNameForm", () => {
 		const form = new FolderNameForm();
 		form.value = value;
 
-		expect(form.problem).toBe(problem);
+		expect(form.problem?.(en)).toBe(problem);
 		expect(form.message).toBeNull();
 		expect(form.attemptSubmit()).toBe(false);
-		expect(form.message).toBe(problem);
+		expect(form.message?.(en)).toBe(problem);
 	});
 
 	it("accepts 100 characters and surrounding whitespace", () => {
@@ -45,9 +46,9 @@ describe("FolderNameForm", () => {
 	it("shows a server error until the input changes", () => {
 		const form = new FolderNameForm();
 		form.reset("Set pieces");
-		form.serverError = "A folder named “Set pieces” already exists. Choose another name.";
+		form.serverError = () => "A folder named “Set pieces” already exists. Choose another name.";
 
-		expect(form.message).toBe("A folder named “Set pieces” already exists. Choose another name.");
+		expect(form.message?.(en)).toBe("A folder named “Set pieces” already exists. Choose another name.");
 		form.edited();
 		expect(form.message).toBeNull();
 	});

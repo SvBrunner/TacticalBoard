@@ -30,7 +30,8 @@ A new or imported situation that isn't saved on the server (always in local mode
 - **Deleting is only possible from the lists** (the start page or a folder's page), not in the editor. Deleting the situation that is still open in the editor (e.g. after the browser's Back button) is not noticed there; its next save fails with "This situation no longer exists on the server" and it can only be exported.
 - **Every save is a full revision.** Even a save without changes writes a new revision; nothing is pruned (see arc42 ch. 11).
 - **Titles are limited to 200 characters** on the server (the editor doesn't limit typing; saving a longer title is rejected with a message). A numbered title (" (2)") may be slightly longer.
-- **Numbered titles append to the whole title**, so a copy of "Powerplay (2)" whose title is taken becomes "Powerplay (2) (2)".
+- **Numbered titles are numbered on, never back**: a copy of "Powerplay (5)" becomes "Powerplay (6)" even if "Powerplay (2)" is free. Only a suffix " (n)" with a space before it counts; "Powerplay(2)" or "Powerplay (x)" get " (2)" appended.
+- **A situation with nothing to save can't be saved**: the Save button is disabled and Ctrl/Cmd+S does nothing while a saved situation has no changes, so a revision without changes is no longer written by accident (a never-saved situation can always be saved).
 - **Unknown extra properties** of a document are stored as sent (the validator ignores them, like the importer).
 - **Edits made while a save is running** stay unsaved (the situation stays dirty); the server's title wins only if the title wasn't changed in the meantime.
 - **The conflict question doesn't show what the other person changed**; there is no comparison or merge.
@@ -79,3 +80,13 @@ GIF stores frame delays in hundredths of a second and at most 256 colors per fra
 - **Data-protection keys are stored unencrypted** in `DataProtection__KeysDirectory` (the backend logs a warning at startup). Whoever can read that volume can decrypt session cookies; protect it like the database.
 - **One database query per request with a session**, for the per-request check of the user. Cheap (primary key, no tracking) and the price of "a blocked user's session ends with the next request".
 - **The dev server logs a proxy error** (`http proxy error: /api/me`) in its terminal when `pnpm run dev` runs without a backend. The app itself stays quiet ("Local mode").
+
+## Localization
+
+- **Two languages**, German and English; everything else falls back to English. A new language is a new file in `frontend/src/lib/i18n/locales/` (no backend change), but all catalogs are bundled and loaded at once.
+- **Stored texts don't follow the language.** User content is never translated, and that includes a default title once it is stored: a situation created in German keeps "Unbenannte Situation" when the UI is switched to English. A situation saved with a blank title by another client gets the server's English default "Untitled Situation".
+- **Some technical details stay English**: the reason of a failed GIF export or share (it comes from the browser or the encoder), the field paths in server validation messages (e.g. `document.situation.title`), the debug notification log (dev builds only), and the server's own `title`/`detail` (only for logs and API consumers; the UI words the error codes).
+- **The account's language is applied once per login.** Choosing another language in a second tab or browser of the same session doesn't switch the first one; it gets the account's language at its next login. An account that never chose a language keeps each browser's own language.
+- **Dates follow the UI language**, not the browser's region: German shows "04.10.2026, 10:30" also on a Swiss or Austrian browser; English uses the US-style "Oct 4, 2026, 10:30 AM".
+- **Position codes stay as they are** (G, V, C, F, LV, …, derived from German terms); only their full names are translated.
+

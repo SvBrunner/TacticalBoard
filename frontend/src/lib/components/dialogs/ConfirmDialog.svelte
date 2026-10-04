@@ -6,18 +6,20 @@ closes it through `open`.
 -->
 <script lang="ts">
 	import { modalDialog } from "$lib/actions/modalDialog";
+	import { t } from "$lib/i18n";
 
 	interface Props {
 		open: boolean;
 		title: string;
 		message: string;
 		confirmLabel: string;
+		/** Defaults to "Cancel" in the current language. */
 		cancelLabel?: string;
 		onConfirm: () => void;
 		onCancel: () => void;
 	}
 
-	let { open, title, message, confirmLabel, cancelLabel = "Cancel", onConfirm, onCancel }: Props = $props();
+	let { open, title, message, confirmLabel, cancelLabel, onConfirm, onCancel }: Props = $props();
 
 	const uid = $props.id();
 	let cancelButton: HTMLButtonElement | undefined = $state();
@@ -40,7 +42,7 @@ closes it through `open`.
 		<h2 id="{uid}-title" class="modal-title">{title}</h2>
 		<p id="{uid}-message" class="modal-text">{message}</p>
 		<div class="modal-actions">
-			<button bind:this={cancelButton} type="button" class="modal-btn secondary" onclick={onCancel}>{cancelLabel}</button>
+			<button bind:this={cancelButton} type="button" class="modal-btn secondary" onclick={onCancel}>{cancelLabel ?? $t.common.cancel}</button>
 			<button type="submit" class="modal-btn danger">{confirmLabel}</button>
 		</div>
 	</form>

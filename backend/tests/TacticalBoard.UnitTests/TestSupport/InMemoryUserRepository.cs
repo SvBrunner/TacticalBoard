@@ -30,7 +30,7 @@ internal sealed class InMemoryUserRepository : IUserRepository
         var user = Users.SingleOrDefault(candidate => candidate.Id == id && !candidate.IsDeleted);
         return Task.FromResult(user is null
             ? null
-            : new SessionUser(user.Id, user.DisplayName.Value, user.IsSystemAdministrator, user.IsBlocked));
+            : new SessionUser(user.Id, user.DisplayName.Value, user.IsSystemAdministrator, user.IsBlocked, user.PreferredLanguageValue));
     }
 
     public int DisplayNameQueries { get; private set; }

@@ -27,7 +27,9 @@ public class SituationDocumentTests
         Assert.False(SituationDocument.TryParse(SituationDocuments.Element(file), out var document, out var issues));
 
         Assert.Null(document);
-        Assert.Equal([new DocumentIssue("situation.frames", "expected at least one frame")], issues);
+        var issue = Assert.Single(issues);
+        Assert.Equal("situation.frames: expected at least one frame", issue.ToString());
+        Assert.Equal("expected-frame", issue.Error.Code);
     }
 
     [Fact]

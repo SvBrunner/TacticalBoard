@@ -35,6 +35,15 @@ export interface StoredSituation extends SituationSummary {
  */
 export type SituationOrigin = "new" | "imported" | "copy";
 
+/** Extra information for a first save. */
+export interface CreateOptions {
+	/**
+	 * The title is a default title (in any UI language, arc42 ch. 8.18): a
+	 * taken one gets the next free number instead of being refused.
+	 */
+	readonly titleIsDefault?: boolean;
+}
+
 /** The server's REST API for saved situations (arc42 ch. 8.15). */
 export class SituationApi {
 	static readonly PERSONAL_AREA_PATH = "/api/personal-area/situations";
@@ -74,8 +83,9 @@ export class SituationApi {
 	}
 
 	/** The first save: creates the situation at `target` (the top level of the personal area, or a folder). */
-	create(document: unknown, origin: SituationOrigin, target: SaveTarget): Promise<StoredSituation> {
-		return this.api.send<StoredSituation>("POST", SituationApi.collectionPath(target), { document, origin });
+	create(document: unknown, origin: SituationOrigin, target: SaveTarget, options: CreateOptions = {}): Promise<StoredSituation> {
+		const body = options.titleIsDefault ? { document, origin, titleIsDefault: true } : { document, origin };
+		return this.api.send<StoredSituation>("POST", SituationApi.collectionPath(target), body);
 	}
 
 	/** A later save on top of `revision`; a `412` (save-conflict) when someone else saved in between. */

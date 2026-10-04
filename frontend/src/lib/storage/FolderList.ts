@@ -1,4 +1,6 @@
 import { get, writable, type Readable } from "svelte/store";
+import { inEnglish } from "$lib/i18n";
+import type { Translatable } from "$lib/i18n/Messages";
 import type { Folder } from "./FolderApi";
 import { FolderMessages, type FolderChange } from "./FolderMessages";
 
@@ -7,7 +9,7 @@ export type FolderListState =
 	| { readonly status: "idle" }
 	| { readonly status: "loading" }
 	| { readonly status: "loaded"; readonly folders: readonly Folder[] }
-	| { readonly status: "failed"; readonly message: string };
+	| { readonly status: "failed"; readonly message: Translatable };
 
 export interface FolderListDependencies {
 	readonly api: {
@@ -47,7 +49,7 @@ export class FolderList {
 		try {
 			this.store.set({ status: "loaded", folders: await this.deps.api.listPersonal() });
 		} catch (error) {
-			this.store.set({ status: "failed", message: this.failure(error, "The folders couldn't be loaded.") });
+			this.store.set({ status: "failed", message: this.failure(error, (m) => m.folders.loadFailed) });
 		}
 	}
 
@@ -59,16 +61,16 @@ export class FolderList {
 			await this.load();
 			return { ok: true, folder };
 		} catch (error) {
-			return { ok: false, message: this.failure(error, `The folder couldn't be created.`, name) };
+			return { ok: false, message: this.failure(error, (m) => m.folders.createFailed, name) };
 		}
 	}
 
-	private failure(error: unknown, fallback: string, name?: string): string {
+	private failure(error: unknown, fallback: Translatable, name?: string): Translatable {
 		if (FolderMessages.isSessionEnded(error)) {
 			this.deps.onSessionEnded?.();
 		}
 		const message = name === undefined ? FolderMessages.general(error, fallback) : FolderMessages.forNameChange(error, name, fallback);
-		this.log(message, "error");
+		this.log(inEnglish(message), "error");
 		return message;
 	}
 

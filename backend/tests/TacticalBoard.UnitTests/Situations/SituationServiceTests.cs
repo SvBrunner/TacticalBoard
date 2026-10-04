@@ -107,6 +107,40 @@ public class SituationServiceTests
     }
 
     [Fact]
+    public async Task A_copy_of_a_numbered_title_gets_the_next_number_not_a_second_suffix()
+    {
+        await CreateAsync("Powerplay");
+        await CreateAsync("Powerplay (2)");
+
+        var copy = await CreateAsync("Powerplay (2)", SituationOrigin.Copy);
+        var import = await CreateAsync("Powerplay (2)", SituationOrigin.Imported);
+
+        Assert.Equal("Powerplay (3)", copy.Summary.Title);
+        Assert.Equal("Powerplay (4)", import.Summary.Title);
+    }
+
+    [Fact]
+    public async Task A_default_title_of_another_UI_language_is_numbered_when_the_client_says_so()
+    {
+        var first = await CreateAsync("Unbenannte Situation", SituationOrigin.NewWithDefaultTitle);
+        var second = await CreateAsync("Unbenannte Situation", SituationOrigin.NewWithDefaultTitle);
+
+        Assert.Equal(["Unbenannte Situation", "Unbenannte Situation (2)"], new[] { first, second }.Select(view => view.Summary.Title));
+        await Assert.ThrowsAsync<DuplicateSituationTitleException>(() => CreateAsync("Unbenannte Situation"));
+    }
+
+    [Fact]
+    public async Task A_numbered_default_title_is_numbered_on()
+    {
+        await CreateAsync("Untitled Situation");
+        await CreateAsync("Untitled Situation (2)");
+
+        var view = await CreateAsync("Untitled Situation (2)", SituationOrigin.NewWithDefaultTitle);
+
+        Assert.Equal("Untitled Situation (3)", view.Summary.Title);
+    }
+
+    [Fact]
     public async Task An_import_with_a_free_title_keeps_it()
     {
         var view = await CreateAsync("Powerplay", SituationOrigin.Imported);

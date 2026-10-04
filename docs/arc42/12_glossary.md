@@ -19,7 +19,9 @@
 | Revision | One saved state of a situation on the server. Every save creates a new revision; the newest is the current one. Its number is the situation's ETag. |
 | Saved situation (server situation) | A situation saved on the server, in an area. For it, "saved" means saved on the server, not exported. Shown in the editor at `/editor?situation=<id>`. |
 | Save conflict | A save based on an older revision than the current one (someone else saved in between). The user chooses Overwrite, Save as copy or Cancel. |
-| Default title | "Untitled Situation": the title of a situation created with a blank title. Saved on the server, it is numbered within the area ("Untitled Situation (2)", …). |
+| Default title | The title of a situation created with a blank title, in the UI language of that moment: "Untitled Situation", "Unbenannte Situation". Saved on the server, it is numbered within the area ("Untitled Situation (2)", …). |
+| UI language | The language of the system texts (German or English, English the fallback); chosen in the navbar's language switcher, remembered in the browser and in the account. User content is never translated. |
+| System text | A text the app itself shows (labels, buttons, messages, element type names, …), as opposed to user content (titles, descriptions, folder names, labels, display names). Only system texts are translated. |
 | Navbar | The app's navigation bar at the top of the start page and the editor: badge (link to the start page), page title, the page's tools, and the account corner (Log in / the user's menu). |
 | Soft delete | Deleting by marking an item as deleted instead of removing it from the database. |
 | Local mode | Using the app without login: editing plus JSON/GIF export and import, nothing stored on the server. |

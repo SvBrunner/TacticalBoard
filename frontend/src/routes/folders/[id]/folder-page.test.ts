@@ -17,7 +17,7 @@ import { load } from "./+page";
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
 
-const alice = { id: "u1", displayName: "Alice", isSystemAdministrator: false };
+const alice = { id: "u1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null };
 
 function folderOf(id: string, name: string): Folder {
 	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z" };

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { cleanup, render, screen, fireEvent, within } from "@testing-library/svelte";
 import { installDialogPolyfill, pressEscapeIn } from "$lib/testing/dialogPolyfill";
 import NewSituationDialog from "./NewSituationDialog.svelte";
+import { i18n } from "$lib/i18n";
 
 function props(overrides: Record<string, unknown> = {}) {
 	return { open: true, onCreate: vi.fn(), onCancel: vi.fn(), ...overrides };
@@ -103,17 +104,32 @@ describe("NewSituationDialog", () => {
 
 		await fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-		expect(p.onCreate).toHaveBeenCalledWith({ title: "", fieldType: "full" });
+		expect(p.onCreate).toHaveBeenCalledWith({ title: "Untitled Situation", fieldType: "full" });
 	});
 
-	it("submits a blank title as blank (the editor stores the default title)", async () => {
+	it("submits a blank title as the default title of the UI language", async () => {
 		const p = props();
 		render(NewSituationDialog, { props: p });
 
 		await fireEvent.input(titleInput(), { target: { value: "   " } });
 		await fireEvent.submit(dialog().querySelector("form")!);
 
-		expect(p.onCreate).toHaveBeenCalledWith({ title: "", fieldType: "full" });
+		expect(p.onCreate).toHaveBeenCalledWith({ title: "Untitled Situation", fieldType: "full" });
+	});
+
+	it("is German in German, with the German default title", async () => {
+		i18n.select("de");
+		const p = props();
+		render(NewSituationDialog, { props: p });
+
+		expect(screen.getByRole("heading", { name: "Neue Situation" })).toBeInTheDocument();
+		expect(screen.getByLabelText("Titel")).toHaveAttribute("placeholder", "Unbenannte Situation");
+		expect(screen.getByRole("radio", { name: "Ganzes Feld" })).toBeChecked();
+		expect(screen.getByRole("radio", { name: "Halbes Feld" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Abbrechen" })).toBeInTheDocument();
+		await fireEvent.click(screen.getByRole("button", { name: "Erstellen" }));
+
+		expect(p.onCreate).toHaveBeenCalledWith({ title: "Unbenannte Situation", fieldType: "full" });
 	});
 
 	it("Cancel calls onCancel only", async () => {

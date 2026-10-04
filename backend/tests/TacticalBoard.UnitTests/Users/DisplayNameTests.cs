@@ -35,21 +35,25 @@ public class DisplayNameTests
     {
         Assert.False(DisplayName.TryCreate(input, out var name, out var error));
         Assert.Null(name);
-        Assert.Equal("The display name must not be empty.", error);
+        Assert.Equal("The display name must not be empty.", error?.Message);
+        Assert.Equal("required", error?.Code);
     }
 
     [Fact]
     public void Rejects_a_too_long_name()
     {
         Assert.False(DisplayName.TryCreate(new string('a', DisplayName.MaxLength + 1), out _, out var error));
-        Assert.Equal("The display name must be at most 100 characters long.", error);
+        Assert.Equal("The display name must be at most 100 characters long.", error?.Message);
+        Assert.Equal("too-long", error?.Code);
+        Assert.Equal(100, error?.Values["maxLength"]);
     }
 
     [Fact]
     public void Rejects_control_characters()
     {
         Assert.False(DisplayName.TryCreate("Sven\u0000Brunner", out _, out var error));
-        Assert.Equal("The display name must not contain control characters.", error);
+        Assert.Equal("The display name must not contain control characters.", error?.Message);
+        Assert.Equal("control-characters", error?.Code);
     }
 
     [Fact]

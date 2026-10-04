@@ -28,7 +28,7 @@ The backend is a modular monolith, decomposed by business domain, not by technic
 
 | Module | Responsibility |
 |---|---|
-| **Users** | Local user accounts mapped from the IdP identity (issuer + subject), display name, system administrator role, blocking, account deletion, the bootstrap of the first system administrator. Provides the *current user* to the other modules. |
+| **Users** | Local user accounts mapped from the IdP identity (issuer + subject), display name, preferred UI language (ch. 8.18), system administrator role, blocking, account deletion, the bootstrap of the first system administrator. Provides the *current user* to the other modules. |
 | **Teams** | Teams (name, logo, code), overview and search, join requests, memberships and roles, leaving and deleting teams. Owns the **authorization checks** for team content (`ITeamAuthorization`). |
 | **Areas** | The common abstraction for "where situations live": a user's personal area or a team. Answers "may the current user read / write in this area?" by asking Users (personal area: only its owner) or Teams (the role matrix, ch. 8.1). |
 | **Folders** | Flat folders inside an area: create, rename (unique names), delete (only when empty). Tells Situations which area a folder belongs to. |
@@ -57,7 +57,7 @@ One .NET solution (`backend/TacticalBoard.slnx`), **one project per module**, so
 
 | Project | Content |
 |---|---|
-| `src/TacticalBoard.SharedKernel` | Abstractions every module's domain code may use, with no framework dependency: `IClock`, `IIdGenerator`, `DomainException` (+ `DomainErrorKind`, `ErrorCode`), `ISoftDeletable` / `SoftDeletableEntity`, `IUnitOfWork` (one transaction across modules, ADR-012), `UniqueNames` (how unique names are compared: titles, folder names). |
+| `src/TacticalBoard.SharedKernel` | Abstractions every module's domain code may use, with no framework dependency: `IClock`, `IIdGenerator`, `DomainException` (+ `DomainErrorKind`, `ErrorCode`), `FieldError` / `FieldErrors` (validation problems with stable codes, ch. 8.2), `ISoftDeletable` / `SoftDeletableEntity`, `IUnitOfWork` (one transaction across modules, ADR-012), `UniqueNames` (how unique names are compared: titles, folder names). |
 | `src/TacticalBoard.Infrastructure` | Shared technical plumbing: `SystemClock`, `SequentialGuidGenerator` (UUID v7), the one EF Core context `TacticalBoardDbContext` with the soft-delete query filter and interceptor (ch. 8.16), `EfUnitOfWork` (transactions on that context), migration on startup, and the module contract `IModule`. |
 | `src/Modules/TacticalBoard.{Users,Teams,Areas,Folders,Situations}` | One project per module. Each references only the modules it may use (above); transitive project references are switched off (`src/Modules/Directory.Build.props`), so e.g. Situations can't use Users or Teams. |
 | `src/TacticalBoard.Api` | The host: composes the modules (`Hosting/ModuleCatalog`, `Hosting/ApiHost`), Problem Details (ch. 8.2), `GET /api/health`, the login as BFF (`Authentication/`: cookie session, OIDC, antiforgery, `/auth/*`, ch. 8.13), configuration, and the EF Core migrations (`Persistence/Migrations`; only the host knows every module's part of the model). The host talks to the Users module only through its `Contracts` (`IUserAuthentication`). |

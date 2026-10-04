@@ -22,6 +22,7 @@ near an edge the strip scrolls by itself.
 -->
 <script lang="ts">
 	import { onDestroy } from "svelte";
+	import { t } from "$lib/i18n";
 	import type { BoardViewport } from "$lib/board/BoardViewport";
 	import type { Point } from "$lib/model/Point";
 	import type { Frame } from "$lib/model/Frame";
@@ -303,7 +304,7 @@ near an edge the strip scrolls by itself.
 	onkeydown={handleKeydown}
 />
 
-<nav class="frame-strip" aria-label="Frames">
+<nav class="frame-strip" aria-label={$t.frames.strip}>
 	<ol bind:this={list} class="frames" class:dragging={drag !== null} onclickcapture={handleClickCapture}>
 		{#each frames as frame, index (frame.id)}
 			<li
@@ -322,18 +323,18 @@ near an edge the strip scrolls by itself.
 				>
 					<FrameThumbnail {frame} {viewport} height={thumbnailHeight} />
 					<span class="number" aria-hidden="true">{index + 1}</span>
-					<span class="visually-hidden">Frame {index + 1}</span>
+					<span class="visually-hidden">{$t.frames.frame(index + 1)}</span>
 				</button>
 			</li>
 		{/each}
 	</ol>
 
-	<div class="frame-actions" role="group" aria-label="Frame actions">
+	<div class="frame-actions" role="group" aria-label={$t.frames.actions}>
 		<button
 			type="button"
 			class="action-btn"
-			aria-label="Move frame left"
-			title="Move frame left"
+			aria-label={$t.frames.moveLeft}
+			title={$t.frames.moveLeft}
 			disabled={playing || activeIndex <= 0}
 			onclick={() => moveActive(-1)}
 		>
@@ -342,20 +343,20 @@ near an edge the strip scrolls by itself.
 		<button
 			type="button"
 			class="action-btn"
-			aria-label="Move frame right"
-			title="Move frame right"
+			aria-label={$t.frames.moveRight}
+			title={$t.frames.moveRight}
 			disabled={playing || activeIndex === -1 || activeIndex >= frames.length - 1}
 			onclick={() => moveActive(1)}
 		>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" /></svg>
 		</button>
-		<button type="button" class="action-btn primary" title="Add frame (copy of the current frame)" disabled={playing} onclick={addFrame}>
+		<button type="button" class="action-btn primary" title={$t.frames.addTitle} disabled={playing} onclick={addFrame}>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg>
-			<span class="label">Add frame</span>
+			<span class="label">{$t.frames.add}</span>
 		</button>
-		<button type="button" class="action-btn" title="Delete the current frame" disabled={playing || frames.length <= 1} onclick={deleteActive}>
+		<button type="button" class="action-btn" title={$t.frames.deleteTitle} disabled={playing || frames.length <= 1} onclick={deleteActive}>
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
-			<span class="label">Delete frame</span>
+			<span class="label">{$t.frames.delete}</span>
 		</button>
 	</div>
 </nav>

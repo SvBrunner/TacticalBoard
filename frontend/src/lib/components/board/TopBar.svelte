@@ -3,7 +3,7 @@
 The editor header: the shared app navbar (`AppNavbar`: the badge as a link
 back to the start page, the situation title, the account corner) with the
 editor's tools: undo/redo, Save (only when saving on the server is possible, i.e.
-logged in), new/load, the export choice and theme toggle. On phones the
+logged in; disabled while there is nothing to save), new/load, the export choice and theme toggle. On phones the
 buttons become icon-only; their text stays as accessible name. `status` is
 rendered at the end of the header (e.g. save feedback hanging below it).
 
@@ -16,6 +16,7 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 	import { theme, toggleTheme } from "$lib/theme";
 	import AppNavbar from "$lib/components/navigation/AppNavbar.svelte";
 	import { notifications } from "$lib/debug/Notifications";
+	import { t } from "$lib/i18n";
 
 	interface Props {
 		title: string;
@@ -36,6 +37,8 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 		onSave?: () => void;
 		/** A save is running: the Save button is disabled and says "Saving…". */
 		saving?: boolean;
+		/** Whether there is something to save (arc42 ch. 8.7); without it the Save button is disabled. Default: true. */
+		hasChanges?: boolean;
 		/** Extra content at the end of the header (e.g. save feedback). */
 		status?: Snippet;
 		/** Where a login started from the navbar returns to. */
@@ -55,6 +58,7 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 		onRedo,
 		onSave,
 		saving = false,
+		hasChanges = true,
 		status,
 		loginReturnTo = "/",
 	}: Props = $props();
@@ -115,6 +119,8 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 		if (canRedo) onRedo();
 	}
 
+	const saveDisabled = $derived(saving || !hasChanges);
+
 	function openFilePicker() {
 		notifications.notify("Opening file picker…");
 		fileInput.click();
@@ -135,14 +141,14 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 <AppNavbar {title} {onHome} {loginReturnTo} {status}>
 	{#snippet actions()}
 		<div class="tools">
-		<div class="history" role="group" aria-label="History">
-			<button type="button" class="btn icon" onclick={handleUndo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">
+		<div class="history" role="group" aria-label={$t.editor.history}>
+			<button type="button" class="btn icon" onclick={handleUndo} disabled={!canUndo} aria-label={$t.editor.undo} title={$t.editor.undoTitle}>
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 					<path d="M9 14L4 9l5-5" />
 					<path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
 				</svg>
 			</button>
-			<button type="button" class="btn icon" onclick={handleRedo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+			<button type="button" class="btn icon" onclick={handleRedo} disabled={!canRedo} aria-label={$t.editor.redo} title={$t.editor.redoTitle}>
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 					<path d="M15 14l5-5-5-5" />
 					<path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
@@ -153,28 +159,34 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 		<div class="divider" aria-hidden="true"></div>
 
 		{#if onSave}
-			<button type="button" class="btn ghost" title="Save (Ctrl+S)" disabled={saving} onclick={() => !saving && onSave()}>
+			<button
+				type="button"
+				class="btn ghost"
+				title={hasChanges ? $t.editor.saveTitle : $t.editor.nothingToSave}
+				disabled={saveDisabled}
+				onclick={() => !saveDisabled && onSave()}
+			>
 				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 					<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" />
 					<path d="M8 3v5h7V3M8 21v-7h8v7" />
 				</svg>
-				<span class="label">{saving ? "Saving…" : "Save"}</span>
+				<span class="label">{saving ? $t.editor.saving : $t.editor.save}</span>
 			</button>
 		{/if}
 
-		<button type="button" class="btn ghost" title="New situation" onclick={onNew}>
+		<button type="button" class="btn ghost" title={$t.editor.newTitle} onclick={onNew}>
 			<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 				<path d="M12 5v14M5 12h14" />
 			</svg>
-			<span class="label">New</span>
+			<span class="label">{$t.editor.new}</span>
 		</button>
 
-		<button type="button" class="btn ghost" title="Load" onclick={openFilePicker}>
+		<button type="button" class="btn ghost" title={$t.editor.load} onclick={openFilePicker}>
 			<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 				<path d="M12 15V3M7 8l5-5 5 5" />
 				<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
 			</svg>
-			<span class="label">Load</span>
+			<span class="label">{$t.editor.load}</span>
 		</button>
 		<input bind:this={fileInput} type="file" accept=".json" class="hidden-input" onchange={handleFileChange} />
 
@@ -183,7 +195,7 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 				bind:this={exportToggle}
 				type="button"
 				class="btn primary"
-				title="Export"
+				title={$t.editor.export}
 				aria-expanded={exportOpen}
 				aria-controls="{uid}-export-options"
 				onclick={toggleExportMenu}
@@ -193,24 +205,24 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 					<path d="M12 3v12M7 10l5 5 5-5" />
 					<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
 				</svg>
-				<span class="label">Export</span>
+				<span class="label">{$t.editor.export}</span>
 				<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 					<path d="M6 9l6 6 6-6" />
 				</svg>
 			</button>
-			<ul id="{uid}-export-options" class="export-options" aria-label="Export as" hidden={!exportOpen}>
+			<ul id="{uid}-export-options" class="export-options" aria-label={$t.editor.exportAs} hidden={!exportOpen}>
 				<li>
-					<button type="button" class="export-option" onclick={() => chooseExport(onExportJson)} onkeydown={handleExportKeydown}>Situation file (JSON)</button>
+					<button type="button" class="export-option" onclick={() => chooseExport(onExportJson)} onkeydown={handleExportKeydown}>{$t.editor.exportJson}</button>
 				</li>
 				<li>
-					<button type="button" class="export-option" onclick={() => chooseExport(onExportAnimation)} onkeydown={handleExportKeydown}>Animated GIF</button>
+					<button type="button" class="export-option" onclick={() => chooseExport(onExportAnimation)} onkeydown={handleExportKeydown}>{$t.editor.exportGif}</button>
 				</li>
 			</ul>
 		</div>
 
 		<div class="divider" aria-hidden="true"></div>
 
-		<button type="button" class="btn icon" onclick={handleToggleTheme} aria-label="Toggle theme" title="Toggle theme">
+		<button type="button" class="btn icon" onclick={handleToggleTheme} aria-label={$t.editor.toggleTheme} title={$t.editor.toggleTheme}>
 			{#if $theme === "dark"}
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z" /></svg>
 			{:else}

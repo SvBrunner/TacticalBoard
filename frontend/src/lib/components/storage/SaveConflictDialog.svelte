@@ -7,6 +7,7 @@ starts on Cancel (the safe choice); Escape cancels.
 -->
 <script lang="ts">
 	import { modalDialog } from "$lib/actions/modalDialog";
+	import { t } from "$lib/i18n";
 	import type { ConflictChoice } from "$lib/storage/SituationSaver";
 
 	interface Props {
@@ -28,15 +29,12 @@ starts on Cancel (the safe choice); Escape cancels.
 	use:modalDialog={{ open, onCancel: () => onChoose("cancel"), initialFocus: () => cancelButton }}
 >
 	<div class="modal-form">
-		<h2 id="{uid}-title" class="modal-title">Saved by someone else</h2>
-		<p id="{uid}-message" class="modal-text">
-			This situation was saved by someone else after you opened it. Overwrite their version with yours, or save yours as a
-			copy?
-		</p>
+		<h2 id="{uid}-title" class="modal-title">{$t.conflict.heading}</h2>
+		<p id="{uid}-message" class="modal-text">{$t.conflict.message}</p>
 		<div class="modal-actions">
-			<button bind:this={cancelButton} type="button" class="modal-btn secondary" onclick={() => onChoose("cancel")}>Cancel</button>
-			<button type="button" class="modal-btn secondary" onclick={() => onChoose("copy")}>Save as copy</button>
-			<button type="button" class="modal-btn danger" onclick={() => onChoose("overwrite")}>Overwrite</button>
+			<button bind:this={cancelButton} type="button" class="modal-btn secondary" onclick={() => onChoose("cancel")}>{$t.common.cancel}</button>
+			<button type="button" class="modal-btn secondary" onclick={() => onChoose("copy")}>{$t.conflict.saveAsCopy}</button>
+			<button type="button" class="modal-btn danger" onclick={() => onChoose("overwrite")}>{$t.conflict.overwrite}</button>
 		</div>
 	</div>
 </dialog>

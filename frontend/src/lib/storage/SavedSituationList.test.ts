@@ -1,3 +1,4 @@
+import { inEnglishDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
 import { summaryOf } from "$lib/testing/storageFakes";
@@ -62,14 +63,14 @@ describe("SavedSituationList", () => {
 	});
 
 	it("is idle until loaded, then holds the server's list", async () => {
-		expect(list.current()).toEqual({ status: "idle" });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "idle" });
 		expect(list.situations()).toEqual([]);
 
 		const loading = list.load();
-		expect(list.current()).toEqual({ status: "loading" });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "loading" });
 		await loading;
 
-		expect(list.current()).toEqual({ status: "loaded", situations });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "loaded", situations });
 		expect(list.situations()).toEqual(situations);
 		expect(listedPlaces).toEqual([TOP_LEVEL]);
 	});
@@ -89,7 +90,7 @@ describe("SavedSituationList", () => {
 
 		await list.load();
 
-		expect(list.current()).toEqual({ status: "failed", message });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "failed", message });
 	});
 
 	it("an ended session refreshes the login state", async () => {
@@ -123,8 +124,8 @@ describe("SavedSituationList", () => {
 
 		await expect(list.delete(situations[0])).resolves.toBe(false);
 
-		expect(list.current()).toEqual({ status: "failed", message: '"A" couldn\'t be deleted.' });
-		expect(log.notify).toHaveBeenCalledWith('"A" couldn\'t be deleted.', "error");
+		expect(inEnglishDeep(list.current())).toEqual({ status: "failed", message: '“A” couldn\'t be deleted.' });
+		expect(log.notify).toHaveBeenCalledWith('“A” couldn\'t be deleted.', "error");
 	});
 
 	it("moves a situation, tells the editor's link and reloads the list without it", async () => {
@@ -146,17 +147,17 @@ describe("SavedSituationList", () => {
 	});
 
 	it.each<[string, Error, string]>([
-		["a folder that is gone", new ApiError(404, { type: FolderApi.NOT_FOUND }), '"A" couldn\'t be moved: the folder no longer exists.'],
-		["a situation that is gone", new ApiError(404, { type: "https://tacticalboard/errors/situation-not-found" }), '"A" couldn\'t be moved: it no longer exists.'],
+		["a folder that is gone", new ApiError(404, { type: FolderApi.NOT_FOUND }), '“A” couldn\'t be moved: the folder no longer exists.'],
+		["a situation that is gone", new ApiError(404, { type: "https://tacticalboard/errors/situation-not-found" }), '“A” couldn\'t be moved: it no longer exists.'],
 		["no server", new ApiUnavailableError(), "The server is not reachable. Please try again later."],
 		["an ended session", new ApiError(401, {}), "Your session has ended. Please log in again."],
-		["another error", new ApiError(500, {}), '"A" couldn\'t be moved.'],
+		["another error", new ApiError(500, {}), '“A” couldn\'t be moved.'],
 	])("reports a failed move: %s", async (_name, error, message) => {
 		moveError = error;
 
 		await expect(list.move(situations[0], "f1")).resolves.toBe(false);
 
-		expect(list.current()).toEqual({ status: "failed", message });
+		expect(inEnglishDeep(list.current())).toEqual({ status: "failed", message });
 		expect(link.relocate).not.toHaveBeenCalled();
 	});
 

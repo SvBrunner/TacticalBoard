@@ -1,5 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using TacticalBoard.SharedKernel.Text;
+using TacticalBoard.SharedKernel.Validation;
 
 namespace TacticalBoard.Situations.Domain;
 
@@ -9,7 +12,7 @@ namespace TacticalBoard.Situations.Domain;
 /// within an area, compared through <see cref="Normalized"/> (trimmed, Unicode NFC, upper case
 /// invariant), i.e. ignoring surrounding whitespace and upper/lower case.
 /// </summary>
-internal sealed record SituationTitle
+internal sealed partial record SituationTitle
 {
     /// <summary>The longest title accepted on saving (UTF-16 code units). A technical limit; numbered titles may exceed it by their suffix.</summary>
     public const int MaxLength = 200;
@@ -33,13 +36,13 @@ internal sealed record SituationTitle
     public bool IsDefault => Normalized == Normalize(Default);
 
     /// <summary>Validates a title from a situation document.</summary>
-    public static bool TryCreate(string? input, [NotNullWhen(true)] out SituationTitle? title, [NotNullWhen(false)] out string? error)
+    public static bool TryCreate(string? input, [NotNullWhen(true)] out SituationTitle? title, [NotNullWhen(false)] out FieldError? error)
     {
         var trimmed = input?.Trim() ?? string.Empty;
         if (trimmed.Length > MaxLength)
         {
             title = null;
-            error = $"expected at most {MaxLength} characters";
+            error = FieldError.TooLong(MaxLength, $"expected at most {MaxLength} characters");
             return false;
         }
 
@@ -66,10 +69,31 @@ internal sealed record SituationTitle
     }
 
     /// <summary>
-    /// This title if it is free, otherwise the first free one of <c>"{title} (2)"</c>,
-    /// <c>"{title} (3)"</c>, … (arc42 ch. 8.15: imported situations, copies, default titles).
+    /// The title numbers are added to, and the first number to try (arc42 ch. 8.15): a title that
+    /// already ends with <c>" (n)"</c> is numbered on from <c>n + 1</c> on its base
+    /// (<c>"Powerplay (2)"</c> → <c>"Powerplay"</c>, 3); any other title from 2 on itself.
     /// </summary>
-    /// <param name="taken">The normalized titles already used in the area.</param>
+    public (SituationTitle Base, int FirstNumber) NumberingStart
+    {
+        get
+        {
+            var match = NumberSuffix().Match(Value);
+            if (match.Success && int.TryParse(match.Groups["number"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number < int.MaxValue)
+            {
+                return (new SituationTitle(match.Groups["base"].Value), Math.Max(number + 1, 2));
+            }
+
+            return (this, 2);
+        }
+    }
+
+    /// <summary>
+    /// This title if it is free, otherwise the first free numbered one (arc42 ch. 8.15: imported
+    /// situations, copies, default titles): <c>"{title} (2)"</c>, <c>"{title} (3)"</c>, …; a title
+    /// that already ends with <c>" (n)"</c> gets the next number instead of a second suffix
+    /// (<c>"Powerplay (2)"</c> → <c>"Powerplay (3)"</c> or the next free one after it).
+    /// </summary>
+    /// <param name="taken">The normalized titles already used in the area (those starting with <see cref="NumberingStart"/>'s base).</param>
     public SituationTitle FirstFree(IReadOnlySet<string> taken)
     {
         ArgumentNullException.ThrowIfNull(taken);
@@ -78,14 +102,17 @@ internal sealed record SituationTitle
             return this;
         }
 
-        var number = 2;
-        while (taken.Contains(WithNumber(number).Normalized))
+        var (numberedBase, number) = NumberingStart;
+        while (taken.Contains(numberedBase.WithNumber(number).Normalized))
         {
             number++;
         }
 
-        return WithNumber(number);
+        return numberedBase.WithNumber(number);
     }
+
+    [GeneratedRegex(@"^(?<base>.*\S) \((?<number>[1-9][0-9]{0,8})\)$", RegexOptions.CultureInvariant | RegexOptions.Singleline)]
+    private static partial Regex NumberSuffix();
 
     /// <inheritdoc />
     public override string ToString() => Value;

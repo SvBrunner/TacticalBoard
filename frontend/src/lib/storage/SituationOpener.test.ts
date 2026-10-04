@@ -1,3 +1,4 @@
+import { inEnglishDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
 import { SituationEditor } from "$lib/editor/SituationEditor";
@@ -66,7 +67,7 @@ describe("SituationOpener", () => {
 		const before = editor.current();
 		const confirm = vi.fn(async () => false);
 
-		await expect(opener.open("server-7", confirm)).resolves.toEqual({ status: "cancelled" });
+		expect(inEnglishDeep(await opener.open("server-7", confirm))).toEqual({ status: "cancelled" });
 
 		expect(confirm).toHaveBeenCalledOnce();
 		expect(editor.current()).toBe(before);
@@ -74,7 +75,7 @@ describe("SituationOpener", () => {
 	});
 
 	it.each<[string, Error | StoredSituation, string]>([
-		["no server", new ApiUnavailableError(), "The server is not reachable."],
+		["no server", new ApiUnavailableError(), "The server is not reachable. Please try again later."],
 		["an ended session", new ApiError(401, {}), "Your session has ended. Please log in again."],
 		["a deleted situation", new ApiError(404, {}), "This situation no longer exists."],
 		["another error", new ApiError(500, {}), "The situation couldn't be opened."],
@@ -83,7 +84,7 @@ describe("SituationOpener", () => {
 		answer = result;
 		const confirm = vi.fn(async () => true);
 
-		await expect(opener.open("server-7", confirm)).resolves.toEqual({ status: "failed", message });
+		expect(inEnglishDeep(await opener.open("server-7", confirm))).toEqual({ status: "failed", message });
 
 		expect(confirm).not.toHaveBeenCalled();
 		expect(editor.isSituationOpen()).toBe(false);

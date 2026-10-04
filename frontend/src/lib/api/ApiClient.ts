@@ -1,3 +1,13 @@
+/**
+ * One field's validation problem with its stable code (arc42 ch. 8.2), e.g.
+ * `{ code: "too-long", maxLength: 100 }`; further members are the code's
+ * values.
+ */
+export interface FieldErrorCode {
+	readonly code: string;
+	readonly [value: string]: unknown;
+}
+
 /** An RFC 7807 problem as the backend sends it (arc42 ch. 8.2). */
 export interface ProblemDetails {
 	readonly type?: string;
@@ -6,6 +16,8 @@ export interface ProblemDetails {
 	readonly detail?: string;
 	/** Validation errors per field (problem type `validation-failed`). */
 	readonly errors?: Readonly<Record<string, readonly string[]>>;
+	/** The same validation errors as stable codes, keyed and ordered like `errors`. */
+	readonly fieldErrors?: Readonly<Record<string, readonly FieldErrorCode[]>>;
 	/** Error-specific extension members, e.g. `currentRevision` of a save conflict. */
 	readonly [extension: string]: unknown;
 }
@@ -25,9 +37,29 @@ export class ApiError extends Error {
 		return this.problem?.type;
 	}
 
+	/** The problem's stable code, the last part of its type URI (e.g. `validation-failed`), if it is one of the app's. */
+	get code(): string | undefined {
+		const type = this.type;
+		return type?.startsWith(ApiError.TYPE_PREFIX) ? type.slice(ApiError.TYPE_PREFIX.length) : undefined;
+	}
+
+	/** The common prefix of the app's problem types (arc42 ch. 8.2). */
+	static readonly TYPE_PREFIX = "https://tacticalboard/errors/";
+
 	/** The first validation message for `field`, if any. */
 	fieldError(field: string): string | undefined {
 		return this.problem?.errors?.[field]?.[0];
+	}
+
+	/** The validation problems of every field as stable codes (empty when the server sent none). */
+	fieldErrorCodes(): [field: string, error: FieldErrorCode][] {
+		return Object.entries(this.problem?.fieldErrors ?? {}).flatMap(([field, errors]) =>
+			Array.isArray(errors) ? errors.filter(ApiError.isFieldErrorCode).map((error): [string, FieldErrorCode] => [field, error]) : [],
+		);
+	}
+
+	private static isFieldErrorCode(value: unknown): value is FieldErrorCode {
+		return typeof value === "object" && value !== null && typeof (value as { code?: unknown }).code === "string";
 	}
 
 	/** All validation messages, as `field: message`. */

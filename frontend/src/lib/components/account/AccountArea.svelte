@@ -10,6 +10,7 @@ The account corner of the shared navbar (`AppNavbar`, start page and editor; arc
 -->
 <script lang="ts">
 	import { authSession, type AuthSession, type LoginNotice } from "$lib/auth/AuthSession";
+	import { t } from "$lib/i18n";
 	import AccountMenu from "./AccountMenu.svelte";
 	import DisplayNameDialog from "./DisplayNameDialog.svelte";
 
@@ -45,11 +46,11 @@ The account corner of the shared navbar (`AppNavbar`, start page and editor; arc
 		/>
 	{:else if $sessionState.status === "anonymous"}
 		{#if loginNotice}
-			<p class="account-note" role="status">{loginNotice === "blocked" ? "Account blocked." : "Login failed."}</p>
+			<p class="account-note" role="status">{loginNotice === "blocked" ? $t.account.accountBlocked : $t.account.loginFailed}</p>
 		{/if}
-		<a class="account-login" href={session.loginUrl(returnTo)} data-sveltekit-reload>Log in</a>
+		<a class="account-login" href={session.loginUrl(returnTo)} data-sveltekit-reload>{$t.account.logIn}</a>
 	{:else if $sessionState.status === "unavailable"}
-		<p class="account-note" title="The server is not reachable. Creating, editing, export and import work as usual.">Local mode</p>
+		<p class="account-note" title={$t.account.localModeHint}>{$t.account.localMode}</p>
 	{/if}
 </div>
 

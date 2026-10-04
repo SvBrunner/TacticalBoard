@@ -1,23 +1,29 @@
 import type { SportId } from "../Sport";
 
-/** A predefined position: the short code shown on the player and its full name. */
+/**
+ * A predefined position: the short code shown on the player (a stored
+ * value, never translated). Its full name is a system text of the UI
+ * language (`messages.positions[sport][code]`, arc42 ch. 8.18).
+ */
 export interface Position {
 	readonly code: string;
-	readonly name: string;
 }
+
+/** The full names of a sport's positions by code, as the message catalog holds them. */
+export type PositionNames = Readonly<Record<SportId, Readonly<Record<string, string>>>>;
 
 /** Letters (any script) and decimal digits. */
 const LABEL_CHARACTER = /^[\p{L}\p{Nd}]$/u;
 
 const FLOORBALL_POSITIONS: readonly Position[] = [
-	{ code: "G", name: "Goalie" },
-	{ code: "V", name: "Verteidiger" },
-	{ code: "C", name: "Center" },
-	{ code: "F", name: "Flügel" },
-	{ code: "LV", name: "Linker Verteidiger" },
-	{ code: "RV", name: "Rechter Verteidiger" },
-	{ code: "LF", name: "Linker Flügel" },
-	{ code: "RF", name: "Rechter Flügel" },
+	{ code: "G" },
+	{ code: "V" },
+	{ code: "C" },
+	{ code: "F" },
+	{ code: "LV" },
+	{ code: "RV" },
+	{ code: "LF" },
+	{ code: "RF" },
 ];
 
 const POSITIONS_BY_SPORT: Record<SportId, readonly Position[]> = {
@@ -37,10 +43,18 @@ const POSITIONS_BY_SPORT: Record<SportId, readonly Position[]> = {
 export class PositionCatalog {
 	static readonly MAX_LABEL_LENGTH = 2;
 
-	private constructor(readonly positions: readonly Position[]) {}
+	private constructor(
+		readonly sport: SportId,
+		readonly positions: readonly Position[],
+	) {}
 
 	static forSport(sport: SportId): PositionCatalog {
-		return new PositionCatalog(POSITIONS_BY_SPORT[sport]);
+		return new PositionCatalog(sport, POSITIONS_BY_SPORT[sport]);
+	}
+
+	/** The full name of the position `code` in `names` (the catalog's `positions`), or the code itself. */
+	nameOf(code: string, names: PositionNames): string {
+		return names[this.sport]?.[code] ?? code;
 	}
 
 	/** The predefined position with this code, if any (exact match). */

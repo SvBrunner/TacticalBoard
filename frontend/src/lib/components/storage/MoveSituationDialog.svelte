@@ -10,6 +10,7 @@ setting `situation` back to `null`.
 -->
 <script lang="ts">
 	import { modalDialog } from "$lib/actions/modalDialog";
+	import { t } from "$lib/i18n";
 	import type { Folder } from "$lib/storage/FolderApi";
 	import type { SituationSummary } from "$lib/storage/SituationApi";
 
@@ -35,7 +36,7 @@ setting `situation` back to `null`.
 	let placeList: HTMLUListElement | undefined = $state();
 
 	const places = $derived([
-		{ value: TOP_LEVEL, label: "Top level (no folder)" },
+		{ value: TOP_LEVEL, label: $t.moveDialog.topLevel },
 		...folders.map((folder) => ({ value: folder.id, label: folder.name })),
 	]);
 
@@ -59,10 +60,10 @@ setting `situation` back to `null`.
 	use:modalDialog={{ open, onCancel, initialFocus: () => placeList?.querySelector<HTMLInputElement>("input:checked") }}
 >
 	<form method="dialog" class="modal-form" onsubmit={handleSubmit}>
-		<h2 id="{uid}-title" class="modal-title">Move “{situation?.title ?? ""}”</h2>
+		<h2 id="{uid}-title" class="modal-title">{$t.moveDialog.heading(situation?.title ?? "")}</h2>
 
 		<fieldset class="modal-fieldset">
-			<legend class="modal-label">Move to</legend>
+			<legend class="modal-label">{$t.moveDialog.moveTo}</legend>
 			<ul class="places" bind:this={placeList}>
 				{#each places as place (place.value)}
 					<li>
@@ -70,20 +71,20 @@ setting `situation` back to `null`.
 							<input type="radio" name="{uid}-place" value={place.value} bind:group={chosen} />
 							<span class="place-name">{place.label}</span>
 							{#if place.value === current}
-								<span class="current">(current)</span>
+								<span class="current">{$t.moveDialog.current}</span>
 							{/if}
 						</label>
 					</li>
 				{/each}
 			</ul>
 			{#if folders.length === 0}
-				<p class="modal-text">There are no folders yet. Create one on the start page first.</p>
+				<p class="modal-text">{$t.moveDialog.noFolders}</p>
 			{/if}
 		</fieldset>
 
 		<div class="modal-actions">
-			<button type="button" class="modal-btn secondary" onclick={onCancel}>Cancel</button>
-			<button type="submit" class="modal-btn primary" disabled={chosen === current}>Move</button>
+			<button type="button" class="modal-btn secondary" onclick={onCancel}>{$t.common.cancel}</button>
+			<button type="submit" class="modal-btn primary" disabled={chosen === current}>{$t.common.move}</button>
 		</div>
 	</form>
 </dialog>

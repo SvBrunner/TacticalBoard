@@ -6,7 +6,7 @@ import { SavedSituationFormat } from "$lib/storage/SavedSituationFormat";
 import { summaryOf } from "$lib/testing/storageFakes";
 import SavedSituations from "./SavedSituations.svelte";
 
-const loggedIn: SessionState = { status: "authenticated", user: { id: "u1", displayName: "Alice", isSystemAdministrator: false } };
+const loggedIn: SessionState = { status: "authenticated", user: { id: "u1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null } };
 
 function renderWith(session: SessionState, list: SavedListState = { status: "idle" }, busy = false, emptyMessage?: string) {
 	const handlers = { onOpen: vi.fn(), onDelete: vi.fn(), onMove: vi.fn(), onRetry: vi.fn() };
@@ -55,7 +55,7 @@ describe("SavedSituations", () => {
 	});
 
 	it("shows a failure with Try again", async () => {
-		const { onRetry } = renderWith(loggedIn, { status: "failed", message: "The server is not reachable." });
+		const { onRetry } = renderWith(loggedIn, { status: "failed", message: () => "The server is not reachable." });
 
 		expect(screen.getByRole("alert")).toHaveTextContent("The server is not reachable.");
 		await fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -83,7 +83,7 @@ describe("SavedSituations", () => {
 		expect(items).toHaveLength(2);
 		const open = within(items[0]).getByRole("button", { name: "Powerplay" });
 		expect(open).toHaveAccessibleDescription(
-			`Half field Last changed by Deleted user, ${SavedSituationFormat.dateTime("2026-10-04T09:30:00.000Z")} Created by Bob`,
+			`Half field Last changed by Deleted user, ${SavedSituationFormat.dateTime("2026-10-04T09:30:00.000Z", "en")} Created by Bob`,
 		);
 		expect(items[0].querySelector("time")).toHaveAttribute("datetime", "2026-10-04T09:30:00.000Z");
 		expect(within(items[1]).getByRole("button", { name: "Breakout" })).toBeInTheDocument();

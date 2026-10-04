@@ -54,10 +54,10 @@ public class FolderEndpointsTests
     }
 
     [Theory]
-    [InlineData(null, "must not be empty")]
-    [InlineData("  ", "must not be empty")]
-    [InlineData("a\nb", "must not contain control characters")]
-    public async Task Post_and_put_report_an_invalid_name(string? name, string message)
+    [InlineData(null, "must not be empty", "required")]
+    [InlineData("  ", "must not be empty", "required")]
+    [InlineData("a\nb", "must not contain control characters", "control-characters")]
+    public async Task Post_and_put_report_an_invalid_name(string? name, string message, string code)
     {
         var post = await FolderEndpoints.CreatePersonalAsync(new FolderNameRequest(name), _service, _areas, Cancellation);
         var created = await CreateAsync();
@@ -65,6 +65,11 @@ public class FolderEndpointsTests
 
         Assert.Equal([message], Assert.IsType<ValidationProblem>(post.Result).ProblemDetails.Errors[FolderEndpoints.NameField]);
         Assert.Equal([message], Assert.IsType<ValidationProblem>(put.Result).ProblemDetails.Errors[FolderEndpoints.NameField]);
+        foreach (var problem in new[] { Assert.IsType<ValidationProblem>(post.Result), Assert.IsType<ValidationProblem>(put.Result) })
+        {
+            var codes = Assert.IsAssignableFrom<IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>[]>>(problem.ProblemDetails.Extensions["fieldErrors"]);
+            Assert.Equal(code, codes[FolderEndpoints.NameField].Single()["code"]);
+        }
         Assert.Equal("Set pieces", Assert.Single(_repository.Folders).Name);
     }
 

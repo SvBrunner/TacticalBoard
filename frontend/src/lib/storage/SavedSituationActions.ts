@@ -1,6 +1,7 @@
 import { get, writable, type Readable } from "svelte/store";
 import type { ConfirmationRequest } from "$lib/dialogs/ConfirmationPrompt";
 import { EditorRoute } from "$lib/editor/EditorRoute";
+import type { Translatable } from "$lib/i18n/Messages";
 import type { OpenOutcome } from "./SituationOpener";
 import type { SituationSummary } from "./SituationApi";
 
@@ -8,7 +9,7 @@ import type { SituationSummary } from "./SituationApi";
 export interface SavedActionsState {
 	readonly opening: boolean;
 	/** Why the last open failed, or `null`. */
-	readonly error: string | null;
+	readonly error: Translatable | null;
 }
 
 export interface SavedSituationActionsDependencies {
@@ -52,7 +53,9 @@ export class SavedSituationActions {
 			if (outcome.status === "opened") {
 				await this.deps.navigate(EditorRoute.forSaved(situation.id));
 			} else if (outcome.status === "failed") {
-				this.store.update((state) => ({ ...state, error: `"${situation.title}" couldn't be opened. ${outcome.message}` }));
+				const reason = outcome.message;
+				const error: Translatable = (m) => `${m.saved.openFailed(situation.title)} ${reason(m)}`;
+				this.store.update((state) => ({ ...state, error }));
 				void this.deps.list.load();
 			}
 		} finally {
@@ -64,10 +67,10 @@ export class SavedSituationActions {
 	async delete(situation: SituationSummary): Promise<boolean> {
 		this.clearError();
 		const confirmed = await this.deps.confirm({
-			title: "Delete situation?",
-			message: `“${situation.title}” will be deleted.`,
-			confirmLabel: "Delete",
-			cancelLabel: "Cancel",
+			title: (m) => m.saved.deleteQuestion,
+			message: (m) => m.saved.deleteMessage(situation.title),
+			confirmLabel: (m) => m.common.delete,
+			cancelLabel: (m) => m.common.cancel,
 		});
 		return confirmed && (await this.deps.list.delete(situation));
 	}

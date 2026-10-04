@@ -191,6 +191,28 @@ describe("ApiClient", () => {
 			expect(error.name).toBe("ApiError");
 		});
 
+		it("exposes the problem's stable code (only for the app's own types)", () => {
+			expect(new ApiError(409, { type: "https://tacticalboard/errors/duplicate-title" }).code).toBe("duplicate-title");
+			expect(new ApiError(409, { type: "https://example.org/other" }).code).toBeUndefined();
+			expect(new ApiError(500, null).code).toBeUndefined();
+		});
+
+		it("lists the field errors' stable codes with their values, skipping malformed entries", () => {
+			const error = new ApiError(400, {
+				fieldErrors: {
+					name: [{ code: "too-long", maxLength: 100 }, { nope: true } as never],
+					title: [{ code: "required" }],
+					broken: "x" as never,
+				},
+			});
+
+			expect(error.fieldErrorCodes()).toEqual([
+				["name", { code: "too-long", maxLength: 100 }],
+				["title", { code: "required" }],
+			]);
+			expect(new ApiError(400, { errors: { a: ["One."] } }).fieldErrorCodes()).toEqual([]);
+		});
+
 		it("lists every validation message with its field", () => {
 			const error = new ApiError(400, { errors: { a: ["One.", "Two."], b: ["Three."] } });
 

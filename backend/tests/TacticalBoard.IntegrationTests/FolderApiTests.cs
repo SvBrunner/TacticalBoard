@@ -138,8 +138,11 @@ public sealed class FolderApiTests(PostgresFixture postgres) : IAsyncLifetime
         using var blank = await alice.SendJsonAsync(HttpMethod.Post, PersonalFolders, new { name = "  " }, await alice.AntiforgeryTokenAsync());
         using var tooLong = await alice.SendJsonAsync(HttpMethod.Post, PersonalFolders, new { name = new string('a', 101) }, await alice.AntiforgeryTokenAsync());
 
-        var errors = (await AssertProblemAsync(blank, HttpStatusCode.BadRequest, "validation-failed")).GetProperty("errors");
+        var problem = await AssertProblemAsync(blank, HttpStatusCode.BadRequest, "validation-failed");
+        var errors = problem.GetProperty("errors");
         Assert.Equal("must not be empty", errors.GetProperty("name")[0].GetString());
+        var codes = problem.GetProperty("fieldErrors");
+        Assert.Equal("required", codes.GetProperty("name")[0].GetProperty("code").GetString());
         Assert.Equal(
             "expected at most 100 characters",
             (await AssertProblemAsync(tooLong, HttpStatusCode.BadRequest, "validation-failed")).GetProperty("errors").GetProperty("name")[0].GetString());

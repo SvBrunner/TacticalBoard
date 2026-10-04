@@ -19,7 +19,7 @@ describe("SavedFolders", () => {
 	});
 
 	it("shows a failure with Try again", async () => {
-		const { onRetry } = renderWith({ status: "failed", message: "The server is not reachable." });
+		const { onRetry } = renderWith({ status: "failed", message: () => "The server is not reachable." });
 
 		expect(screen.getByRole("alert")).toHaveTextContent("The server is not reachable.");
 		await fireEvent.click(screen.getByRole("button", { name: "Try again" }));

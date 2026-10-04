@@ -30,6 +30,8 @@ doesn't exist (any more) says so.
 	import type { SituationSummary } from "$lib/storage/SituationApi";
 	import { situationLink } from "$lib/storage/SituationLink";
 	import { folderApi, situationApi, situationOpener } from "$lib/storage/situationStorage";
+	import { t } from "$lib/i18n";
+	import type { Translatable } from "$lib/i18n/Messages";
 
 	interface Props {
 		/** The folder; fixed for the component's life (the route re-creates it for another folder). */
@@ -47,6 +49,7 @@ doesn't exist (any more) says so.
 		files: new SituationFileTransfer(),
 		link: situationLink,
 		confirm: (request) => prompt.request(request),
+		isLoggedIn: () => authSession.current().status === "authenticated",
 		log: notifications,
 	});
 
@@ -74,7 +77,7 @@ doesn't exist (any more) says so.
 	const actionState = actions.state;
 
 	let renaming = $state(false);
-	let folderError: string | null = $state(null);
+	let folderError: Translatable | null = $state(null);
 	let moving: SituationSummary | null = $state(null);
 	const name = $derived($folderState.status === "loaded" ? $folderState.folder.name : null);
 	const otherPlaces = $derived($folderListState.status === "loaded" ? $folderListState.folders : []);
@@ -124,36 +127,36 @@ doesn't exist (any more) says so.
 </script>
 
 <svelte:head>
-	<title>{name ? `${name} – Tactical Board` : "Folder – Tactical Board"}</title>
+	<title>{$t.app.pageTitle(name ?? $t.folderPage.title)}</title>
 </svelte:head>
 
-<AppNavbar title={name ?? "Folder"} loginReturnTo={FolderRoute.forFolder(folderId)} />
+<AppNavbar title={name ?? $t.folderPage.title} loginReturnTo={FolderRoute.forFolder(folderId)} />
 
 <main class="folder-page">
-	<nav aria-label="Breadcrumb" class="breadcrumb">
+	<nav aria-label={$t.folderPage.breadcrumb} class="breadcrumb">
 		<ol>
-			<li><a href="/">Start page</a></li>
-			<li><span aria-current="page">{name ?? "Folder"}</span></li>
+			<li><a href="/">{$t.folderPage.startPage}</a></li>
+			<li><span aria-current="page">{name ?? $t.folderPage.title}</span></li>
 		</ol>
 	</nav>
 
 	{#if $sessionState.status === "anonymous"}
-		<p class="hint">Log in to see your folders.</p>
+		<p class="hint">{$t.folderPage.logInHint}</p>
 	{:else if $sessionState.status === "unavailable"}
-		<p class="hint">Folders need the server, which can't be reached. Creating, editing, export and import work as usual on the start page.</p>
+		<p class="hint">{$t.folderPage.unavailableHint}</p>
 	{:else if $sessionState.status === "authenticated"}
 		{#if $folderState.status === "loading"}
-			<p class="hint" role="status">Loading folder…</p>
+			<p class="hint" role="status">{$t.folderPage.loading}</p>
 		{:else if $folderState.status === "missing"}
-			<p class="hint">This folder doesn't exist (any more). <a href="/">Back to the start page</a></p>
+			<p class="hint">{$t.folderPage.missing} <a href="/">{$t.folderPage.backToStart}</a></p>
 		{:else if $folderState.status === "failed"}
 			<div class="failure" role="alert">
-				<p class="hint">{$folderState.message}</p>
-				<button type="button" class="tool" onclick={() => void folder.load()}>Try again</button>
+				<p class="hint">{$folderState.message($t)}</p>
+				<button type="button" class="tool" onclick={() => void folder.load()}>{$t.common.tryAgain}</button>
 			</div>
 		{:else}
 			<section class="panel" aria-labelledby="folder-heading">
-				<h2 id="folder-heading" class="panel-title">Folder</h2>
+				<h2 id="folder-heading" class="panel-title">{$t.folderPage.heading}</h2>
 				<ul class="tools">
 					<li>
 						<button type="button" class="tool" onclick={rename}>
@@ -161,7 +164,7 @@ doesn't exist (any more) says so.
 								<path d="M4 20h4L19 9l-4-4L4 16z" />
 								<path d="M13.5 6.5l4 4" />
 							</svg>
-							Rename
+							{$t.folderPage.rename}
 						</button>
 					</li>
 					<li>
@@ -169,30 +172,30 @@ doesn't exist (any more) says so.
 							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 								<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
 							</svg>
-							Delete folder
+							{$t.folderPage.delete}
 						</button>
 					</li>
 				</ul>
 				{#if folderError}
-					<p class="error" role="alert">{folderError}</p>
+					<p class="error" role="alert">{folderError($t)}</p>
 				{/if}
 			</section>
 
 			<section class="panel" aria-labelledby="start-heading">
-				<h2 id="start-heading" class="panel-title">Start in this folder</h2>
+				<h2 id="start-heading" class="panel-title">{$t.folderPage.startHere}</h2>
 				<StartActions {workflow} {prompt} {target} onOpened={openEditor} />
 			</section>
 
 			<section class="panel" aria-labelledby="situations-heading">
-				<h2 id="situations-heading" class="panel-title">Situations</h2>
+				<h2 id="situations-heading" class="panel-title">{$t.folderPage.situations}</h2>
 				{#if $actionState.error}
-					<p class="error" role="alert">{$actionState.error}</p>
+					<p class="error" role="alert">{$actionState.error($t)}</p>
 				{/if}
 				<SavedSituations
 					session={$sessionState}
 					list={$savedState}
 					busy={$actionState.opening}
-					emptyMessage="This folder is empty. Start a new situation or import one here, or move situations into it."
+					emptyMessage={$t.folderPage.empty}
 					onOpen={(situation) => void actions.open(situation)}
 					onDelete={(situation) => void deleteSituation(situation)}
 					onMove={(situation) => (moving = situation)}
@@ -205,8 +208,8 @@ doesn't exist (any more) says so.
 
 <FolderNameDialog
 	open={renaming}
-	title="Rename folder"
-	submitLabel="Rename"
+	title={$t.folders.renameHeading}
+	submitLabel={$t.common.rename}
 	initialName={name ?? ""}
 	onSubmit={(newName) => folder.rename(newName)}
 	onClose={() => (renaming = false)}

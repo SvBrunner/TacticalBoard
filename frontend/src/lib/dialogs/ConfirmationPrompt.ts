@@ -1,11 +1,12 @@
+import type { Translatable } from "$lib/i18n/Messages";
 import { ChoicePrompt } from "./ChoicePrompt";
 
-/** What a confirmation dialog asks. */
+/** What a confirmation dialog asks; the texts are translated when shown. */
 export interface ConfirmationRequest {
-	readonly title: string;
-	readonly message: string;
-	readonly confirmLabel: string;
-	readonly cancelLabel?: string;
+	readonly title: Translatable;
+	readonly message: Translatable;
+	readonly confirmLabel: Translatable;
+	readonly cancelLabel?: Translatable;
 }
 
 /**

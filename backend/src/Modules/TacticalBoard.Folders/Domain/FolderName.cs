@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using TacticalBoard.SharedKernel.Text;
+using TacticalBoard.SharedKernel.Validation;
 
 namespace TacticalBoard.Folders.Domain;
 
@@ -26,15 +27,15 @@ internal sealed record FolderName
     /// <summary>The form names are compared in.</summary>
     public string Normalized { get; }
 
-    /// <summary>Validates a name entered by the user.</summary>
-    public static bool TryCreate(string? input, [NotNullWhen(true)] out FolderName? name, [NotNullWhen(false)] out string? error)
+    /// <summary>Validates a name entered by the user; <paramref name="error"/> carries a stable code (arc42 ch. 8.2).</summary>
+    public static bool TryCreate(string? input, [NotNullWhen(true)] out FolderName? name, [NotNullWhen(false)] out FieldError? error)
     {
         var trimmed = input?.Trim() ?? string.Empty;
         error = trimmed switch
         {
-            { Length: 0 } => "must not be empty",
-            { Length: > MaxLength } => $"expected at most {MaxLength} characters",
-            _ when trimmed.Any(char.IsControl) => "must not contain control characters",
+            { Length: 0 } => FieldError.Required(),
+            { Length: > MaxLength } => FieldError.TooLong(MaxLength, $"expected at most {MaxLength} characters"),
+            _ when trimmed.Any(char.IsControl) => FieldError.ControlCharacters(),
             _ => null,
         };
         name = error is null ? new FolderName(trimmed) : null;

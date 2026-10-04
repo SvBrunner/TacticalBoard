@@ -6,6 +6,7 @@ session (`onCommit`), so one focus of the field is one undo step. Shows the
 new frame's text when the active frame changes.
 -->
 <script lang="ts">
+	import { t } from "$lib/i18n";
 	interface Props {
 		/** 1-based position of the active frame, shown in the label. */
 		frameNumber: number;
@@ -21,12 +22,12 @@ new frame's text when the active frame changes.
 </script>
 
 <div class="text-field">
-	<label class="text-label" for="{uid}-frame-description">Frame {frameNumber} description</label>
+	<label class="text-label" for="{uid}-frame-description">{$t.details.frameDescription(frameNumber)}</label>
 	<textarea
 		id="{uid}-frame-description"
 		class="text-input"
 		rows="4"
-		placeholder="What happens in this frame? (Markdown)"
+		placeholder={$t.details.frameDescriptionPlaceholder}
 		value={description}
 		oninput={(event) => onChange(event.currentTarget.value)}
 		onblur={onCommit}

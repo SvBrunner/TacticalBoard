@@ -301,4 +301,39 @@ public class SituationDocumentValidatorTests
     [InlineData("-", false)]
     [InlineData("²", false)] // superscript two is a digit, but not a decimal digit
     public void Position_labels(string label, bool valid) => Assert.Equal(valid, SituationDocumentValidator.IsValidLabel(label));
+
+    [Fact]
+    public void Gives_every_issue_a_stable_code_with_its_values()
+    {
+        var file = SituationDocuments.Minimal();
+        file["format"] = "other";
+        file["situation"]!["fieldType"] = "quarter";
+        Element(file)["x"] = "1";
+        Element(file)["label"] = "ABC";
+
+        var issues = Validator.Validate(SituationDocuments.Parse(file.ToJsonString()));
+
+        Assert.Equal(
+            [("format", "expected-value"), ("situation.fieldType", "expected-field-type"), ("situation.frames[0].elements[0].x", "expected-finite-number"), ("situation.frames[0].elements[0].label", "expected-label")],
+            issues.Select(issue => (issue.Path, issue.Error.Code)));
+        Assert.Equal("tacticalboard.situation", issues[0].Error.Values["expected"]);
+    }
+
+    [Fact]
+    public void Codes_a_wrong_version_with_the_current_one_and_duplicates_with_the_id()
+    {
+        var file = SituationDocuments.Minimal();
+        file["formatVersion"] = 2;
+        var frames = Situation(file)["frames"]!.AsArray();
+        frames.Add(frames[0]!.DeepClone());
+
+        var issues = Validator.Validate(SituationDocuments.Parse(file.ToJsonString()));
+
+        var version = Assert.Single(issues, issue => issue.Path == "formatVersion").Error;
+        Assert.Equal(("expected-current-version", 3), (version.Code, version.Values["version"]));
+        var duplicate = Assert.Single(issues, issue => issue.Path == "situation.frames[1].id").Error;
+        Assert.Equal("duplicate-id", duplicate.Code);
+        Assert.Equal(Frame(file)["id"]!.GetValue<string>(), duplicate.Values["id"]);
+    }
 }
+

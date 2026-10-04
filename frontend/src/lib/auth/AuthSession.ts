@@ -1,11 +1,15 @@
 import { get, writable, type Readable } from "svelte/store";
-import { ApiClient, ApiError, ApiUnavailableError, type AntiforgeryToken } from "$lib/api/ApiClient";
+import { ApiClient, ApiError, type AntiforgeryToken } from "$lib/api/ApiClient";
+import type { Translatable } from "$lib/i18n/Messages";
+import { ProblemText } from "$lib/i18n/ProblemText";
 
 /** The logged-in user, as `GET /api/me` returns it. */
 export interface CurrentUser {
 	readonly id: string;
 	readonly displayName: string;
 	readonly isSystemAdministrator: boolean;
+	/** The UI language stored in the account (arc42 ch. 8.18), or `null` if the user never chose one. */
+	readonly preferredLanguage: string | null;
 }
 
 /**
@@ -21,7 +25,7 @@ export type SessionState =
 	| { readonly status: "authenticated"; readonly user: CurrentUser };
 
 /** The result of changing the display name: the updated user, or a message to show. */
-export type DisplayNameChange = { readonly ok: true; readonly user: CurrentUser } | { readonly ok: false; readonly message: string };
+export type DisplayNameChange = { readonly ok: true; readonly user: CurrentUser } | { readonly ok: false; readonly message: Translatable };
 
 /**
  * Why the last login gave no session, as the backend reports it on the start
@@ -45,6 +49,7 @@ export interface FormField {
 export class AuthSession {
 	static readonly ME_PATH = "/api/me";
 	static readonly DISPLAY_NAME_PATH = "/api/me/display-name";
+	static readonly LANGUAGE_PATH = "/api/me/language";
 	static readonly LOGIN_PATH = "/auth/login";
 	static readonly LOGOUT_PATH = "/auth/logout";
 	/** The query parameter the backend adds to the start page when a login failed. */
@@ -103,18 +108,36 @@ export class AuthSession {
 		}
 	}
 
-	private messageFor(error: unknown): string {
-		if (error instanceof ApiError) {
-			if (error.status === 401) {
+	/**
+	 * Stores `language` as the logged-in user's UI language (arc42 ch. 8.18);
+	 * on success the state carries it. Resolves with whether it was stored.
+	 * Never throws.
+	 */
+	async changeLanguage(language: string): Promise<boolean> {
+		try {
+			const user = await this.api.send<CurrentUser>("PUT", AuthSession.LANGUAGE_PATH, { language });
+			this.store.set({ status: "authenticated", user });
+			return true;
+		} catch (error) {
+			if (ProblemText.isSessionEnded(error)) {
 				this.store.set({ status: "anonymous" });
-				return "Your session has ended. Please log in again.";
 			}
-			return error.fieldError("displayName") ?? "The display name couldn't be saved.";
+			return false;
 		}
-		if (error instanceof ApiUnavailableError) {
-			return "The server is not reachable. Please try again later.";
+	}
+
+	private messageFor(error: unknown): Translatable {
+		if (ProblemText.isSessionEnded(error)) {
+			this.store.set({ status: "anonymous" });
+			return ProblemText.SESSION_ENDED;
 		}
-		return "The display name couldn't be saved.";
+		if (error instanceof ApiError) {
+			const problem = ProblemText.fieldError(error, "displayName");
+			if (problem) {
+				return (m) => m.fieldErrors.displayName(problem(m));
+			}
+		}
+		return ProblemText.describe(error, (m) => m.account.displayNameNotSaved);
 	}
 
 	/** A path on this origin: one leading `/`, not `//` or `/\`. */

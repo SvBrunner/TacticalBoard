@@ -22,11 +22,13 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(user => user.Subject).HasMaxLength(ExternalIdentity.MaxSubjectLength).IsRequired();
         builder.Property(user => user.DisplayNameValue).HasColumnName("display_name").HasMaxLength(DisplayName.MaxLength).IsRequired();
         builder.Property(user => user.IsSystemAdministrator);
+        builder.Property(user => user.PreferredLanguageValue).HasColumnName("preferred_language").HasMaxLength(LanguageTag.MaxLength);
         builder.Property(user => user.IsBlocked);
         builder.Property(user => user.CreatedAt);
         builder.Property(user => user.DeletedAt);
         builder.Ignore(user => user.Identity);
         builder.Ignore(user => user.DisplayName);
+        builder.Ignore(user => user.PreferredLanguage);
         builder.Ignore(user => user.IsDeleted);
         builder.Ignore(user => user.CanSignIn);
         builder.HasIndex(user => new { user.Issuer, user.Subject })

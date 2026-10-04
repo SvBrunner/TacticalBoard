@@ -10,6 +10,7 @@ which also show the questions of `prompt`.
 <script lang="ts">
 	import SituationDialogs from "$lib/components/dialogs/SituationDialogs.svelte";
 	import type { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
+	import { t } from "$lib/i18n";
 	import type { SituationWorkflow } from "$lib/editor/SituationWorkflow";
 	import { TOP_LEVEL, type SaveTarget } from "$lib/storage/SaveTarget";
 
@@ -42,7 +43,7 @@ which also show the questions of `prompt`.
 			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 				<path d="M12 5v14M5 12h14" />
 			</svg>
-			New situation
+			{$t.start.newSituation}
 		</button>
 	</li>
 	<li>
@@ -51,7 +52,7 @@ which also show the questions of `prompt`.
 				<path d="M12 15V3M7 8l5-5 5 5" />
 				<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
 			</svg>
-			Import
+			{$t.start.import}
 		</button>
 		<input bind:this={fileInput} type="file" accept=".json" class="hidden-input" onchange={handleFileChange} />
 	</li>

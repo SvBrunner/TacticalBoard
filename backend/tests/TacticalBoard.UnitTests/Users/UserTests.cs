@@ -46,6 +46,20 @@ public class UserTests
     }
 
     [Fact]
+    public void Has_no_language_until_it_is_chosen()
+    {
+        var user = TestUsers.Create();
+        Assert.Null(user.PreferredLanguage);
+        Assert.Null(user.PreferredLanguageValue);
+
+        user.ChangePreferredLanguage(LanguageTag.FromTrusted("de"));
+
+        Assert.Equal("de", user.PreferredLanguage?.Value);
+        Assert.Equal("de", user.PreferredLanguageValue);
+        Assert.Throws<ArgumentNullException>(() => user.ChangePreferredLanguage(null!));
+    }
+
+    [Fact]
     public void Can_become_system_administrator()
     {
         var user = TestUsers.Create();

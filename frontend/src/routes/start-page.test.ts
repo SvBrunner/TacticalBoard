@@ -13,6 +13,7 @@ import { Frame } from "$lib/model/Frame";
 import { Situation } from "$lib/model/Situation";
 import { installDialogPolyfill } from "$lib/testing/dialogPolyfill";
 import StartPage from "./+page.svelte";
+import { accountLanguage, i18n } from "$lib/i18n";
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
 
@@ -135,7 +136,7 @@ describe("start page", () => {
 		});
 
 		it("shows the user's menu in the header when logged in", async () => {
-			await sessionFrom(jsonResponse(200, { id: "1", displayName: "Alice", isSystemAdministrator: false }));
+			await sessionFrom(jsonResponse(200, { id: "1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null }));
 			render(StartPage);
 
 			expect(within(screen.getByRole("banner")).getByRole("button", { name: "Alice" })).toBeInTheDocument();
@@ -246,7 +247,7 @@ describe("start page", () => {
 	});
 
 	describe("saved situations", () => {
-		const alice = { id: "u1", displayName: "Alice", isSystemAdministrator: false };
+		const alice = { id: "u1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null };
 		let server: FakeFetch;
 
 		function savedSection() {
@@ -356,6 +357,72 @@ describe("start page", () => {
 			expect(within(screen.getByRole("region", { name: "Folders" })).getByRole("link", { name: "Set pieces" })).toBeInTheDocument();
 		});
 
+		it("in German: the page, the dialog and the server's refusal are German", async () => {
+			i18n.select("de");
+			await loggedInWith([], [folderOf("f1", "Set pieces")]);
+			server.on("POST", "/api/personal-area/folders", problemResponse(409, { type: "https://tacticalboard/errors/duplicate-folder-name", detail: "English." }));
+			render(StartPage);
+			await settle();
+
+			expect(screen.getByRole("region", { name: "Start" })).toBeInTheDocument();
+			expect(screen.getByRole("button", { name: "Neue Situation" })).toBeInTheDocument();
+			expect(screen.getByRole("button", { name: "Importieren" })).toBeInTheDocument();
+			expect(screen.getByRole("region", { name: "Gespeicherte Situationen" })).toBeInTheDocument();
+			expect(screen.getByText("Keine Situationen außerhalb der Ordner.")).toBeInTheDocument();
+
+			await fireEvent.click(screen.getByRole("button", { name: "Neuer Ordner" }));
+			await settle();
+			const dialog = screen.getByRole("dialog", { name: "Neuer Ordner" });
+			await fireEvent.input(within(dialog).getByRole("textbox", { name: "Ordnername" }), { target: { value: "set pieces" } });
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Erstellen" }));
+			await settle();
+
+			expect(within(dialog).getByRole("alert")).toHaveTextContent("Ein Ordner namens „set pieces“ existiert bereits. Wähle einen anderen Namen.");
+		});
+
+		it("on login, the account's language wins", async () => {
+			vi.stubGlobal("fetch", new FakeFetch().on("GET", "/api/me", problemResponse(401, {})).fetch);
+			await authSession.refresh();
+			const detach = accountLanguage.attach();
+			try {
+				server = new FakeFetch()
+					.on("GET", "/api/me", jsonResponse(200, { ...alice, preferredLanguage: "de" }))
+					.on("GET", "/api/antiforgery", jsonResponse(200, ANTIFORGERY))
+					.on("GET", "/api/personal-area/situations", jsonResponse(200, []))
+					.on("GET", "/api/personal-area/folders", jsonResponse(200, []));
+				vi.stubGlobal("fetch", server.fetch);
+				render(StartPage);
+				expect(screen.getByRole("region", { name: "Saved situations" })).toBeInTheDocument();
+
+				await authSession.refresh();
+				await settle();
+
+				expect(screen.getByRole("region", { name: "Gespeicherte Situationen" })).toBeInTheDocument();
+				expect(document.documentElement.lang).toBe("de");
+			} finally {
+				detach();
+			}
+		});
+
+		it("choosing a language when logged in stores it in the account", async () => {
+			const detach = accountLanguage.attach();
+			try {
+				await loggedInWith();
+				server.on("PUT", "/api/me/language", jsonResponse(200, { ...alice, preferredLanguage: "de" }));
+				render(StartPage);
+				await settle();
+
+				await fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "de" } });
+				await settle();
+
+				const [put] = server.requestsTo("/api/me/language");
+				expect(JSON.parse(put.body!)).toEqual({ language: "de" });
+				expect(screen.getByRole("combobox", { name: "Sprache" })).toHaveValue("de");
+			} finally {
+				detach();
+			}
+		});
+
 		it("keeps the New folder dialog open with the reason when the name is taken", async () => {
 			await loggedInWith([], [folderOf("f1", "Set pieces")]);
 			server.on("POST", "/api/personal-area/folders", problemResponse(409, { type: "https://tacticalboard/errors/duplicate-folder-name" }));
@@ -446,7 +513,7 @@ describe("start page", () => {
 			await fireEvent.click(screen.getByRole("button", { name: "Powerplay" }));
 			await settle();
 
-			expect(within(savedSection()).getByRole("alert")).toHaveTextContent('"Powerplay" couldn\'t be opened. This situation no longer exists.');
+			expect(within(savedSection()).getByRole("alert")).toHaveTextContent('“Powerplay” couldn\'t be opened. This situation no longer exists.');
 			expect(server.requestsTo("/api/personal-area/situations").length).toBeGreaterThanOrEqual(2);
 			expect(goto).not.toHaveBeenCalled();
 		});

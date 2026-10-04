@@ -31,10 +31,10 @@ export interface FrameWorkflowDependencies {
 /** The question asked before a frame is deleted. */
 export function deleteFrameRequest(frameNumber: number): ConfirmationRequest {
 	return {
-		title: "Delete frame?",
-		message: `Frame ${frameNumber} and everything on it will be deleted. This can't be undone.`,
-		confirmLabel: "Delete",
-		cancelLabel: "Cancel",
+		title: (m) => m.frames.deleteQuestion,
+		message: (m) => m.frames.deleteMessage(frameNumber),
+		confirmLabel: (m) => m.common.delete,
+		cancelLabel: (m) => m.common.cancel,
 	};
 }
 

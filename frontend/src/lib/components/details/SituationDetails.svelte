@@ -10,6 +10,7 @@ the fields' own (browser) undo applies while typing.
 -->
 <script lang="ts">
 	import type { Snippet } from "svelte";
+	import { t } from "$lib/i18n";
 
 	interface Props {
 		title: string;
@@ -39,7 +40,7 @@ the fields' own (browser) undo applies while typing.
 </script>
 
 <aside class="details-panel" class:expanded aria-labelledby="{uid}-heading">
-	<h2 id="{uid}-heading" class="heading">Details</h2>
+	<h2 id="{uid}-heading" class="heading">{$t.details.heading}</h2>
 	<button
 		type="button"
 		class="toggle"
@@ -47,13 +48,13 @@ the fields' own (browser) undo applies while typing.
 		aria-controls="{uid}-content"
 		onclick={() => (expanded = !expanded)}
 	>
-		<span>Details</span>
+		<span>{$t.details.heading}</span>
 		<svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" /></svg>
 	</button>
 
 	<div id="{uid}-content" class="content">
 		<div class="text-field">
-			<label class="text-label" for="{uid}-title">Title</label>
+			<label class="text-label" for="{uid}-title">{$t.details.title}</label>
 			<input
 				id="{uid}-title"
 				class="text-input"
@@ -66,12 +67,12 @@ the fields' own (browser) undo applies while typing.
 			/>
 		</div>
 		<div class="text-field">
-			<label class="text-label" for="{uid}-description">Description</label>
+			<label class="text-label" for="{uid}-description">{$t.details.description}</label>
 			<textarea
 				id="{uid}-description"
 				class="text-input"
 				rows="5"
-				placeholder="What is this situation about? (Markdown)"
+				placeholder={$t.details.descriptionPlaceholder}
 				value={description}
 				{disabled}
 				oninput={(event) => onDescriptionChange(event.currentTarget.value)}

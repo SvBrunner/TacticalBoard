@@ -1,3 +1,4 @@
+import { de, en, inEnglishDeep, translateDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { get } from "svelte/store";
 import { FixedClock } from "$lib/model/Clock";
@@ -76,7 +77,7 @@ describe("FrameWorkflow", () => {
 		it("asks for confirmation with the frame number, then deletes", async () => {
 			await expect(workflow.delete("f2")).resolves.toBe(true);
 
-			expect(confirm).toHaveBeenCalledWith(deleteFrameRequest(2));
+			expect(inEnglishDeep(confirm.mock.calls[0][0])).toEqual(inEnglishDeep(deleteFrameRequest(2)));
 			expect(order()).toEqual(["f1", "f3"]);
 			expect(messages()).toContain("Deleted frame 2");
 		});
@@ -123,11 +124,17 @@ describe("FrameWorkflow", () => {
 		});
 
 		it("the request is a destructive yes/no question", () => {
-			expect(deleteFrameRequest(4)).toEqual({
+			expect(inEnglishDeep(deleteFrameRequest(4))).toEqual({
 				title: "Delete frame?",
 				message: "Frame 4 and everything on it will be deleted. This can't be undone.",
 				confirmLabel: "Delete",
 				cancelLabel: "Cancel",
+			});
+			expect(translateDeep(deleteFrameRequest(4), de)).toEqual({
+				title: "Bild löschen?",
+				message: "Bild 4 und alles darauf wird gelöscht. Das lässt sich nicht rückgängig machen.",
+				confirmLabel: "Löschen",
+				cancelLabel: "Abbrechen",
 			});
 		});
 	});
