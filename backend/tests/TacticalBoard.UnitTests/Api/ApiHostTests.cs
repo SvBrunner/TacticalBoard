@@ -37,6 +37,8 @@ public class ApiHostTests
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["ConnectionStrings:TacticalBoard"] = "Host=unused;Database=unused",
+            ["Oidc:Authority"] = "https://idp.example.org",
+            ["Oidc:ClientId"] = "client",
         });
         host.ConfigureServices(builder.Services, builder.Configuration);
         var app = builder.Build();

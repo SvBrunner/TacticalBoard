@@ -38,6 +38,7 @@ public sealed class ExceptionHandlingTests(PostgresFixture postgres) : IAsyncLif
         }
     }
 
+    private readonly string _keysDirectory = ApiFactory.NewKeysDirectory();
     private WebApplication? _app;
     private HttpClient? _client;
 
@@ -45,11 +46,11 @@ public sealed class ExceptionHandlingTests(PostgresFixture postgres) : IAsyncLif
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
         builder.WebHost.UseTestServer();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["ConnectionStrings:TacticalBoard"] = postgres.NewDatabaseConnectionString(),
-            ["Database:MigrateOnStartup"] = "false",
-        });
+        var settings = ApiFactory.LoginSettings();
+        settings["ConnectionStrings:TacticalBoard"] = postgres.NewDatabaseConnectionString();
+        settings["Database:MigrateOnStartup"] = "false";
+        settings["DataProtection:KeysDirectory"] = _keysDirectory;
+        builder.Configuration.AddInMemoryCollection(settings);
         var host = new ApiHost([.. ModuleCatalog.All, new ThrowingModule()]);
         host.ConfigureServices(builder.Services, builder.Configuration);
         _app = builder.Build();
@@ -64,6 +65,11 @@ public sealed class ExceptionHandlingTests(PostgresFixture postgres) : IAsyncLif
         if (_app is not null)
         {
             await _app.DisposeAsync();
+        }
+
+        if (Directory.Exists(_keysDirectory))
+        {
+            Directory.Delete(_keysDirectory, recursive: true);
         }
     }
 

@@ -24,6 +24,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app .
+# Data-protection keys (DataProtection__KeysDirectory); a volume mounted here inherits the owner.
+RUN mkdir -p /var/lib/tacticalboard/keys && chown "$APP_UID" /var/lib/tacticalboard/keys
 USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "TacticalBoard.Api.dll"]

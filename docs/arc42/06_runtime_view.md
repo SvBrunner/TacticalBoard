@@ -27,6 +27,8 @@ sequenceDiagram
     B-->>F: Current user (name, system admin flag)
 ```
 
+A blocked or deleted user gets no session: the callback redirects to `/?login=failed` instead. Every later request with the session cookie checks the user again (ch. 8.13).
+
 ## 6.2 Save a team situation
 
 ```mermaid

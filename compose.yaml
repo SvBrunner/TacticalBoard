@@ -22,9 +22,27 @@ services:
       ConnectionStrings__TacticalBoard: "Host=db;Port=5432;Database=tacticalboard;Username=tacticalboard;Password=tacticalboard"
       Database__MigrateOnStartup: "true"
       App__PublicBaseUrl: "http://localhost:8080"
+      # Login (arc42 ch. 8.13). The issuer is the URL browsers see; the backend reads the
+      # discovery document through the Compose network. Plain http is for local use only.
+      Oidc__Authority: "http://localhost:8180/realms/tacticalboard"
+      Oidc__MetadataAddress: "http://idp:8080/realms/tacticalboard/.well-known/openid-configuration"
+      Oidc__RequireHttpsMetadata: "false"
+      Oidc__ClientId: "tacticalboard"
+      Oidc__ClientSecret: "tacticalboard-dev-secret"
+      Session__SecureCookies: "false"
+      # Trust X-Forwarded-Proto/-For from the reverse proxy (needed behind TLS termination).
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      DataProtection__KeysDirectory: "/var/lib/tacticalboard/keys"
+      # The realm's user "trainer" (fixed id in deploy/keycloak/tacticalboard-realm.json).
+      Bootstrap__SystemAdministrators: "http://localhost:8180/realms/tacticalboard|8f6d5f3e-4c1a-4b8e-9a51-0c7d2b6e1a01"
+    volumes:
+      # Data-protection keys, so sessions survive a restart of the backend container.
+      - backend-keys:/var/lib/tacticalboard/keys
     depends_on:
       db:
         condition: service_healthy
+      idp:
+        condition: service_started
 
   db:
     image: postgres:18-alpine
@@ -43,8 +61,8 @@ services:
       timeout: 5s
       retries: 30
 
-  # Development OIDC identity provider (not used by the backend yet; the BFF login follows in
-  # roadmap Phase 2 step 2). Browsers reach it at http://localhost:8180; containers at
+  # Development OIDC identity provider for the backend's login (BFF). Browsers reach it at
+  # http://localhost:8180; containers at
   # http://idp:8080. The issuer is always http://localhost:8180/realms/tacticalboard
   # (KC_HOSTNAME), while backchannel endpoints (token, JWKS) follow the requesting host.
   idp:
@@ -63,3 +81,4 @@ services:
 
 volumes:
   db-data:
+  backend-keys:

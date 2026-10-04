@@ -1,3 +1,4 @@
+using TacticalBoard.Api.Authentication;
 using TacticalBoard.Api.Configuration;
 using TacticalBoard.Api.ErrorHandling;
 using TacticalBoard.Api.Health;
@@ -6,7 +7,7 @@ using TacticalBoard.Infrastructure.Modularity;
 
 namespace TacticalBoard.Api.Hosting;
 
-/// <summary>Composes the backend: shared infrastructure, the modules, error handling and the HTTP pipeline.</summary>
+/// <summary>Composes the backend: shared infrastructure, the modules, error handling, the login (BFF) and the HTTP pipeline.</summary>
 public sealed class ApiHost(IReadOnlyList<IModule> modules)
 {
     /// <summary>The path prefix of every API endpoint.</summary>
@@ -23,6 +24,7 @@ public sealed class ApiHost(IReadOnlyList<IModule> modules)
         services.AddPersistence(migrationsAssembly: typeof(ApiHost).Assembly.GetName().Name!);
         services.AddApiErrorHandling();
         services.AddApiHealthChecks();
+        services.AddBffAuthentication(configuration);
 
         foreach (var module in Modules)
         {
@@ -37,6 +39,7 @@ public sealed class ApiHost(IReadOnlyList<IModule> modules)
         app.UseStatusCodePages();
 
         var api = app.MapGroup(ApiPrefix);
+        app.UseBffAuthentication(api);
         api.MapApiHealth();
         foreach (var module in Modules)
         {

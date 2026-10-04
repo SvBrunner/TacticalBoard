@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { cleanup, render, screen, fireEvent, within } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { goto } from "$app/navigation";
+import { authSession } from "$lib/auth/AuthSession";
 import { situationEditor } from "$lib/editor/SituationEditor";
+import { FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
 import { SituationSerializer } from "$lib/model/serialization/SituationSerializer";
 import { Frame } from "$lib/model/Frame";
 import { Situation } from "$lib/model/Situation";
@@ -85,6 +87,51 @@ describe("start page", () => {
 			for (const svg of container.querySelectorAll("svg")) {
 				expect(svg.closest("[aria-hidden='true']")).not.toBeNull();
 			}
+		});
+	});
+
+	describe("account", () => {
+		afterEach(() => {
+			vi.unstubAllGlobals();
+			window.history.replaceState({}, "", "/");
+		});
+
+		async function sessionFrom(response: Response) {
+			vi.stubGlobal("fetch", new FakeFetch().on("GET", "/api/me", response).fetch);
+			await authSession.refresh();
+		}
+
+		it("offers Log in in the header when logged out, returning to the start page", async () => {
+			await sessionFrom(problemResponse(401, {}));
+			render(StartPage);
+
+			const header = screen.getByRole("banner");
+			expect(within(header).getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/auth/login?returnUrl=%2F");
+		});
+
+		it("says when the login failed", async () => {
+			window.history.replaceState({}, "", "/?login=failed");
+			await sessionFrom(problemResponse(401, {}));
+			render(StartPage);
+
+			expect(within(screen.getByRole("banner")).getByRole("status")).toHaveTextContent("Login failed.");
+		});
+
+		it("shows the user's menu in the header when logged in", async () => {
+			await sessionFrom(jsonResponse(200, { id: "1", displayName: "Alice", isSystemAdministrator: false }));
+			render(StartPage);
+
+			expect(within(screen.getByRole("banner")).getByRole("button", { name: "Alice" })).toBeInTheDocument();
+		});
+
+		it("keeps local mode fully usable without a backend", async () => {
+			await sessionFrom(new Response("proxy error", { status: 502 }));
+			render(StartPage);
+
+			expect(within(screen.getByRole("banner")).getByText("Local mode")).toBeInTheDocument();
+			expect(screen.getByRole("button", { name: "New situation" })).toBeEnabled();
+			expect(screen.getByRole("button", { name: "Import" })).toBeEnabled();
+			expect(screen.queryByRole("alert")).toBeNull();
 		});
 	});
 

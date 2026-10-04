@@ -3,6 +3,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TacticalBoard.Infrastructure;
 using TacticalBoard.Infrastructure.Modularity;
+using TacticalBoard.Users.Application;
+using TacticalBoard.Users.Contracts;
+using TacticalBoard.Users.Endpoints;
+using TacticalBoard.Users.Infrastructure;
 
 namespace TacticalBoard.Users;
 
@@ -18,11 +22,16 @@ public sealed class UsersModule : IModule
     public void RegisterServices(IServiceCollection services, IConfiguration configuration)
     {
         services.AddModelConfigurationFrom(typeof(UsersModule).Assembly);
+
+        services.AddSingleton(BootstrapConfiguration.Read(configuration));
+        services.AddScoped<IUserRepository, EfUserRepository>();
+        services.AddScoped<SystemAdministratorBootstrap>();
+        services.AddScoped<CurrentUserState>();
+        services.AddScoped<ICurrentUser>(provider => provider.GetRequiredService<CurrentUserState>());
+        services.AddScoped<IUserAuthentication, UserAuthenticationService>();
+        services.AddScoped<UserProfileService>();
     }
 
     /// <inheritdoc />
-    public void MapEndpoints(IEndpointRouteBuilder api)
-    {
-        // No endpoints yet.
-    }
+    public void MapEndpoints(IEndpointRouteBuilder api) => MeEndpoints.Map(api);
 }

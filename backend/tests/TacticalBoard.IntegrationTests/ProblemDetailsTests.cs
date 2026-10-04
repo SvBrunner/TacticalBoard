@@ -34,9 +34,12 @@ public class ProblemDetailsTests(PostgresFixture postgres)
     public async Task A_wrong_method_is_a_method_not_allowed_problem()
     {
         await using var factory = ApiFactory.WithDatabase(postgres.NewDatabaseConnectionString());
-        using var client = factory.CreateClient();
+        using var browser = factory.CreateBrowser();
+        var token = await browser.AntiforgeryTokenAsync();
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/api/health", UriKind.Relative));
+        request.Headers.Add("X-CSRF-TOKEN", token);
 
-        using var response = await client.PostAsync(new Uri("/api/health", UriKind.Relative), null, TestContext.Current.CancellationToken);
+        using var response = await browser.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
         var problem = await ProblemAsync(response);

@@ -12,7 +12,7 @@ using TacticalBoard.Users;
 
 namespace TacticalBoard.UnitTests.Modules;
 
-/// <summary>The module skeletons: each registers its own EF Core model configuration and has no endpoints yet.</summary>
+/// <summary>The modules: each registers its own EF Core model configuration; only Users has endpoints so far.</summary>
 public class ModuleTests
 {
     public static TheoryData<IModule, string> Modules => new()
@@ -42,10 +42,11 @@ public class ModuleTests
         Assert.Equal("TacticalBoard." + name, configuration.Assembly.GetName().Name);
     }
 
-    public static TheoryData<IModule> ModuleInstances => new(Modules.Select(row => (IModule)row.Data.Item1));
+    public static TheoryData<IModule> ModulesWithoutEndpoints => new(
+        Modules.Select(row => (IModule)row.Data.Item1).Where(module => module is not UsersModule));
 
     [Theory]
-    [MemberData(nameof(ModuleInstances))]
+    [MemberData(nameof(ModulesWithoutEndpoints))]
     public async Task Maps_no_endpoints_yet(IModule module)
     {
         await using var app = WebApplication.CreateBuilder().Build();

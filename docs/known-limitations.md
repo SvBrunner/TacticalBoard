@@ -45,3 +45,12 @@ The GIF is rendered and encoded in the browser's main thread, one frame at a tim
 
 GIF stores frame delays in hundredths of a second and at most 256 colors per frame; antialiased edges are slightly quantized.
 
+
+## Login and session
+
+- **The session does not follow the IdP session.** After the login the session lives on its own (14 days without use, sliding) and is checked against the local user on every request (blocked, deleted). Logging out at the IdP directly, or the IdP ending its session, does not end it: IdP-initiated (front-channel/back-channel) logout is not supported, and the IdP's tokens are not refreshed or re-validated. A user blocked or disabled only at the IdP keeps an existing session until it expires or they log out; blocking in the app ends it at once.
+- **Logging out at the IdP depends on the IdP.** If the IdP's discovery document has no `end_session_endpoint` (or the IdP can't be reached), "Log out" ends only the app's session; the next "Log in" may then return without asking for credentials.
+- **A failed login says only "Login failed."** The start page does not tell why (blocked, deleted, IdP error), on purpose; the reason is in the backend log.
+- **Data-protection keys are stored unencrypted** in `DataProtection__KeysDirectory` (the backend logs a warning at startup). Whoever can read that volume can decrypt session cookies; protect it like the database.
+- **One database query per request with a session**, for the per-request check of the user. Cheap (primary key, no tracking) and the price of "a blocked user's session ends with the next request".
+- **The dev server logs a proxy error** (`http proxy error: /api/me`) in its terminal when `pnpm run dev` runs without a backend. The app itself stays quiet ("Local mode").

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -52,6 +53,7 @@ public static class InfrastructureServiceCollectionExtensions
             options
                 .UseNpgsql(database.ConnectionString, npgsql => npgsql.MigrationsAssembly(migrationsAssembly))
                 .UseSnakeCaseNamingConvention()
+                .ReplaceService<IModelCacheKeyFactory, ModelConfigurationCacheKeyFactory>()
                 .AddInterceptors(serviceProvider.GetRequiredService<SoftDeleteInterceptor>());
         });
 

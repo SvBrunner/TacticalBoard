@@ -59,7 +59,7 @@ One .NET solution (`backend/TacticalBoard.slnx`), **one project per module**, so
 | `src/TacticalBoard.SharedKernel` | Abstractions every module's domain code may use, with no framework dependency: `IClock`, `IIdGenerator`, `DomainException` (+ `DomainErrorKind`, `ErrorCode`), `ISoftDeletable` / `SoftDeletableEntity`. |
 | `src/TacticalBoard.Infrastructure` | Shared technical plumbing: `SystemClock`, `SequentialGuidGenerator` (UUID v7), the one EF Core context `TacticalBoardDbContext` with the soft-delete query filter and interceptor (ch. 8.16), migration on startup, and the module contract `IModule`. |
 | `src/Modules/TacticalBoard.{Users,Teams,Areas,Folders,Situations}` | One project per module. Each references only the modules it may use (above); transitive project references are switched off (`src/Modules/Directory.Build.props`), so e.g. Situations can't use Users or Teams. |
-| `src/TacticalBoard.Api` | The host: composes the modules (`Hosting/ModuleCatalog`, `Hosting/ApiHost`), Problem Details (ch. 8.2), `GET /api/health`, configuration, and the EF Core migrations (`Persistence/Migrations`; only the host knows every module's part of the model). |
+| `src/TacticalBoard.Api` | The host: composes the modules (`Hosting/ModuleCatalog`, `Hosting/ApiHost`), Problem Details (ch. 8.2), `GET /api/health`, the login as BFF (`Authentication/`: cookie session, OIDC, antiforgery, `/auth/*`, ch. 8.13), configuration, and the EF Core migrations (`Persistence/Migrations`; only the host knows every module's part of the model). The host talks to the Users module only through its `Contracts` (`IUserAuthentication`). |
 
 Conventions inside a module project (folders are created as the module gets content):
 

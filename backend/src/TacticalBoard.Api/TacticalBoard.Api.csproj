@@ -1,13 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <!--
     The host of the modular monolith: composes the modules, the shared infrastructure and the
-    HTTP pipeline (Problem Details, health endpoint). Also holds the EF Core migrations, because
+    HTTP pipeline (Problem Details, health endpoint, BFF login). Also holds the EF Core migrations, because
     only the host knows every module's part of the model.
   -->
   <PropertyGroup>
     <RootNamespace>TacticalBoard.Api</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

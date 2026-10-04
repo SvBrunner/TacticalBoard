@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render } from "@testing-library/svelte";
 import { createRawSnippet } from "svelte";
+import { authSession } from "$lib/auth/AuthSession";
 import { situationEditor } from "$lib/editor/SituationEditor";
 import { theme } from "$lib/theme";
 import Layout from "./+layout.svelte";
@@ -17,6 +18,17 @@ describe("layout", () => {
 	beforeEach(() => {
 		theme.set("light");
 		situationEditor.createNew({ title: "", fieldType: "full" });
+		vi.spyOn(authSession, "refresh").mockResolvedValue({ status: "unavailable" });
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("asks who is logged in once mounted", () => {
+		render(Layout, { props: { children } });
+
+		expect(authSession.refresh).toHaveBeenCalledOnce();
 	});
 
 	it("renders the page inside the themed root", () => {

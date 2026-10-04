@@ -6,7 +6,7 @@ See also [known-limitations.md](../known-limitations.md).
 
 | Risk | Description | Related |
 |---|---|---|
-| Backend is only a skeleton | The backend runs (modules, database, migrations, health endpoint), but login, teams, folders and server-side board storage are specified and not implemented yet. Only local (client-side) board JSON export/import currently works. | ch. 5, 9, [roadmap](../roadmap.md) |
+| Backend is incomplete | The backend runs (modules, database, migrations, health endpoint, login with users), but teams, folders and server-side board storage are specified and not implemented yet. Only local (client-side) board JSON export/import currently works. | ch. 5, 9, [roadmap](../roadmap.md) |
 | Bus factor of one | Solo project; no redundancy in project knowledge. | ch. 1, 2 |
 | Unbounded growth of soft-deleted data and revisions | Nothing is purged yet (ch. 8.16, ADR-009). Fine at the expected scale; a purge/retention concept is needed before it matters. | ch. 8, 9 |
 

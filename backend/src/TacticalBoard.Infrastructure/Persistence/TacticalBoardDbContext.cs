@@ -24,7 +24,15 @@ public class TacticalBoardDbContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(modelConfigurations);
         _modelConfigurations = modelConfigurations.ToList();
+        ModelCacheKey = string.Join(
+            ';',
+            _modelConfigurations.Select(configuration => configuration is AssemblyModelConfiguration assembly
+                ? assembly.Assembly.FullName
+                : configuration.GetType().AssemblyQualifiedName));
     }
+
+    /// <summary>Identifies the set of model configurations, for <see cref="ModelConfigurationCacheKeyFactory"/>.</summary>
+    public string ModelCacheKey { get; }
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

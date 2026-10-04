@@ -1,11 +1,14 @@
 <!--
 @component
 Start page (overview): start a new situation or import one from a file;
-either opens the editor. The "Saved situations" section is where the list
-of saved situations and teams goes once there is storage (Phase 2).
+either opens the editor. The header has the account corner (log in / the
+user's menu). The "Saved situations" section is where the list of saved
+situations and teams goes once there is storage (Phase 2).
 -->
 <script lang="ts">
 	import { goto } from "$app/navigation";
+	import { AuthSession } from "$lib/auth/AuthSession";
+	import AccountArea from "$lib/components/account/AccountArea.svelte";
 	import SituationDialogs from "$lib/components/dialogs/SituationDialogs.svelte";
 	import { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
 	import { situationEditor } from "$lib/editor/SituationEditor";
@@ -20,6 +23,8 @@ of saved situations and teams goes once there is storage (Phase 2).
 		confirm: (request) => prompt.request(request),
 		log: notifications,
 	});
+
+	const loginFailed = AuthSession.loginFailed(window.location.search);
 
 	let dialogs: SituationDialogs;
 	let fileInput: HTMLInputElement;
@@ -52,6 +57,7 @@ of saved situations and teams goes once there is storage (Phase 2).
 			</svg>
 		</div>
 		<h1 class="app-title">Tactical Board</h1>
+		<AccountArea returnTo="/" {loginFailed} />
 	</header>
 
 	<section class="panel" aria-labelledby="start-heading">
@@ -109,6 +115,7 @@ of saved situations and teams goes once there is storage (Phase 2).
 	.masthead {
 		display: flex;
 		align-items: center;
+		flex-wrap: wrap;
 		gap: 16px;
 	}
 
