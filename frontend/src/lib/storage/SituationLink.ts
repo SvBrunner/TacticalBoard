@@ -34,6 +34,20 @@ export class SituationLink {
 		return state.kind === "saved" ? state.summary : null;
 	}
 
+	/**
+	 * The place of the personal area the situation belongs to: a server
+	 * situation's folder (or top level), or where an unsaved one was started
+	 * (where its first save goes).
+	 */
+	place(): SaveTarget {
+		return SituationLink.placeOf(this.current());
+	}
+
+	/** The place a link in `state` belongs to (see `place`). */
+	static placeOf(state: LinkState): SaveTarget {
+		return state.kind === "saved" ? { folderId: state.summary.folderId } : state.target;
+	}
+
 	/** A new situation was created in the app, started at `target` (where its first save goes). */
 	startNew(target: SaveTarget = TOP_LEVEL): void {
 		this.store.set({ kind: "unsaved", origin: "new", target });

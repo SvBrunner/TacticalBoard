@@ -99,7 +99,32 @@ public class FolderServiceTests
 
         var list = await Service.ListAsync(AlicesArea, Cancellation);
 
-        Assert.Equal(["Alpha", "beta", "Übergang", "Zebra"], list.Select(folder => folder.Name));
+        Assert.Equal(["Alpha", "beta", "Übergang", "Zebra"], list.Select(summary => summary.Folder.Name));
+    }
+
+    [Fact]
+    public async Task Lists_each_folder_with_the_number_of_its_situations_from_one_count()
+    {
+        var full = await CreateAsync("Full");
+        var empty = await CreateAsync("Empty");
+        var bobsArea = AreaReference.Personal(Bob);
+        _contents.Counts[AlicesArea] = new Dictionary<Guid, int> { [full.Id] = 3 };
+        _contents.Counts[bobsArea] = new Dictionary<Guid, int> { [empty.Id] = 7 };
+
+        var list = await Service.ListAsync(AlicesArea, Cancellation);
+
+        Assert.Equal([(empty, 0), (full, 3)], list.Select(summary => (summary.Folder, summary.SituationCount)));
+        Assert.Equal([AlicesArea], _contents.CountedAreas);
+    }
+
+    [Fact]
+    public async Task Listing_without_read_access_counts_nothing()
+    {
+        _areas.Readable.Clear();
+
+        await Assert.ThrowsAsync<FolderAccessDeniedException>(() => Service.ListAsync(AlicesArea, Cancellation));
+
+        Assert.Empty(_contents.CountedAreas);
     }
 
     [Fact]

@@ -1,7 +1,8 @@
 <!--
 @component
 The editor header: the shared app navbar (`AppNavbar`: the badge as a link
-back to the start page, the situation title, the account corner) with the
+back to the start page — or to the folder's page while the edited situation
+lies in a folder —, the situation title, the account corner) with the
 editor's tools: undo/redo, Save (only when saving on the server is possible, i.e.
 logged in; disabled while there is nothing to save), new/load, the export choice and theme toggle. On phones the
 buttons become icon-only; their text stays as accessible name. `status` is
@@ -20,8 +21,12 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 
 	interface Props {
 		title: string;
-		/** The badge was activated: go back to the start page (the owner checks for unsaved changes). */
+		/** The badge was activated: go back to the start page or the folder's page (the owner checks for unsaved changes). */
 		onHome: () => void;
+		/** Where the badge leads (default: the start page). */
+		homeHref?: string;
+		/** The badge's accessible name (default: "Start page"). */
+		homeLabel?: string;
 		/** Start a new situation (the owner checks for unsaved changes). */
 		onNew: () => void;
 		/** Export the situation as a JSON file. */
@@ -48,6 +53,8 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 	let {
 		title,
 		onHome,
+		homeHref = "/",
+		homeLabel,
 		onNew,
 		onExportJson,
 		onExportAnimation,
@@ -138,7 +145,7 @@ Escape (focus back on Export), or when focus or a press goes elsewhere.
 
 <svelte:window onpointerdown={handleWindowPointerDown} />
 
-<AppNavbar {title} {onHome} {loginReturnTo} {status}>
+<AppNavbar {title} {onHome} {homeHref} {homeLabel} {loginReturnTo} {status}>
 	{#snippet actions()}
 		<div class="tools">
 		<div class="history" role="group" aria-label={$t.editor.history}>

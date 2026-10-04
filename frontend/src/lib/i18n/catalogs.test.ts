@@ -41,6 +41,21 @@ describe("message catalogs", () => {
 		expect(de.messages.playback.seconds(1.5)).toBe("1,5 s");
 	});
 
+	it("words the number of situations in a folder with the right plural form", () => {
+		expect([0, 1, 2, 1200].map((count) => en.messages.folders.situationCount(count))).toEqual([
+			"0 situations",
+			"1 situation",
+			"2 situations",
+			"1,200 situations",
+		]);
+		expect([0, 1, 2, 1200].map((count) => de.messages.folders.situationCount(count))).toEqual([
+			"0 Situationen",
+			"1 Situation",
+			"2 Situationen",
+			"1.200 Situationen",
+		]);
+	});
+
 	it("the language codes and names identify the files", () => {
 		expect([en.code, en.name]).toEqual(["en", "English"]);
 		expect([de.code, de.name]).toEqual(["de", "Deutsch"]);

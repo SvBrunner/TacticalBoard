@@ -136,7 +136,7 @@ public sealed class FolderApiTests(PostgresFixture postgres) : IAsyncLifetime
         using var alice = await LoggedInAsync("alice", "Alice");
 
         using var blank = await alice.SendJsonAsync(HttpMethod.Post, PersonalFolders, new { name = "  " }, await alice.AntiforgeryTokenAsync());
-        using var tooLong = await alice.SendJsonAsync(HttpMethod.Post, PersonalFolders, new { name = new string('a', 101) }, await alice.AntiforgeryTokenAsync());
+        using var tooLong = await alice.SendJsonAsync(HttpMethod.Post, PersonalFolders, new { name = new string('a', FolderName.MaxLength + 1) }, await alice.AntiforgeryTokenAsync());
 
         var problem = await AssertProblemAsync(blank, HttpStatusCode.BadRequest, "validation-failed");
         var errors = problem.GetProperty("errors");
@@ -144,7 +144,7 @@ public sealed class FolderApiTests(PostgresFixture postgres) : IAsyncLifetime
         var codes = problem.GetProperty("fieldErrors");
         Assert.Equal("required", codes.GetProperty("name")[0].GetProperty("code").GetString());
         Assert.Equal(
-            "expected at most 100 characters",
+            "expected at most 64 characters",
             (await AssertProblemAsync(tooLong, HttpStatusCode.BadRequest, "validation-failed")).GetProperty("errors").GetProperty("name")[0].GetString());
         Assert.Equal(0, await CountAsync("SELECT count(*) FROM folders"));
     }
@@ -193,6 +193,33 @@ public sealed class FolderApiTests(PostgresFixture postgres) : IAsyncLifetime
         using var back = await MoveAsync(alice, topId, null);
         Assert.Equal(JsonValueKind.Null, (await JsonAsync(back)).GetProperty("folderId").ValueKind);
         Assert.Equal(["Top"], await TitlesAsync(alice, PersonalSituations));
+    }
+
+    [Fact]
+    public async Task Lists_folders_with_the_number_of_their_non_deleted_situations()
+    {
+        using var alice = await LoggedInAsync("alice", "Alice");
+        var full = await CreateFolderAsync(alice, "Full");
+        await CreateFolderAsync(alice, "Empty");
+        await CreateSituationAsync(alice, $"/api/folders/{full}/situations", "One");
+        await CreateSituationAsync(alice, $"/api/folders/{full}/situations", "Two");
+        var deleted = await CreateSituationAsync(alice, $"/api/folders/{full}/situations", "Deleted");
+        using var deletion = await alice.SendJsonAsync(HttpMethod.Delete, $"/api/situations/{deleted.GetProperty("id").GetString()}", null, await alice.AntiforgeryTokenAsync());
+        Assert.Equal(HttpStatusCode.NoContent, deletion.StatusCode);
+        var moved = await CreateSituationAsync(alice, PersonalSituations, "Moved in");
+        using var move = await MoveAsync(alice, moved.GetProperty("id").GetString()!, full);
+        Assert.Equal(HttpStatusCode.OK, move.StatusCode);
+        await CreateSituationAsync(alice, PersonalSituations, "Top level");
+        using var bob = await LoggedInAsync("bob", "Bob");
+        var bobs = await CreateFolderAsync(bob, "Full");
+        await CreateSituationAsync(bob, $"/api/folders/{bobs}/situations", "Bob's");
+
+        using var list = await alice.GetAsync(PersonalFolders);
+
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Equal(
+            [("Empty", 0), ("Full", 3)],
+            (await JsonAsync(list)).EnumerateArray().Select(folder => (folder.GetProperty("name").GetString(), folder.GetProperty("situationCount").GetInt32())));
     }
 
     [Fact]
@@ -441,6 +468,17 @@ public sealed class FolderApiTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.True(reader.GetBoolean(3));
         Assert.True(reader.GetBoolean(4));
         Assert.Equal(2, reader.GetInt64(5));
+    }
+
+    [Fact]
+    public async Task The_name_column_holds_the_longest_valid_name()
+    {
+        using var alice = await LoggedInAsync("alice", "Alice");
+        await CreateFolderAsync(alice, new string('a', FolderName.MaxLength));
+
+        Assert.Equal(
+            FolderName.MaxLength,
+            await CountAsync("SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'folders' AND column_name = 'name'"));
     }
 
     private static FolderName Name(string text)

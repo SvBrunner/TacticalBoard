@@ -11,7 +11,7 @@ using TacticalBoard.Infrastructure.Modularity;
 namespace TacticalBoard.Folders;
 
 /// <summary>
-/// The Folders module: flat folders inside an area (create, rename, delete when empty). Provides
+/// The Folders module: flat folders inside an area (list with situation counts, create, rename, delete when empty). Provides
 /// <see cref="IFolderDirectory"/> to Situations; needs an <see cref="IFolderContents"/>, which
 /// the Situations module registers.
 /// </summary>

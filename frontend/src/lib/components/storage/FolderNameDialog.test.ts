@@ -44,7 +44,7 @@ describe("FolderNameDialog", () => {
 
 		expect(dialog().tagName).toBe("DIALOG");
 		expect(within(dialog()).getByRole("heading", { level: 2, name: "New folder" })).toBeInTheDocument();
-		expect(input()).toHaveAttribute("maxlength", "100");
+		expect(input()).toHaveAttribute("maxlength", "64");
 		expect(input()).toBeRequired();
 		expect(screen.getByRole("button", { name: "Create" })).toHaveAttribute("type", "submit");
 		expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("type", "button");

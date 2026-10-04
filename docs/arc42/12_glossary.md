@@ -22,10 +22,10 @@
 | Default title | The title of a situation created with a blank title, in the UI language of that moment: "Untitled Situation", "Unbenannte Situation". Saved on the server, it is numbered within the area ("Untitled Situation (2)", …). |
 | UI language | The language of the system texts (German or English, English the fallback); chosen in the navbar's language switcher, remembered in the browser and in the account. User content is never translated. |
 | System text | A text the app itself shows (labels, buttons, messages, element type names, …), as opposed to user content (titles, descriptions, folder names, labels, display names). Only system texts are translated. |
-| Navbar | The app's navigation bar at the top of the start page and the editor: badge (link to the start page), page title, the page's tools, and the account corner (Log in / the user's menu). |
+| Navbar | The app's navigation bar at the top of the start page and the editor: badge (link to the start page; in the editor of a situation in a folder, to that folder's page), page title, the page's tools, and the account corner (Log in / the user's menu). |
 | Soft delete | Deleting by marking an item as deleted instead of removing it from the database. |
 | Local mode | Using the app without login: editing plus JSON/GIF export and import, nothing stored on the server. |
-| Folder | Groups situations in a team or in a user's personal area. One level only, no subfolders. Its name is unique in the area; it can be deleted only while empty. Has its own page (`/folders/<id>`). |
+| Folder | Groups situations in a team or in a user's personal area. One level only, no subfolders. Its name is unique in the area and at most 64 characters long; it can be deleted only while empty. Has its own page (`/folders/<id>`); the start page lists it with the number of situations it contains. |
 | Top level | The place in an area outside every folder. A situation is either in one folder of its area or at its top level. |
 | Move | Putting a saved situation into another folder of its area (or to its top level) with its Move button. Not a save: no new revision. |
 | Role | A team-scoped permission level: Admin, Editor, or Reader. See ch. 8 for the permission matrix. |

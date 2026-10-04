@@ -1,15 +1,15 @@
 import { inEnglishDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
-import { FolderApi, type Folder } from "./FolderApi";
+import { FolderApi, type FolderSummary } from "./FolderApi";
 import { FolderList } from "./FolderList";
 
-function folderOf(id: string, name: string): Folder {
-	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z" };
+function folderOf(id: string, name: string, situationCount = 0): FolderSummary {
+	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z", situationCount };
 }
 
 describe("FolderList", () => {
-	let folders: Folder[];
+	let folders: FolderSummary[];
 	let listError: Error | null;
 	let createError: Error | null;
 	let onSessionEnded: ReturnType<typeof vi.fn<() => void>>;
@@ -17,7 +17,7 @@ describe("FolderList", () => {
 	let list: FolderList;
 
 	beforeEach(() => {
-		folders = [folderOf("f1", "Breakouts")];
+		folders = [folderOf("f1", "Breakouts", 2)];
 		listError = null;
 		createError = null;
 		onSessionEnded = vi.fn();

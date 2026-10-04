@@ -5,6 +5,7 @@ import type { SavedListState } from "$lib/storage/SavedSituationList";
 import { SavedSituationFormat } from "$lib/storage/SavedSituationFormat";
 import { summaryOf } from "$lib/testing/storageFakes";
 import SavedSituations from "./SavedSituations.svelte";
+import SavedSituationsWithEmptyActions from "./SavedSituationsWithEmptyActions.test.svelte";
 
 const loggedIn: SessionState = { status: "authenticated", user: { id: "u1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null } };
 
@@ -74,6 +75,30 @@ describe("SavedSituations", () => {
 
 		expect(screen.getByText("This folder is empty.")).toBeInTheDocument();
 		expect(screen.queryByText(/No saved situations yet/)).toBeNull();
+	});
+
+	it("offers the place's empty actions below the empty message", () => {
+		render(SavedSituationsWithEmptyActions, { props: { session: loggedIn, list: { status: "loaded", situations: [] } } });
+
+		const message = screen.getByText("This folder is empty.");
+		const action = screen.getByRole("button", { name: "Start here" });
+		expect(message.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it.each<[string, SavedListState]>([
+		["loading", { status: "loading" }],
+		["failed", { status: "failed", message: () => "Failed." }],
+		["listing situations", { status: "loaded", situations: [powerplay] }],
+	])("shows no empty actions while %s", (_, list) => {
+		render(SavedSituationsWithEmptyActions, { props: { session: loggedIn, list } });
+
+		expect(screen.queryByRole("button", { name: "Start here" })).toBeNull();
+	});
+
+	it("shows no empty actions without login", () => {
+		render(SavedSituationsWithEmptyActions, { props: { session: { status: "anonymous" }, list: { status: "loaded", situations: [] } } });
+
+		expect(screen.queryByRole("button", { name: "Start here" })).toBeNull();
 	});
 
 	it("lists the situations with title, field type, last change and creator", () => {

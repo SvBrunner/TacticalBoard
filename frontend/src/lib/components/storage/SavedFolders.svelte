@@ -1,8 +1,9 @@
 <!--
 @component
 The folders of the personal area on the start page (arc42 ch. 8.15): each a
-link to its own page (`/folders/<id>`, deep-linkable), in the server's order
-(by name). Shows loading, a failure with "Try again", or "No folders yet.".
+link to its own page (`/folders/<id>`, deep-linkable) with the number of
+situations in it, in the server's order (by name). Shows loading, a failure
+with "Try again", or "No folders yet.".
 -->
 <script lang="ts">
 	import { t } from "$lib/i18n";
@@ -34,7 +35,10 @@ link to its own page (`/folders/<id>`, deep-linkable), in the server's order
 					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 						<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
 					</svg>
-					<span class="name">{folder.name}</span>
+					<span class="text">
+						<span class="name">{folder.name}</span>
+						<span class="count">{$t.folders.situationCount(folder.situationCount)}</span>
+					</span>
 				</a>
 			</li>
 		{/each}
@@ -99,8 +103,20 @@ link to its own page (`/folders/<id>`, deep-linkable), in the server's order
 		color: var(--accent);
 	}
 
+	.text {
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
 	.name {
 		overflow-wrap: anywhere;
+	}
+
+	.count {
+		font-size: 13px;
+		font-weight: 400;
+		color: var(--text-muted);
 	}
 
 	.folder:hover {

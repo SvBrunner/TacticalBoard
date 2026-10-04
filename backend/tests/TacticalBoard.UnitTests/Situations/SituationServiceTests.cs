@@ -595,6 +595,28 @@ public class SituationServiceTests
     }
 
     [Fact]
+    public async Task Counts_the_situations_per_folder_of_an_area_for_the_folders_module()
+    {
+        var folder = Folders.Add(AlicesArea);
+        var other = Folders.Add(AlicesArea);
+        var emptyFolder = Folders.Add(AlicesArea);
+        var contents = new SituationFolderContents(_repository);
+        await CreateInFolderAsync(folder.Id, "One");
+        await CreateInFolderAsync(folder.Id, "Two");
+        var deleted = await CreateInFolderAsync(folder.Id, "Deleted");
+        await Service.DeleteAsync(deleted.Summary.Id, Cancellation);
+        await CreateInFolderAsync(other.Id, "Three");
+        await CreateAsync("Top level");
+
+        var counts = await contents.CountSituationsByFolderAsync(AlicesArea, Cancellation);
+
+        Assert.Equal(new Dictionary<Guid, int> { [folder.Id] = 2, [other.Id] = 1 }, counts);
+        Assert.False(counts.ContainsKey(emptyFolder.Id));
+        Assert.Empty(await contents.CountSituationsByFolderAsync(AreaReference.Personal(Guid.NewGuid()), Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => contents.CountSituationsByFolderAsync(null!, Cancellation));
+    }
+
+    [Fact]
     public async Task Rejects_missing_arguments_for_folders()
     {
         await Assert.ThrowsAsync<ArgumentNullException>(() => Service.CreateInFolderAsync(Guid.NewGuid(), null!, SituationDocuments.Valid(), SituationOrigin.New, Cancellation));

@@ -22,7 +22,7 @@ describe("FolderNameForm", () => {
 
 	it.each<[string, string]>([
 		["   ", "Enter a folder name."],
-		["a".repeat(101), "Use at most 100 characters."],
+		["a".repeat(65), "Use at most 64 characters."],
 		["Line\nbreak", "Don't use line breaks or other control characters."],
 		["Tab\tinside", "Don't use line breaks or other control characters."],
 		["Del\u007f", "Don't use line breaks or other control characters."],
@@ -36,9 +36,9 @@ describe("FolderNameForm", () => {
 		expect(form.message?.(en)).toBe(problem);
 	});
 
-	it("accepts 100 characters and surrounding whitespace", () => {
+	it("accepts 64 characters and surrounding whitespace", () => {
 		const form = new FolderNameForm();
-		form.value = ` ${"a".repeat(100)} `;
+		form.value = ` ${"a".repeat(64)} `;
 
 		expect(form.attemptSubmit()).toBe(true);
 	});

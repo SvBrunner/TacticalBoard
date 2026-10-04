@@ -1,8 +1,9 @@
 <!--
 @component
 The app's navigation bar, shared by the start page and the editor: the
-banner with the app badge (a link to the start page, in the "Main"
-navigation), the page title (the page's h1), the page's own `actions` (e.g.
+banner with the app badge (a link to the start page — or, in the editor
+while the edited situation lies in a folder, to that folder's page — in the
+"Main" navigation), the page title (the page's h1), the page's own `actions` (e.g.
 the editor's tools), the language switcher (arc42 ch. 8.18), and the account
 corner (in the "Account" navigation: "Log in", the user's menu, or "Local
 mode"; arc42 ch. 8.8, 8.13). `status`
@@ -22,6 +23,10 @@ the page's actions in a second row, so every control keeps its 44 px target.
 		title: string;
 		/** The badge was activated (a plain click); without it the badge is an ordinary link. */
 		onHome?: () => void;
+		/** Where the badge leads (default: the start page). */
+		homeHref?: string;
+		/** The badge's accessible name and tooltip (default: "Start page"). */
+		homeLabel?: string;
 		/** The start page itself: the badge is marked as the current page. */
 		home?: boolean;
 		/** Where a login started here returns to (a local path). */
@@ -32,7 +37,9 @@ the page's actions in a second row, so every control keeps its 44 px target.
 		status?: Snippet;
 	}
 
-	let { title, onHome, home = false, loginReturnTo = "/", loginNotice = null, actions, status }: Props = $props();
+	let { title, onHome, homeHref = "/", homeLabel, home = false, loginReturnTo = "/", loginNotice = null, actions, status }: Props = $props();
+
+	const badgeLabel = $derived(homeLabel ?? $t.navbar.startPage);
 
 	// A real link (works without the handler, e.g. opened in a new tab); a
 	// plain activation goes through `onHome` (e.g. "Discard changes?").
@@ -47,7 +54,7 @@ the page's actions in a second row, so every control keeps its 44 px target.
 
 <header class="navbar" class:with-actions={actions !== undefined}>
 	<nav class="nav-main" aria-label={$t.navbar.main}>
-		<a class="badge" href="/" aria-label={$t.navbar.startPage} title={$t.navbar.startPage} aria-current={home ? "page" : undefined} onclick={handleHome}>
+		<a class="badge" href={homeHref} aria-label={badgeLabel} title={badgeLabel} aria-current={home ? "page" : undefined} onclick={handleHome}>
 			<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--accent-contrast)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 				<circle cx="12" cy="12" r="9" />
 				<path d="M12 3v18M3 12h18" />

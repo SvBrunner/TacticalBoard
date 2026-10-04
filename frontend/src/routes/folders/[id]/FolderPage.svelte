@@ -4,7 +4,10 @@ The content of a folder's page (`/folders/<id>`, deep-linkable; arc42 ch. 8.8, 8
 shared navbar with the folder's name as title, a breadcrumb back to the start
 page, the folder's actions (Rename, Delete — refused with the reason while
 it contains situations), "New situation" and "Import" whose first save goes
-into this folder, and the folder's situations (open, move, delete). Without
+into this folder, and the folder's situations (open, move, delete). While
+the folder is empty, New situation and Import are offered in the empty
+state of the situations instead of their own section (confirmed product
+decision), so they appear once. Without
 login or server it explains why it can't show the folder; a folder that
 doesn't exist (any more) says so.
 -->
@@ -81,6 +84,8 @@ doesn't exist (any more) says so.
 	let moving: SituationSummary | null = $state(null);
 	const name = $derived($folderState.status === "loaded" ? $folderState.folder.name : null);
 	const otherPlaces = $derived($folderListState.status === "loaded" ? $folderListState.folders : []);
+	/** The folder has no situations (known only once they are loaded): New situation and Import move into the empty state. */
+	const empty = $derived($savedState.status === "loaded" && $savedState.situations.length === 0);
 
 	$effect(() => {
 		if ($sessionState.status === "authenticated") {
@@ -181,10 +186,12 @@ doesn't exist (any more) says so.
 				{/if}
 			</section>
 
-			<section class="panel" aria-labelledby="start-heading">
-				<h2 id="start-heading" class="panel-title">{$t.folderPage.startHere}</h2>
-				<StartActions {workflow} {prompt} {target} onOpened={openEditor} />
-			</section>
+			{#if !empty}
+				<section class="panel" aria-labelledby="start-heading">
+					<h2 id="start-heading" class="panel-title">{$t.folderPage.startHere}</h2>
+					<StartActions {workflow} {prompt} {target} onOpened={openEditor} />
+				</section>
+			{/if}
 
 			<section class="panel" aria-labelledby="situations-heading">
 				<h2 id="situations-heading" class="panel-title">{$t.folderPage.situations}</h2>
@@ -200,7 +207,11 @@ doesn't exist (any more) says so.
 					onDelete={(situation) => void deleteSituation(situation)}
 					onMove={(situation) => (moving = situation)}
 					onRetry={() => void savedList.load()}
-				/>
+				>
+					{#snippet emptyActions()}
+						<StartActions {workflow} {prompt} {target} onOpened={openEditor} />
+					{/snippet}
+				</SavedSituations>
 			</section>
 		{/if}
 	{/if}

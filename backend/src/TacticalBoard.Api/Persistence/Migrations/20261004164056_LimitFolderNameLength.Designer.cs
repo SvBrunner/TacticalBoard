@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TacticalBoard.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TacticalBoard.Infrastructure.Persistence;
 namespace TacticalBoard.Api.Persistence.Migrations
 {
     [DbContext(typeof(TacticalBoardDbContext))]
-    partial class TacticalBoardDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261004164056_LimitFolderNameLength")]
+    partial class LimitFolderNameLength
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

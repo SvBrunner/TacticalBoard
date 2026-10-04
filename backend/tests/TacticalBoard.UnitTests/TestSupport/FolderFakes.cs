@@ -64,12 +64,25 @@ internal sealed class FakeFolderDirectory(FakeUnitOfWork? transactions = null) :
     }
 }
 
-/// <summary>An <see cref="IFolderContents"/> with a set of non-empty folders.</summary>
+/// <summary>An <see cref="IFolderContents"/> with a set of non-empty folders and the situation counts per area and folder.</summary>
 internal sealed class FakeFolderContents : IFolderContents
 {
     public HashSet<Guid> NonEmpty { get; } = [];
 
+    /// <summary>The counts <see cref="CountSituationsByFolderAsync"/> returns, per area.</summary>
+    public Dictionary<AreaReference, Dictionary<Guid, int>> Counts { get; } = [];
+
+    /// <summary>The areas whose situations were counted, in order.</summary>
+    public List<AreaReference> CountedAreas { get; } = [];
+
     public Task<bool> HasSituationsAsync(Guid folderId, CancellationToken cancellationToken) => Task.FromResult(NonEmpty.Contains(folderId));
+
+    public Task<IReadOnlyDictionary<Guid, int>> CountSituationsByFolderAsync(AreaReference area, CancellationToken cancellationToken)
+    {
+        CountedAreas.Add(area);
+        IReadOnlyDictionary<Guid, int> counts = Counts.TryGetValue(area, out var found) ? found : [];
+        return Task.FromResult(counts);
+    }
 }
 
 /// <summary>

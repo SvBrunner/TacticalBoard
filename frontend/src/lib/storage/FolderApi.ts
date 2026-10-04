@@ -8,6 +8,11 @@ export interface Folder {
 	readonly updatedAt: string;
 }
 
+/** A folder in the list of an area's folders: with the number of (non-deleted) situations in it. */
+export interface FolderSummary extends Folder {
+	readonly situationCount: number;
+}
+
 /** The server's REST API for folders (arc42 ch. 8.15). */
 export class FolderApi {
 	static readonly PERSONAL_AREA_PATH = "/api/personal-area/folders";
@@ -15,8 +20,8 @@ export class FolderApi {
 	static readonly NOT_EMPTY = "https://tacticalboard/errors/folder-not-empty";
 	static readonly NOT_FOUND = "https://tacticalboard/errors/folder-not-found";
 
-	/** Same limit as the backend (UTF-16 code units, like `maxlength`). */
-	static readonly MAX_NAME_LENGTH = 100;
+	/** Same limit as the backend (UTF-16 code units, like `maxlength`; confirmed product decision: 64). */
+	static readonly MAX_NAME_LENGTH = 64;
 
 	constructor(private readonly api: ApiClient) {}
 
@@ -24,9 +29,9 @@ export class FolderApi {
 		return `/api/folders/${encodeURIComponent(id)}`;
 	}
 
-	/** The current user's folders, by name. */
-	listPersonal(): Promise<Folder[]> {
-		return this.api.get<Folder[]>(FolderApi.PERSONAL_AREA_PATH);
+	/** The current user's folders, by name, each with the number of situations in it. */
+	listPersonal(): Promise<FolderSummary[]> {
+		return this.api.get<FolderSummary[]>(FolderApi.PERSONAL_AREA_PATH);
 	}
 
 	/** One folder. */

@@ -27,6 +27,19 @@ internal sealed class EfSituationRepository(TacticalBoardDbContext context) : IS
     public Task<bool> AnyInFolderAsync(Guid folderId, CancellationToken cancellationToken) =>
         Situations.AsNoTracking().AnyAsync(situation => situation.FolderId == folderId, cancellationToken);
 
+    public async Task<IReadOnlyDictionary<Guid, int>> CountByFolderAsync(AreaReference area, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+
+        // One query: SELECT folder_id, count(*) ... WHERE <area> AND folder_id IS NOT NULL AND deleted_at IS NULL GROUP BY folder_id.
+        var counts = await InArea(Situations.AsNoTracking(), area)
+            .Where(situation => situation.FolderId != null)
+            .GroupBy(situation => situation.FolderId!.Value)
+            .Select(group => new { FolderId = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+        return counts.ToDictionary(entry => entry.FolderId, entry => entry.Count);
+    }
+
     public Task<SituationRevision?> FindRevisionAsync(Guid situationId, int number, CancellationToken cancellationToken) =>
         Revisions.AsNoTracking().SingleOrDefaultAsync(revision => revision.SituationId == situationId && revision.Number == number, cancellationToken);
 

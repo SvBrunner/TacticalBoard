@@ -46,6 +46,7 @@
 	import SaveStatus from "$lib/components/storage/SaveStatus.svelte";
 	import SavedSituationInfo from "$lib/components/storage/SavedSituationInfo.svelte";
 	import { ChoicePrompt } from "$lib/dialogs/ChoicePrompt";
+	import { EditorPlace } from "$lib/editor/EditorPlace";
 	import { EditorRoute } from "$lib/editor/EditorRoute";
 	import { SaveShortcut } from "$lib/storage/SaveShortcut";
 	import { situationLink } from "$lib/storage/SituationLink";
@@ -111,6 +112,9 @@
 	const linkState = situationLink.state;
 	/** Something to save: never saved on the server, or changed since (arc42 ch. 8.7). */
 	const hasChanges = $derived(SituationSaver.hasChanges($linkState, $unsavedChanges));
+	/** Where the editor works: New and Load save into the edited situation's folder, the badge leads back to it (arc42 ch. 8.8). */
+	const place = $derived(EditorPlace.of($linkState, canSave));
+	const home = $derived(place.home());
 	const conflictPrompt = new ChoicePrompt<true, ConflictChoice>("cancel");
 	const conflictPending = conflictPrompt.pending;
 	const saver = new SituationSaver({
@@ -263,13 +267,18 @@
 		workflow.redo();
 	}
 
-	/** The badge: back to the start page, after "Discard changes?" when there are unsaved changes. */
+	/**
+	 * The badge: back to the start page, or to the folder's page while the
+	 * situation lies in a folder; after "Discard changes?" when there are
+	 * unsaved changes.
+	 */
 	async function handleHome() {
+		const href = home.href;
 		await workflow.leave(async () => {
 			popover.close();
 			selection.clear();
 			controller.toolChanged();
-			await goto("/");
+			await goto(href);
 		});
 	}
 
@@ -302,6 +311,8 @@
 	<TopBar
 		title={shownTitle}
 		onHome={handleHome}
+		homeHref={home.href}
+		homeLabel={home.inFolder ? $t.navbar.backToFolder : undefined}
 		onNew={() => dialogs.startNew()}
 		onExportJson={() => workflow.exportCurrent()}
 		onExportAnimation={handleExportAnimation}
@@ -401,7 +412,7 @@
 	/>
 </div>
 
-<SituationDialogs bind:this={dialogs} {workflow} {prompt} onOpened={handleOpened} />
+<SituationDialogs bind:this={dialogs} {workflow} {prompt} target={place.startTarget()} onOpened={handleOpened} />
 
 <SaveConflictDialog open={$conflictPending !== null} onChoose={(choice) => conflictPrompt.answer(choice)} />
 

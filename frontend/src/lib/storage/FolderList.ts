@@ -1,19 +1,19 @@
 import { get, writable, type Readable } from "svelte/store";
 import { inEnglish } from "$lib/i18n";
 import type { Translatable } from "$lib/i18n/Messages";
-import type { Folder } from "./FolderApi";
+import type { Folder, FolderSummary } from "./FolderApi";
 import { FolderMessages, type FolderChange } from "./FolderMessages";
 
 /** The folder list's state. */
 export type FolderListState =
 	| { readonly status: "idle" }
 	| { readonly status: "loading" }
-	| { readonly status: "loaded"; readonly folders: readonly Folder[] }
+	| { readonly status: "loaded"; readonly folders: readonly FolderSummary[] }
 	| { readonly status: "failed"; readonly message: Translatable };
 
 export interface FolderListDependencies {
 	readonly api: {
-		listPersonal(): Promise<Folder[]>;
+		listPersonal(): Promise<FolderSummary[]>;
 		createPersonal(name: string): Promise<Folder>;
 	};
 	/** Called when the server says the session has ended. */
@@ -23,8 +23,8 @@ export interface FolderListDependencies {
 
 /**
  * The folders of the personal area (arc42 ch. 8.15), in the server's order
- * (by name): listed on the start page and offered as targets when moving a
- * situation. Creating a folder reloads the list.
+ * (by name), each with the number of situations in it: listed on the start
+ * page and offered as targets when moving a situation. Creating a folder reloads the list.
  */
 export class FolderList {
 	private readonly store = writable<FolderListState>({ status: "idle" });
@@ -38,7 +38,7 @@ export class FolderList {
 	}
 
 	/** The listed folders, or none while not loaded. */
-	folders(): readonly Folder[] {
+	folders(): readonly FolderSummary[] {
 		const state = this.current();
 		return state.status === "loaded" ? state.folders : [];
 	}

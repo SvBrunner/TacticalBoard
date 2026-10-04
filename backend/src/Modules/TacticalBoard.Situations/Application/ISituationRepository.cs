@@ -18,6 +18,12 @@ internal interface ISituationRepository
     /// <summary>Whether a non-deleted situation is in the folder <paramref name="folderId"/>.</summary>
     Task<bool> AnyInFolderAsync(Guid folderId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The number of non-deleted situations of <paramref name="area"/> per folder (one grouped
+    /// query); folders without situations and the top level are missing.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, int>> CountByFolderAsync(AreaReference area, CancellationToken cancellationToken);
+
     /// <summary>One revision of a situation (read-only).</summary>
     Task<SituationRevision?> FindRevisionAsync(Guid situationId, int number, CancellationToken cancellationToken);
 

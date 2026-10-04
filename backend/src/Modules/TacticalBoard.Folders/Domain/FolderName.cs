@@ -12,8 +12,12 @@ namespace TacticalBoard.Folders.Domain;
 /// </summary>
 internal sealed record FolderName
 {
-    /// <summary>The longest name accepted (UTF-16 code units, like the browser's <c>maxlength</c>). A technical limit.</summary>
-    public const int MaxLength = 100;
+    /// <summary>
+    /// The longest name accepted (UTF-16 code units, like the browser's <c>maxlength</c>): 64, a
+    /// technical limit chosen for the confirmed product decision that 100 is more than a folder
+    /// name needs (arc42 ch. 8.15). The column is <c>varchar(64)</c>.
+    /// </summary>
+    public const int MaxLength = 64;
 
     private FolderName(string value)
     {

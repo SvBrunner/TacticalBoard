@@ -29,8 +29,8 @@ describe("FolderMessages", () => {
 		],
 		[
 			"a too long name (by its code, with its value)",
-			new ApiError(400, { fieldErrors: { name: [{ code: "too-long", maxLength: 100 }] } }),
-			"The name must be at most 100 characters long.",
+			new ApiError(400, { fieldErrors: { name: [{ code: "too-long", maxLength: 64 }] } }),
+			"The name must be at most 64 characters long.",
 		],
 		["no server", new ApiUnavailableError(), "The server is not reachable. Please try again later."],
 		["an ended session", new ApiError(401, {}), "Your session has ended. Please log in again."],

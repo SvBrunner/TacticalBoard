@@ -30,6 +30,8 @@ export const messages = {
 		main: "Main",
 		account: "Account",
 		startPage: "Start page",
+		/** The badge's name in the editor while the edited situation lies in a folder (it leads to the folder's page). */
+		backToFolder: "Back to the folder",
 	},
 	account: {
 		logIn: "Log in",
@@ -245,6 +247,8 @@ export const messages = {
 	folders: {
 		loading: "Loading folders…",
 		none: "No folders yet.",
+		/** How many (non-deleted) situations a folder contains, in the folder list. */
+		situationCount: (count: number) => (count === 1 ? "1 situation" : `${count.toLocaleString("en")} situations`),
 		name: "Folder name",
 		newHeading: "New folder",
 		renameHeading: "Rename folder",

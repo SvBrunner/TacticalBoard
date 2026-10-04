@@ -7,7 +7,7 @@ import { situationEditor } from "$lib/editor/SituationEditor";
 import { Frame } from "$lib/model/Frame";
 import { Situation } from "$lib/model/Situation";
 import { SituationSerializer } from "$lib/model/serialization/SituationSerializer";
-import type { Folder } from "$lib/storage/FolderApi";
+import type { Folder, FolderSummary } from "$lib/storage/FolderApi";
 import { situationLink } from "$lib/storage/SituationLink";
 import { installDialogPolyfill } from "$lib/testing/dialogPolyfill";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
@@ -21,6 +21,10 @@ const alice = { id: "u1", displayName: "Alice", isSystemAdministrator: false, pr
 
 function folderOf(id: string, name: string): Folder {
 	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z" };
+}
+
+function summaryOfFolder(folder: Folder, situationCount = 0): FolderSummary {
+	return { ...folder, situationCount };
 }
 
 /** Lets the async loads, confirmations and their DOM updates finish. */
@@ -61,7 +65,7 @@ describe("folder page", () => {
 			.on("GET", "/api/antiforgery", jsonResponse(200, ANTIFORGERY))
 			.on("GET", `/api/folders/${folder.id}`, jsonResponse(200, folder))
 			.on("GET", `/api/folders/${folder.id}/situations`, jsonResponse(200, situations))
-			.on("GET", "/api/personal-area/folders", jsonResponse(200, [folderOf("f0", "Breakouts"), folder]));
+			.on("GET", "/api/personal-area/folders", jsonResponse(200, [summaryOfFolder(folderOf("f0", "Breakouts")), summaryOfFolder(folder, situations.length)]));
 		vi.stubGlobal("fetch", server.fetch);
 		await authSession.refresh();
 	}
@@ -156,11 +160,49 @@ describe("folder page", () => {
 		expect(items.map((item) => within(item).getAllByRole("button")[0].textContent?.trim())).toEqual(["Powerplay", "Corner"]);
 	});
 
-	it("says when the folder is empty", async () => {
+	it("says when the folder is empty and offers New situation and Import right there, instead of their own section", async () => {
 		await loggedInWith([]);
 		await renderPage();
 
 		expect(situationsSection()).toHaveTextContent("This folder is empty. Start a new situation or import one here, or move situations into it.");
+		expect(within(situationsSection()).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual(["New situation", "Import"]);
+		expect(screen.queryByRole("region", { name: "Start in this folder" })).toBeNull();
+		expect(screen.getAllByRole("button", { name: "New situation" })).toHaveLength(1);
+	});
+
+	it("starts a new situation in this folder from the empty state", async () => {
+		await loggedInWith([]);
+		await renderPage();
+
+		await fireEvent.click(within(situationsSection()).getByRole("button", { name: "New situation" }));
+		await settle();
+		await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
+		expect(goto).toHaveBeenCalledWith("/editor");
+	});
+
+	it("imports into this folder from the empty state", async () => {
+		await loggedInWith([]);
+		await renderPage();
+		const situation = new Situation({
+			id: "x",
+			title: "Imported",
+			description: "",
+			sport: "floorball",
+			fieldType: "full",
+			createdAt: "2026-01-01T00:00:00.000Z",
+			updatedAt: "2026-01-01T00:00:00.000Z",
+			frames: [new Frame("f1", "", [])],
+		});
+		const input = situationsSection().querySelector<HTMLInputElement>("input[type=file]")!;
+		Object.defineProperty(input, "files", { value: [new File([new SituationSerializer().serialize(situation)], "x.json")], configurable: true });
+
+		await fireEvent.change(input);
+		await settle();
+
+		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f1" } });
+		expect(goto).toHaveBeenCalledWith("/editor");
 	});
 
 	it("starts a new situation in this folder (its first save goes here)", async () => {
@@ -227,6 +269,8 @@ describe("folder page", () => {
 
 		expect(server.requestsTo("/api/situations/s1").map((request) => request.method)).toEqual(["DELETE"]);
 		expect(situationsSection()).toHaveTextContent("This folder is empty.");
+		expect(within(situationsSection()).getByRole("button", { name: "New situation" })).toBeInTheDocument();
+		expect(screen.queryByRole("region", { name: "Start in this folder" })).toBeNull();
 	});
 
 	it("moves a situation to the top level or another folder", async () => {

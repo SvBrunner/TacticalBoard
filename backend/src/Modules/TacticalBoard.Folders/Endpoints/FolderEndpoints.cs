@@ -14,7 +14,7 @@ namespace TacticalBoard.Folders.Endpoints;
 /// Folders over REST (arc42 ch. 8.15). All need a session (otherwise <c>401</c>); the
 /// state-changing ones also the antiforgery header (ch. 8.13).
 /// <list type="bullet">
-/// <item><c>GET /api/personal-area/folders</c>: the current user's folders, by name.</item>
+/// <item><c>GET /api/personal-area/folders</c>: the current user's folders, by name, each with its <c>situationCount</c>.</item>
 /// <item><c>POST /api/personal-area/folders</c> with <c>{ name }</c>: create → <c>201</c>, <c>Location</c>.</item>
 /// <item><c>GET /api/folders/{id}</c>: one folder.</item>
 /// <item><c>PUT /api/folders/{id}</c> with <c>{ name }</c>: rename.</item>
@@ -43,7 +43,7 @@ internal static class FolderEndpoints
         folders.MapDelete("/{id:guid}", DeleteAsync);
     }
 
-    public static async Task<Ok<List<FolderResponse>>> ListPersonalAsync(
+    public static async Task<Ok<List<FolderSummaryResponse>>> ListPersonalAsync(
         [FromServices] FolderService service,
         [FromServices] IAreaAccess areas,
         CancellationToken cancellationToken)
@@ -51,7 +51,7 @@ internal static class FolderEndpoints
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(areas);
         var list = await service.ListAsync(areas.CurrentUsersPersonalArea(), cancellationToken);
-        return TypedResults.Ok(list.Select(FolderResponse.From).ToList());
+        return TypedResults.Ok(list.Select(FolderSummaryResponse.From).ToList());
     }
 
     public static async Task<Results<CreatedAtRoute<FolderResponse>, ValidationProblem>> CreatePersonalAsync(

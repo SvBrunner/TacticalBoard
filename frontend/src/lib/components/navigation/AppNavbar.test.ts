@@ -38,6 +38,18 @@ describe("AppNavbar", () => {
 		expect(within(banner).getByRole("heading", { level: 1, name: "Powerplay" })).toBeInTheDocument();
 	});
 
+	it("the badge can lead elsewhere under another name (e.g. back to a folder from the editor)", async () => {
+		const onHome = vi.fn();
+		render(AppNavbar, { props: { title: "X", onHome, homeHref: "/folders/f1", homeLabel: "Back to the folder" } });
+
+		const link = within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Back to the folder" });
+		expect(link).toHaveAttribute("href", "/folders/f1");
+		expect(link).toHaveAttribute("title", "Back to the folder");
+		expect(screen.queryByRole("link", { name: "Start page" })).toBeNull();
+		expect(await fireEvent.click(link)).toBe(false);
+		expect(onHome).toHaveBeenCalledOnce();
+	});
+
 	it("marks the start page as the current page", () => {
 		render(AppNavbar, { props: { title: "Tactical Board", home: true } });
 

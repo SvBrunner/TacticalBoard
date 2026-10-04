@@ -71,6 +71,15 @@ internal sealed class InMemorySituationRepository : ISituationRepository
     public Task<bool> AnyInFolderAsync(Guid folderId, CancellationToken cancellationToken) =>
         Task.FromResult(Situations.Any(situation => situation.FolderId == folderId && !situation.IsDeleted));
 
+    public Task<IReadOnlyDictionary<Guid, int>> CountByFolderAsync(AreaReference area, CancellationToken cancellationToken)
+    {
+        IReadOnlyDictionary<Guid, int> counts = Situations
+            .Where(situation => situation.Area == area && situation.FolderId != null && !situation.IsDeleted)
+            .GroupBy(situation => situation.FolderId!.Value)
+            .ToDictionary(group => group.Key, group => group.Count());
+        return Task.FromResult(counts);
+    }
+
     public Task<bool> SaveFolderAsync(Situation situation, CancellationToken cancellationToken)
     {
         if (DeletedBeforeFolderSave)

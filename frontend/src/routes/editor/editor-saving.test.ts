@@ -4,6 +4,8 @@ import { tick } from "svelte";
 import { goto } from "$app/navigation";
 import { authSession } from "$lib/auth/AuthSession";
 import { situationEditor } from "$lib/editor/SituationEditor";
+import { SituationSerializer } from "$lib/model/serialization/SituationSerializer";
+import { inFolder, TOP_LEVEL } from "$lib/storage/SaveTarget";
 import { SituationApi, type SituationSummary } from "$lib/storage/SituationApi";
 import { situationLink } from "$lib/storage/SituationLink";
 import { SavedSituationFormat } from "$lib/storage/SavedSituationFormat";
@@ -379,6 +381,145 @@ describe("editor page: saving on the server", () => {
 
 			expect(goto).toHaveBeenCalledWith("/editor", { replaceState: true, keepFocus: true, noScroll: true });
 			expect(situationLink.saved()).toBeNull();
+		});
+	});
+
+	describe("the folder of the edited situation", () => {
+		const badge = (name: string) => within(screen.getByRole("banner")).getByRole("link", { name });
+
+		async function newSituation() {
+			await fireEvent.click(screen.getByRole("button", { name: "New" }));
+			await settle();
+			await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+			await settle();
+		}
+
+		async function loadFile() {
+			const file = new File([new SituationSerializer().serialize(situationEditor.current().withTitle("Imported"))], "x.situation.json");
+			const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+			Object.defineProperty(input, "files", { value: [file], configurable: true });
+			await fireEvent.change(input);
+			await settle();
+		}
+
+		describe("logged in", () => {
+			beforeEach(logIn);
+
+			it("New saves into the folder of the edited server situation", async () => {
+				server.on("POST", "/api/folders/f1/situations", (request) => echo(request, 201, { id: "s2", folderId: "f1" }));
+				situationLink.attach(summaryOf({ id: "s1", folderId: "f1" }));
+				render(EditorPage);
+
+				await newSituation();
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
+				await fireEvent.click(saveButton());
+				await settle();
+
+				expect(server.requestsTo("/api/folders/f1/situations").map((request) => request.method)).toEqual(["POST"]);
+				expect(posts()).toHaveLength(0);
+			});
+
+			it("Load (import) saves into the folder of the edited server situation", async () => {
+				situationLink.attach(summaryOf({ id: "s1", folderId: "f1" }));
+				render(EditorPage);
+
+				await loadFile();
+
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f1" } });
+			});
+
+			it("New and Load stay in the folder an unsaved situation was started in", async () => {
+				situationLink.startNew(inFolder("f2"));
+				render(EditorPage);
+
+				await newSituation();
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f2" } });
+				await loadFile();
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f2" } });
+			});
+
+			it("New and Load save at the top level for a situation in no folder", async () => {
+				situationLink.attach(summaryOf({ id: "s1", folderId: null }));
+				render(EditorPage);
+
+				await newSituation();
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: TOP_LEVEL });
+				await loadFile();
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: TOP_LEVEL });
+			});
+
+			it("the badge leads back to the folder's page while the situation is in a folder, and follows a move", async () => {
+				situationLink.attach(summaryOf({ id: "s1", folderId: "f1" }));
+				render(EditorPage);
+
+				expect(badge("Back to the folder")).toHaveAttribute("href", "/folders/f1");
+				situationLink.relocate("s1", null);
+				await settle();
+				expect(badge("Start page")).toHaveAttribute("href", "/");
+			});
+
+			it("the badge goes to the folder's page and closes the situation", async () => {
+				situationLink.attach(summaryOf({ id: "s1", folderId: "f1" }));
+				render(EditorPage);
+
+				await fireEvent.click(badge("Back to the folder"));
+				await settle();
+
+				expect(goto).toHaveBeenCalledWith("/folders/f1");
+				expect(situationEditor.isSituationOpen()).toBe(false);
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: TOP_LEVEL });
+			});
+
+			it("the badge asks 'Discard changes?' first, as for the start page; Cancel stays", async () => {
+				situationLink.attach(summaryOf({ id: "s1", folderId: "f1" }));
+				situationEditor.addElement(1, 1, "red", "Player");
+				render(EditorPage);
+
+				await fireEvent.click(badge("Back to the folder"));
+				await settle();
+				expect(screen.getByRole("alertdialog", { name: "Discard changes?" })).toHaveAttribute("open");
+				await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+				await settle();
+				expect(goto).not.toHaveBeenCalled();
+
+				await fireEvent.click(badge("Back to the folder"));
+				await settle();
+				await fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+				await settle();
+				expect(goto).toHaveBeenCalledWith("/folders/f1");
+			});
+
+			it("the badge leads back to the folder an unsaved situation was started in", () => {
+				situationLink.startImported(inFolder("f2"));
+				render(EditorPage);
+
+				expect(badge("Back to the folder")).toHaveAttribute("href", "/folders/f2");
+			});
+
+			it("names the badge in German", async () => {
+				situationLink.attach(summaryOf({ id: "s1", folderId: "f1" }));
+				i18n.select("de");
+				render(EditorPage);
+
+				expect(badge("Zurück zum Ordner")).toHaveAttribute("href", "/folders/f1");
+				i18n.select("en");
+			});
+		});
+
+		describe("not logged in (local mode)", () => {
+			beforeEach(async () => {
+				server.on("GET", "/api/me", problemResponse(401, {}));
+				await authSession.refresh();
+			});
+
+			it("the badge leads to the start page and New starts at the top level, whatever the link says", async () => {
+				situationLink.startNew(inFolder("f2"));
+				render(EditorPage);
+
+				expect(badge("Start page")).toHaveAttribute("href", "/");
+				await newSituation();
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: TOP_LEVEL });
+			});
 		});
 	});
 });

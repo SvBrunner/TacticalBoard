@@ -87,6 +87,23 @@ public class FolderEndpointsTests
     }
 
     [Fact]
+    public async Task List_returns_each_folder_with_its_situation_count()
+    {
+        var full = await CreateAsync("Full");
+        var empty = await CreateAsync("Empty");
+        _contents.Counts[AreaReference.Personal(Alice)] = new Dictionary<Guid, int> { [full.Id] = 2 };
+
+        var list = await FolderEndpoints.ListPersonalAsync(_service, _areas, Cancellation);
+
+        Assert.Equal(
+            [
+                new FolderSummaryResponse(empty.Id, "Empty", empty.CreatedAt, empty.UpdatedAt, 0),
+                new FolderSummaryResponse(full.Id, "Full", full.CreatedAt, full.UpdatedAt, 2),
+            ],
+            list.Value!);
+    }
+
+    [Fact]
     public async Task Put_renames()
     {
         var created = await CreateAsync();
@@ -118,6 +135,7 @@ public class FolderEndpointsTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => FolderEndpoints.RenameAsync(Guid.NewGuid(), null!, _service, Cancellation));
         await Assert.ThrowsAsync<ArgumentNullException>(() => FolderEndpoints.DeleteAsync(Guid.NewGuid(), null!, Cancellation));
         Assert.Throws<ArgumentNullException>(() => FolderResponse.From(null!));
+        Assert.Throws<ArgumentNullException>(() => FolderSummaryResponse.From(null!));
     }
 
     [Fact]

@@ -59,6 +59,6 @@ describe("FolderApi", () => {
 		expect(FolderApi.DUPLICATE_NAME).toBe("https://tacticalboard/errors/duplicate-folder-name");
 		expect(FolderApi.NOT_EMPTY).toBe("https://tacticalboard/errors/folder-not-empty");
 		expect(FolderApi.NOT_FOUND).toBe("https://tacticalboard/errors/folder-not-found");
-		expect(FolderApi.MAX_NAME_LENGTH).toBe(100);
+		expect(FolderApi.MAX_NAME_LENGTH).toBe(64);
 	});
 });

@@ -6,7 +6,7 @@ import { authSession } from "$lib/auth/AuthSession";
 import { situationEditor } from "$lib/editor/SituationEditor";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
 import { situationLink } from "$lib/storage/SituationLink";
-import type { Folder } from "$lib/storage/FolderApi";
+import type { FolderSummary } from "$lib/storage/FolderApi";
 import { storedFrom, summaryOf } from "$lib/testing/storageFakes";
 import { SituationSerializer } from "$lib/model/serialization/SituationSerializer";
 import { Frame } from "$lib/model/Frame";
@@ -17,8 +17,8 @@ import { accountLanguage, i18n } from "$lib/i18n";
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
 
-function folderOf(id: string, name: string): Folder {
-	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z" };
+function folderOf(id: string, name: string, situationCount = 0): FolderSummary {
+	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z", situationCount };
 }
 
 function situationFile(name = "play.situation.json"): File {
@@ -254,7 +254,7 @@ describe("start page", () => {
 			return screen.getByRole("region", { name: "Saved situations" });
 		}
 
-		async function loggedInWith(situations = [summaryOf({ id: "s1", title: "Powerplay" })], folders: Folder[] = []) {
+		async function loggedInWith(situations = [summaryOf({ id: "s1", title: "Powerplay" })], folders: FolderSummary[] = []) {
 			server = new FakeFetch()
 				.on("GET", "/api/me", jsonResponse(200, alice))
 				.on("GET", "/api/antiforgery", jsonResponse(200, ANTIFORGERY))
@@ -316,14 +316,14 @@ describe("start page", () => {
 		});
 
 		it("lists the folders as links to their pages", async () => {
-			await loggedInWith([], [folderOf("f1", "Breakouts"), folderOf("f2", "Set pieces")]);
+			await loggedInWith([], [folderOf("f1", "Breakouts", 1), folderOf("f2", "Set pieces", 4)]);
 			render(StartPage);
 			await settle();
 
 			const folders = screen.getByRole("region", { name: "Folders" });
-			expect(within(folders).getAllByRole("link").map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
-				["Breakouts", "/folders/f1"],
-				["Set pieces", "/folders/f2"],
+			expect(within(folders).getAllByRole("link").map((link) => [link.textContent?.replace(/\s+/g, " ").trim(), link.getAttribute("href")])).toEqual([
+				["Breakouts 1 situation", "/folders/f1"],
+				["Set pieces 4 situations", "/folders/f2"],
 			]);
 			expect(screen.getByRole("region", { name: "Situations" })).toHaveTextContent("No situations outside the folders.");
 		});
@@ -354,7 +354,7 @@ describe("start page", () => {
 			const [post] = server.requestsTo("/api/personal-area/folders").filter((request) => request.method === "POST");
 			expect(JSON.parse(post.body!)).toEqual({ name: "Set pieces" });
 			expect(dialog).not.toHaveAttribute("open");
-			expect(within(screen.getByRole("region", { name: "Folders" })).getByRole("link", { name: "Set pieces" })).toBeInTheDocument();
+			expect(within(screen.getByRole("region", { name: "Folders" })).getByRole("link", { name: "Set pieces 0 situations" })).toBeInTheDocument();
 		});
 
 		it("in German: the page, the dialog and the server's refusal are German", async () => {

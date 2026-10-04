@@ -4,11 +4,13 @@ The saved situations of one place of the personal area (arc42 ch. 8.15): the
 top level on the start page, or a folder on its page. Each with title, field
 type, last changed by/at and created by; a situation opens with its title
 button, Move offers the other folders of the area (`onMove` opens the
-picker), and Delete deletes it (the owner asks for confirmation). Without
-login a hint to log in; without a server a hint that local mode works as
-usual.
+picker), and Delete deletes it (the owner asks for confirmation). An empty
+place shows `emptyMessage` and, if given, `emptyActions` (e.g. a folder's page
+offers New situation and Import there). Without login a hint to log in;
+without a server a hint that local mode works as usual.
 -->
 <script lang="ts">
+	import type { Snippet } from "svelte";
 	import type { SessionState } from "$lib/auth/AuthSession";
 	import { language, t } from "$lib/i18n";
 	import type { SavedListState } from "$lib/storage/SavedSituationList";
@@ -25,6 +27,8 @@ usual.
 		onRetry: () => void;
 		/** Shown when the place has no situations (default: "No saved situations yet…"). */
 		emptyMessage?: string;
+		/** Actions offered when the place has no situations, below `emptyMessage`. */
+		emptyActions?: Snippet;
 		/** Disables the buttons (e.g. while a situation is being opened). */
 		busy?: boolean;
 	}
@@ -37,6 +41,7 @@ usual.
 		onMove,
 		onRetry,
 		emptyMessage,
+		emptyActions,
 		busy = false,
 	}: Props = $props();
 
@@ -57,6 +62,7 @@ usual.
 		</div>
 	{:else if list.situations.length === 0}
 		<p class="hint">{emptyMessage ?? $t.saved.empty}</p>
+		{@render emptyActions?.()}
 	{:else}
 		<ul class="saved-list">
 			{#each list.situations as situation, index (situation.id)}

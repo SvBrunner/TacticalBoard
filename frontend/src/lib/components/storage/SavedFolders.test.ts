@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup, render, screen, fireEvent, within } from "@testing-library/svelte";
+import { tick } from "svelte";
+import { i18n } from "$lib/i18n";
 import type { FolderListState } from "$lib/storage/FolderList";
 import SavedFolders from "./SavedFolders.svelte";
 
@@ -10,7 +12,10 @@ function renderWith(list: FolderListState) {
 }
 
 describe("SavedFolders", () => {
-	afterEach(() => cleanup());
+	afterEach(() => {
+		cleanup();
+		i18n.select("en");
+	});
 
 	it("says it is loading", () => {
 		renderWith({ status: "loading" });
@@ -38,18 +43,37 @@ describe("SavedFolders", () => {
 		const { container } = renderWith({
 			status: "loaded",
 			folders: [
-				{ id: "f1", name: "Breakouts", createdAt: "", updatedAt: "" },
-				{ id: "f/2", name: "Set pieces", createdAt: "", updatedAt: "" },
+				{ id: "f1", name: "Breakouts", createdAt: "", updatedAt: "", situationCount: 0 },
+				{ id: "f/2", name: "Set pieces", createdAt: "", updatedAt: "", situationCount: 3 },
 			],
 		});
 
 		const links = within(screen.getByRole("list")).getAllByRole("link");
-		expect(links.map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
-			["Breakouts", "/folders/f1"],
-			["Set pieces", "/folders/f%2F2"],
-		]);
+		expect(links.map((link) => link.getAttribute("href"))).toEqual(["/folders/f1", "/folders/f%2F2"]);
+		expect(links[0]).toHaveAccessibleName("Breakouts 0 situations");
 		for (const svg of container.querySelectorAll("svg")) {
 			expect(svg).toHaveAttribute("aria-hidden", "true");
 		}
+	});
+
+	it("shows the number of situations in each folder, in the UI language with its plural form", async () => {
+		renderWith({
+			status: "loaded",
+			folders: [
+				{ id: "f1", name: "Breakouts", createdAt: "", updatedAt: "", situationCount: 1 },
+				{ id: "f2", name: "Set pieces", createdAt: "", updatedAt: "", situationCount: 2 },
+			],
+		});
+
+		const [one, two] = within(screen.getByRole("list")).getAllByRole("link");
+		expect(within(one).getByText("Breakouts")).toBeInTheDocument();
+		expect(within(one).getByText("1 situation")).toBeInTheDocument();
+		expect(within(two).getByText("2 situations")).toBeInTheDocument();
+
+		i18n.select("de");
+		await tick();
+
+		expect(within(one).getByText("1 Situation")).toBeInTheDocument();
+		expect(within(two).getByText("2 Situationen")).toBeInTheDocument();
 	});
 });

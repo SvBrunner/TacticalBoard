@@ -82,4 +82,41 @@ describe("SituationLink", () => {
 		link.reset();
 		expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: TOP_LEVEL });
 	});
+
+	describe("place", () => {
+		it("is where an unsaved situation was started", () => {
+			const link = new SituationLink();
+			expect(link.place()).toEqual(TOP_LEVEL);
+
+			link.startNew(inFolder("f1"));
+			expect(link.place()).toEqual({ folderId: "f1" });
+
+			link.startImported(inFolder("f2"));
+			expect(link.place()).toEqual({ folderId: "f2" });
+		});
+
+		it("is the folder (or top level) of a server situation, also after a move", () => {
+			const link = new SituationLink();
+
+			link.attach(summary);
+			expect(link.place()).toEqual(TOP_LEVEL);
+
+			link.relocate("s1", "f3");
+			expect(link.place()).toEqual({ folderId: "f3" });
+		});
+
+		it("is also known for a state alone", () => {
+			expect(SituationLink.placeOf({ kind: "saved", summary: { ...summary, folderId: "f4" } })).toEqual({ folderId: "f4" });
+			expect(SituationLink.placeOf({ kind: "unsaved", origin: "imported", target: inFolder("f5") })).toEqual({ folderId: "f5" });
+		});
+
+		it("is the top level again after the situation was closed", () => {
+			const link = new SituationLink();
+			link.attach({ ...summary, folderId: "f1" });
+
+			link.reset();
+
+			expect(link.place()).toEqual(TOP_LEVEL);
+		});
+	});
 });

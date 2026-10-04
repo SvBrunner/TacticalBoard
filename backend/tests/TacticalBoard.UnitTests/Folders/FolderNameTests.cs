@@ -32,9 +32,9 @@ public class FolderNameTests
     {
         Assert.True(FolderName.TryCreate(" " + new string('a', FolderName.MaxLength) + " ", out _, out _));
         Assert.False(FolderName.TryCreate(new string('a', FolderName.MaxLength + 1), out _, out var error));
-        Assert.Equal("expected at most 100 characters", error?.Message);
+        Assert.Equal("expected at most 64 characters", error?.Message);
         Assert.Equal("too-long", error?.Code);
-        Assert.Equal(100, error?.Values["maxLength"]);
+        Assert.Equal(64, error?.Values["maxLength"]);
     }
 
     [Theory]

@@ -33,6 +33,7 @@ const messages: Messages = {
 		main: "Hauptnavigation",
 		account: "Konto",
 		startPage: "Startseite",
+		backToFolder: "Zurück zum Ordner",
 	},
 	account: {
 		logIn: "Anmelden",
@@ -246,6 +247,7 @@ const messages: Messages = {
 	folders: {
 		loading: "Ordner werden geladen…",
 		none: "Noch keine Ordner.",
+		situationCount: (count) => (count === 1 ? "1 Situation" : `${decimal(count, 0)} Situationen`),
 		name: "Ordnername",
 		newHeading: "Neuer Ordner",
 		renameHeading: "Ordner umbenennen",

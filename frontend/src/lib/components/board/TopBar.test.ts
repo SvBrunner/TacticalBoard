@@ -350,6 +350,16 @@ describe("TopBar", () => {
 			expect(link).toHaveAttribute("href", "/");
 		});
 
+		it("leads to the given place under the given name (the folder's page)", async () => {
+			const onHome = vi.fn();
+			render(TopBar, { props: props({ onHome, homeHref: "/folders/f1", homeLabel: "Back to the folder" }) });
+
+			const link = within(screen.getByRole("banner")).getByRole("link", { name: "Back to the folder" });
+			expect(link).toHaveAttribute("href", "/folders/f1");
+			expect(await fireEvent.click(link)).toBe(false);
+			expect(onHome).toHaveBeenCalledOnce();
+		});
+
 		it("a click goes through onHome instead of following the link", async () => {
 			const onHome = vi.fn();
 			render(TopBar, { props: props({ onHome }) });

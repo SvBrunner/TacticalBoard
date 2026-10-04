@@ -9,9 +9,10 @@ using TacticalBoard.SharedKernel.Time;
 namespace TacticalBoard.Folders.Application;
 
 /// <summary>
-/// The use cases of folders (arc42 ch. 8.15): list, get, create, rename and delete the flat
-/// folders of an area. Names are unique per area; a folder can only be deleted while it is empty
-/// (asked through <see cref="IFolderContents"/>, implemented by Situations). Access is decided by
+/// The use cases of folders (arc42 ch. 8.15): list (with the number of situations in each), get,
+/// create, rename and delete the flat folders of an area. Names are unique per area; a folder can
+/// only be deleted while it is empty (asked through <see cref="IFolderContents"/>, implemented by
+/// Situations, which also counts the situations). Access is decided by
 /// the Areas module: a folder in an area the user can't read is "not found"; one they can read but
 /// not write is "forbidden".
 /// </summary>
@@ -24,9 +25,13 @@ internal sealed class FolderService(
     IIdGenerator ids,
     IClock clock)
 {
-    /// <summary>The folders of <paramref name="area"/>, by name (ignoring case, then exactly).</summary>
+    /// <summary>
+    /// The folders of <paramref name="area"/>, by name (ignoring case, then exactly), each with the
+    /// number of non-deleted situations in it (one query for all folders, asked through
+    /// <see cref="IFolderContents"/>).
+    /// </summary>
     /// <exception cref="FolderAccessDeniedException">The user may not read the area.</exception>
-    public async Task<IReadOnlyList<FolderView>> ListAsync(AreaReference area, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<FolderSummary>> ListAsync(AreaReference area, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(area);
         if (!await areas.CanReadAsync(area, cancellationToken))
@@ -34,10 +39,12 @@ internal sealed class FolderService(
             throw new FolderAccessDeniedException();
         }
 
-        return (await folders.ListAsync(area, cancellationToken))
+        var list = await folders.ListAsync(area, cancellationToken);
+        var counts = await contents.CountSituationsByFolderAsync(area, cancellationToken);
+        return list
             .OrderBy(folder => folder.Name, StringComparer.Create(CultureInfo.InvariantCulture, CompareOptions.IgnoreCase))
             .ThenBy(folder => folder.Name, StringComparer.Ordinal)
-            .Select(View)
+            .Select(folder => new FolderSummary(View(folder), counts.GetValueOrDefault(folder.Id)))
             .ToList();
     }
 
