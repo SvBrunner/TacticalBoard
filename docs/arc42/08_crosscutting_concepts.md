@@ -4,8 +4,21 @@
 
 There are two levels of roles:
 
-- **System-wide:** *system administrator* or *normal user*. System administrators only handle operations/technical settings and have no special access to teams or their content. Any user can create a team.
-- **Per team:** **Admin**, **Editor**, **Reader**. These apply across the Teams, Folders, and Boards modules (chapter 5). The creator of a team becomes its Admin. Members whose join request is accepted start as Reader.
+- **System-wide:** *system administrator* or *normal user*. Any user can create a team.
+- **Per team:** **Admin**, **Editor**, **Reader**. These apply across the Teams, Folders, and Situations modules (chapter 5). The creator of a team becomes its Admin. Members whose join request is accepted start as Reader.
+- **Personal area:** only its owner can read and write it.
+
+**System administrators** manage users and teams, but have **no access to situations or folders** (neither personal nor team):
+
+| Action | System administrator |
+|---|---|
+| List users, block/unblock, delete a user | ✅ |
+| Grant/revoke system administrator | ✅ (the last system administrator can't lose the role, block or delete themselves) |
+| List teams, delete a team | ✅ |
+| Manage a team's members and roles (also accept/reject join requests) | ✅ |
+| View or change situations and folders | ❌ |
+
+A blocked user can't log in or call the API; their content and memberships stay.
 
 **Team permission matrix (confirmed):**
 
@@ -15,17 +28,19 @@ There are two levels of roles:
 | Create/edit/delete a board | ✅ | ✅ | ❌ |
 | Create/rename/delete a folder | ✅ | ✅ | ❌ |
 | Accept/reject join requests | ✅ | ❌ | ❌ |
-| Manage team members/roles | ✅ | ❌ | ❌ |
+| Manage team members/roles (remove members, change roles, own role included²) | ✅ | ❌ | ❌ |
+| See the member list | ✅ | ✅ | ✅ |
 | Leave the team | ✅¹ | ✅ | ✅ |
 | Delete the team | ✅ | ❌ | ❌ |
 
 ¹ Except the team's last Admin, who has to delete the team instead.
+² As long as the team keeps at least one Admin.
 
-Enforcement point: the backend (chapter 5's Teams module owns the role check; Boards/Folders modules call into it rather than duplicating authorization logic).
+Enforcement point: the backend. The Teams module owns the role check; Situations and Folders ask the Areas module, which delegates to Teams or Users (ch. 5.2), rather than duplicating authorization logic. The frontend only hides what isn't allowed.
 
 ## 8.2 API Error Handling
 
-Proposed: consistent error responses using [RFC 7807 Problem Details](https://www.rfc-editor.org/rfc/rfc7807) (`application/problem+json`), which ASP.NET Core supports natively. Not yet confirmed.
+Confirmed: consistent error responses using [RFC 7807 Problem Details](https://www.rfc-editor.org/rfc/rfc7807) (`application/problem+json`), which ASP.NET Core supports natively. Validation errors list the invalid fields (`errors`); domain errors (e.g. duplicate title, save conflict, last Admin) have their own `type` URI so the frontend can react to them.
 
 Example shape:
 
@@ -179,7 +194,7 @@ Implementation: `frontend/src/lib/model/FieldDimensions.ts`, `frontend/src/lib/b
 
 ## 8.7 Unsaved changes
 
-Until there is server-side storage, "saved" means **exported**.
+Until there is server-side storage, "saved" means **exported**. From Phase 2, for a situation saved on the server it means saved there (ch. 8.15); in local mode (no login) it stays "exported".
 
 - `SituationEditor` keeps a simple dirty flag (`hasUnsavedChanges` store, `isDirty()`): it becomes true with any edit that changes the situation (undo and redo included) and false when a situation is created or loaded/imported, or when it is exported as JSON (`markSaved()`). Exporting an animated GIF does **not** count as saving (8.12). It is deliberately a flag, not a comparison: undoing back to the starting state still counts as unsaved.
 - Starting a new situation (start page or editor), importing a file, or going back to the start page with the editor's badge while dirty asks **"Discard changes?"** (Discard / Cancel, reusable `ConfirmDialog`). Confirm proceeds, Cancel (or Escape) keeps the current situation. For an import the question comes after the file was read successfully.
@@ -320,3 +335,41 @@ The frames of a situation can be exported as an **animated GIF** — the slidesh
 
 **Performance:** rendering and encoding run on the main thread, one frame at a time (in headless Chromium about 0.1–0.3 s for 3 frames, depending on the resolution); see [known limitations](../known-limitations.md).
 
+
+## 8.13 Login and session (Phase 2)
+
+- The backend is the OIDC client (ADR-006): `GET /auth/login?returnUrl=…` starts the Authorization Code flow with PKCE, `/auth/callback` finishes it, `POST /auth/logout` ends the session (and at the IdP, if it supports it). `returnUrl` must be a local path.
+- The session is an `HttpOnly`, `Secure`, `SameSite=Lax` cookie under the app's origin. The IdP tokens stay in the backend.
+- **CSRF:** every state-changing request (`POST`, `PUT`, `PATCH`, `DELETE`) needs an antiforgery token header that the frontend gets from the backend; together with `SameSite=Lax` this blocks cross-site requests.
+- `GET /api/me` returns the current user, or `401` when not logged in. The frontend then offers "Log in" and keeps working in local mode (ch. 1).
+- **Users** are identified by the IdP's issuer + `sub`. The first valid login creates a normal user (just-in-time). The display name comes from the `name` claim (fallbacks: `preferred_username`, then `email`) on that first login only; afterwards it is changed in the app and never overwritten by the IdP.
+- A blocked or deleted user gets no session; an existing session ends with the next request.
+
+## 8.14 Bootstrapping the first system administrator
+
+The deployment configuration lists identities that are system administrators from the start (`Bootstrap__SystemAdministrators`, entries `issuer|subject`). When such an identity logs in and **no active system administrator exists yet**, or the identity logs in for the very first time, it gets the role. Afterwards the role is managed only in the app, so revoking it there sticks. If every system administrator is gone (e.g. deleted directly in the database), a configured identity gets the role again on its next login — the recovery path.
+
+## 8.15 Saving situations on the server (Phase 2)
+
+- **Areas:** a situation lives in exactly one area (a user's personal area or a team) and optionally in one folder of that area. It can be moved between the folders (and the top level) of its area, but not moved or copied to another area (only via JSON export/import).
+- **Folders:** flat, names unique within the area (ignoring upper/lower case), deletable only when empty.
+- **Save:** explicit, with the Save button or Ctrl+S / Cmd+S (no autosave). The first save of a new or imported situation creates it **where it was started**: the area and folder (or top level) from which "New situation" or "Import" was chosen; from the start page, the top level of the personal area (without login: no server save, only export). Later saves update it.
+- **Storage:** see ADR-009. Each save writes a new revision; the situation row carries the metadata (title, field type, created/updated at and by, current revision).
+- **Titles:** unique among the non-deleted situations of an area, compared after trimming and ignoring upper/lower case. Saving with a title that exists there fails (Problem Details, the editor shows the error). When an imported situation is saved for the first time and its title exists, it gets the suffix " (2)" (or the next free number). Default titles are incremented within the area: "Untitled Situation", "Untitled Situation (2)", …
+- **Conflicts:** optimistic concurrency with the revision number (`ETag` / `If-Match`). If someone else saved in between, the save fails with `412`, and the user chooses **Overwrite** (save again on top of the newest revision), **Save as copy** (a new situation with title suffix " (2)" or the next free number) or **Cancel**.
+- **Shown metadata:** created by/at and last changed by/at.
+- **Format:** the server always stores the current file format version; the frontend migrates older files on import (ch. 8.3) and the backend validates the document before saving.
+
+## 8.16 Soft delete
+
+- Situations, folders, teams, memberships, join requests and users are never deleted physically: they get a `deletedAt` timestamp and disappear from all queries. There is no restore UI and no final purge yet.
+- Deleting a team soft-deletes its folders, situations, memberships and pending join requests. A folder can be deleted only while it contains no (non-deleted) situations.
+- Uniqueness (situation titles and folder names per area, team names) only counts non-deleted items, so names can be reused.
+- **Account deletion** (by the user or a system administrator): blocked while the user is the last Admin of a team with other members. Otherwise their personal area (folders, situations), memberships and pending join requests are soft-deleted, teams where they were the only member are deleted, and the user record is anonymized (display name removed) and soft-deleted. "Created/changed by" on team situations then shows "Deleted user".
+
+## 8.17 Teams (Phase 2)
+
+- **Name:** unique among non-deleted teams, compared after trimming and ignoring upper/lower case. **Logo:** optional; PNG, JPEG or WebP; the backend scales it down to fit 256 × 256 px, re-encodes it (dropping metadata) and stores it in the database.
+- **Code:** 6 characters from A–Z and 0–9, generated randomly when the team is created (retried on a collision), never changed. The team link contains the code.
+- **Overview:** only for logged-in users; lists all teams with name and logo, searchable by name or code.
+- **Join requests:** one pending request per user and team; it can't be withdrawn; after a rejection the user may send a new one. Joining through a link also creates a request.

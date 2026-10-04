@@ -13,10 +13,16 @@
 | Arrow | An element showing a movement: a **pass** (dashed line), a **run** (wavy line), or a **shot** (thick line), drawn from a start to an end point with an arrowhead at the end. Free: not attached to players. Its type can only change to another arrow type. |
 | Bend point | A point an arrow's curve passes through between its start and end. An arrow without bend points is straight; it can have any number of them, added, moved and removed by the user. |
 | Team code | Unique, system-generated 6-character identifier of a team (A–Z, 0–9), used to find it. |
-| Team | A group of users who share access to boards and folders, with per-member roles. |
+| Team | A group of users who share access to situations and folders, with per-member roles. Has a unique name, an optional logo and a team code. |
+| Area | Where saved situations live: a user's personal area or a team. Situation titles are unique within an area. |
+| Personal area | A user's own area for situations and folders; only the user can access it. |
+| Revision | One saved state of a situation on the server. Every save creates a new revision; the newest is the current one. |
+| Soft delete | Deleting by marking an item as deleted instead of removing it from the database. |
+| Local mode | Using the app without login: editing plus JSON/GIF export and import, nothing stored on the server. |
 | Folder | Groups situations in a team or in a user's personal area. One level only, no subfolders. |
 | Role | A team-scoped permission level: Admin, Editor, or Reader. See ch. 8 for the permission matrix. |
-| System administrator | System-wide user type limited to operations/technical settings; no special access to teams or content. |
+| System administrator | System-wide user type that manages users and teams (incl. members and roles), without access to situations or folders. Granted only by another system administrator, the first one through the deployment configuration. |
 | Trainer | A coach-type user of the system. Descriptive only — not a role and not mapped to team roles. |
 | Spieler | A player-type user of the system. Descriptive only — not a role and not mapped to team roles. |
-| IdP (Identity Provider) | External, self-hosted service handling authentication (e.g. PocketID, Keycloak). The backend does not store passwords itself. |
+| IdP (Identity Provider) | External OpenID Connect service handling authentication (any provider, e.g. PocketID, Keycloak). The backend does not store passwords itself. |
+| BFF (backend for frontend) | The backend performs the OIDC login for the browser and keeps the tokens; the browser only holds a session cookie. |

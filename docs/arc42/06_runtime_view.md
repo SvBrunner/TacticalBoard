@@ -1,46 +1,54 @@
 # 6. Runtime View
 
-Two representative scenarios, based on the modules from chapter 5.
+Representative scenarios, based on the modules from chapter 5.
 
-## 6.1 Login
+## 6.1 Login (backend for frontend)
 
-_Assumes OAuth2 Authorization Code flow (with PKCE) against the self-hosted IdP — a common default for SPA + external IdP, not yet explicitly confirmed._
+The backend is the OIDC client (Authorization Code flow with PKCE). Tokens stay in the backend; the browser only gets an `HttpOnly` session cookie (ch. 8.13).
 
 ```mermaid
 sequenceDiagram
     participant U as Trainer/Spieler
     participant F as Frontend (SvelteKit)
-    participant I as Identity Provider
     participant B as Backend (.NET)
+    participant I as Identity Provider
+    participant DB as PostgreSQL
 
-    U->>F: Open app
-    F->>I: Redirect to login (Authorization Code + PKCE)
-    U->>I: Enter credentials
-    I-->>F: Redirect back with auth code
-    F->>I: Exchange code for tokens
-    I-->>F: Access token (+ refresh token)
-    F->>B: REST call with access token
-    B->>I: Validate token (e.g. JWKS)
-    B-->>F: Response (authorized)
+    U->>F: Click "Log in"
+    F->>B: GET /auth/login?returnUrl=…
+    B-->>U: Redirect to IdP (code + PKCE)
+    U->>I: Authenticate
+    I-->>B: Redirect to /auth/callback with code
+    B->>I: Exchange code for tokens
+    I-->>B: ID token (+ access/refresh token)
+    B->>DB: Find user by issuer + subject, create on first login
+    B-->>U: Set session cookie, redirect to returnUrl
+    F->>B: GET /api/me (cookie)
+    B-->>F: Current user (name, system admin flag)
 ```
 
-## 6.2 Save a board
+## 6.2 Save a team situation
 
 ```mermaid
 sequenceDiagram
-    participant U as Trainer
-    participant F as Frontend (SvelteKit)
-    participant B as Backend: Boards module
-    participant T as Backend: Teams module
+    participant U as Editor
+    participant F as Frontend
+    participant S as Backend: Situations
+    participant A as Backend: Areas/Teams
     participant DB as PostgreSQL
 
-    U->>F: Click "Save"
-    F->>B: POST /boards (JSON board content, folder, team)
-    B->>T: Check user's role in team (Editor/Admin required)
-    T-->>B: Authorized
-    B->>DB: Persist board
-    DB-->>B: OK
-    B-->>F: 201 Created
-    F-->>U: Confirmation
+    U->>F: Save (button or Ctrl+S)
+    F->>S: PUT /api/situations/{id} (document), If-Match: "revision 7"
+    S->>A: May the user write in this team? (Editor/Admin)
+    A-->>S: Yes
+    S->>DB: Current revision still 7? Title unique in the area?
+    alt unchanged in between
+        S->>DB: Insert revision 8, update metadata
+        S-->>F: 200, ETag "revision 8"
+    else someone saved revision 8 meanwhile
+        S-->>F: 412 Precondition Failed (Problem Details: conflict)
+        F-->>U: Warning: Overwrite / Save as copy / Cancel
+    end
 ```
 
+"Overwrite" repeats the save with the newest revision as `If-Match`; "Save as copy" creates a new situation with the title suffix " (2)" (or the next free number), see ch. 8.15.

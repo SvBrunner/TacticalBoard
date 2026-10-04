@@ -32,22 +32,29 @@ Next, in this order:
 
 ## Phase 2 — Backend, users, and teams
 
-Architecture decisions: .NET, PostgreSQL, self-hosted OIDC IdP, containers (see [ADRs](arc42/09_architecture_decisions.md)).
+Architecture decisions: .NET modular monolith, PostgreSQL, any OIDC IdP with BFF login, Docker Compose (see [ADRs](arc42/09_architecture_decisions.md) and [ch. 8.13–8.17](arc42/08_crosscutting_concepts.md)). Local mode without login stays available throughout.
 
-- [ ] Backend skeleton + IdP login
-- [ ] System-wide user types: system administrator (operations only) and normal user
-- [ ] Personal area: save/load/edit/delete situations on the server, in flat folders
-- [ ] Start page lists the saved situations and teams (the MVP start page only offers "New situation" and "Import", with a placeholder section for this list)
-- [ ] Teams: create (name, logo, generated 6-character code A–Z/0–9), overview page of all teams searchable by name/code, team links
-- [ ] Join requests, accepted/rejected by team Admins; new members start as Reader
-- [ ] Leaving a team (the last Admin has to delete the team instead)
-- [ ] Member and role management (Admin, Editor, Reader — see [ch. 8](arc42/08_crosscutting_concepts.md))
-- [ ] Team situations in flat folders
-- [ ] Default titles are incremented (Untitled Situation 2, …)
+Next, in this order:
+
+1. [ ] **Backend skeleton**: .NET 10 solution with the modules from ch. 5.2, DI, EF Core + PostgreSQL with migrations, Problem Details, health endpoint; xUnit + Testcontainers; .NET SDK in the Nix flake; Docker Compose with backend, PostgreSQL, a development IdP, reverse proxy and the frontend switched to `adapter-static`.
+   *Everything else runs on it; settles the module boundaries and the test setup.*
+2. [ ] **Login**: BFF login/logout, session cookie, CSRF, just-in-time users, display name (editable), `/api/me`, bootstrap system administrator; frontend shows log in/out and keeps local mode.
+3. [ ] **Personal area — situations**: save (button, Ctrl+S), open, delete; revisions and metadata, title uniqueness and default titles, conflict warning (overwrite / save as copy), created/changed by; the start page lists the saved situations.
+   *First real use of the backend; establishes the save flow that teams reuse.*
+4. [ ] **Personal area — folders**: create, rename (unique names), delete (only if empty); situations in folders or at the top level, moving them between folders; "New situation"/"Import" from a folder saves there.
+5. [ ] **Teams**: create (unique name, optional logo, generated code), overview page with search (logged in), team page via link; the start page lists the user's teams.
+6. [ ] **Membership**: join requests (accept/reject, re-request after rejection), roles and member management, member list, leaving, deleting a team (with confirmation).
+7. [ ] **Team situations and folders** with the permission matrix (ch. 8.1).
+8. [ ] **System administration**: user list, block/unblock, delete users, grant/revoke system administrator, team management.
+9. [ ] **Account deletion** (by the user and by a system administrator), incl. the last-Admin rule.
 
 ## Later
 
 - [ ] Additional sports
+- [ ] Realtime collaborative editing (WebSockets, ADR-010)
+- [ ] Version history of situations (the data model already keeps revisions)
+- [ ] Restoring soft-deleted items; purging old data
+- [ ] Helm chart for Kubernetes
 
 ## Open questions
 

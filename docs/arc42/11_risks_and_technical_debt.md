@@ -8,7 +8,7 @@ See also [known-limitations.md](../known-limitations.md).
 |---|---|---|
 | No backend exists yet | Teams, folders, server-side board storage, and auth are all specified but unimplemented. Only local (client-side) board JSON export/import currently works. | ch. 5, 9 |
 | Bus factor of one | Solo project; no redundancy in project knowledge. | ch. 1, 2 |
-| Open technology choices | IdP product (PocketID vs. Keycloak vs. other), container orchestration (Compose vs. Kubernetes), and error-response format are not yet finalized. | ch. 7, 8, 9 |
+| Unbounded growth of soft-deleted data and revisions | Nothing is purged yet (ch. 8.16, ADR-009). Fine at the expected scale; a purge/retention concept is needed before it matters. | ch. 8, 9 |
 
 ## Technical debt
 
