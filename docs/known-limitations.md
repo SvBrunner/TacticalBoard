@@ -25,7 +25,7 @@ A new or imported situation that isn't saved on the server (always in local mode
 
 ## Saving on the server
 
-- **Personal area only.** Teams come in later steps.
+- **Personal area only.** Teams exist, but saving situations in a team comes with roadmap Phase 2 step 8.
 - **The lists are not live.** The start page's folders (with their situation counts) and situations and a folder's page are loaded when the page is shown (and after a delete, move or new folder); changes made in another tab or by another session appear after navigating to the page again. A folder deleted or renamed elsewhere still shows its old state until then (an action on it then says that it no longer exists).
 - **Deleting is only possible from the lists** (the start page or a folder's page), not in the editor. Deleting the situation that is still open in the editor (e.g. after the browser's Back button) is not noticed there; its next save fails with "This situation no longer exists on the server" and it can only be exported.
 - **Every save is a full revision.** Even a save without changes writes a new revision; nothing is pruned (see arc42 ch. 11).
@@ -48,6 +48,15 @@ A new or imported situation that isn't saved on the server (always in local mode
 - **Folders are sorted by name** with a culture-independent, case-insensitive comparison (e.g. accented letters sort with their base letter, but language-specific orders are not followed).
 - **A folder that still contains situations can't be deleted** (by design); its situations have to be moved or deleted one by one first.
 - **The situation count** is shown only in the start page's folder list (not on the folder's page header or in the move dialog), and it counts situations only, as of loading the list.
+
+## Teams
+
+- **No members besides the creator yet.** Join requests, member management, leaving and deleting a team come with roadmap Phase 2 step 7; until then every team has exactly one member, its creator (Admin). A non-member's team page only says that joining isn't possible yet.
+- **Team names**: at most 64 characters, no line breaks or other control characters; a taken name is refused. Renaming has no conflict check; the last rename wins. A team's code never changes, and the code of a deleted team is never given to another team.
+- **The overview is searched by substring** of the name or the code, ignoring case (e.g. "ions" finds "Lions"); there is no fuzzy matching, no ranking, and no search for accents ("Zurich" doesn't find "Zürich"). It loads 50 teams at a time ("Show more"); the order is the database's order of the upper-cased names, which may differ slightly from a language's alphabetical order. The search scans all team names (no index for substrings); fine for thousands of teams.
+- **The lists are not live**: the start page's teams and the overview are loaded when the page is shown.
+- **Logo uploads**: PNG, JPEG or WebP of at most 5 MB and 25 megapixels; no SVG or GIF, no cropping. The logo is stored as a PNG fitting 256 × 256 px (never scaled up, the aspect ratio kept), so a photo's logo can be larger in bytes than the original JPEG of the same size; an animated image keeps its first frame. Metadata (EXIF, comments, color profiles) is dropped; colors are converted to sRGB. A request larger than about 5 MB is cut off by the server (the app checks the size before uploading).
+- **A logo is shown to every logged-in user** (it is part of the team's public data), and it is revalidated with the server on every display (cheap, but a request per logo).
 
 ## Hidden-half elements of half-field situations
 

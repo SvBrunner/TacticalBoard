@@ -1,0 +1,190 @@
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
+import { inEnglishDeep } from "$lib/testing/i18n";
+import { CurrentTeam } from "./CurrentTeam";
+import { TeamApi, type Team } from "./TeamApi";
+
+const lions: Team = {
+	id: "t1",
+	code: "ABC123",
+	name: "Lions",
+	logoUrl: "/api/teams/ABC123/logo?v=1",
+	createdAt: "2026-10-04T08:00:00Z",
+	role: "admin",
+};
+
+describe("CurrentTeam", () => {
+	let api: {
+		get: ReturnType<typeof vi.fn<(code: string) => Promise<Team>>>;
+		rename: ReturnType<typeof vi.fn<(code: string, name: string) => Promise<Team>>>;
+		setLogo: ReturnType<typeof vi.fn<(code: string, logo: File) => Promise<Team>>>;
+		removeLogo: ReturnType<typeof vi.fn<(code: string) => Promise<void>>>;
+	};
+	let onSessionEnded: ReturnType<typeof vi.fn<() => void>>;
+	let log: {
+		notify: ReturnType<typeof vi.fn<(message: string, level?: string) => void>>;
+	};
+	let team: CurrentTeam;
+	const logo = new File([new Uint8Array(1)], "logo.png", { type: "image/png" });
+
+	beforeEach(() => {
+		api = {
+			get: vi.fn(async () => lions),
+			rename: vi.fn(async (_code, name) => ({ ...lions, name })),
+			setLogo: vi.fn(async () => ({
+				...lions,
+				logoUrl: "/api/teams/ABC123/logo?v=2",
+			})),
+			removeLogo: vi.fn(async () => undefined),
+		};
+		onSessionEnded = vi.fn();
+		log = { notify: vi.fn() };
+		team = new CurrentTeam({ api, code: "ABC123", onSessionEnded, log });
+	});
+
+	it("loads the team by its code", async () => {
+		expect(team.current()).toEqual({ status: "loading" });
+		expect(team.team()).toBeNull();
+
+		await team.load();
+
+		expect(api.get).toHaveBeenCalledWith("ABC123");
+		expect(team.current()).toEqual({ status: "loaded", team: lions });
+		expect(team.team()).toEqual(lions);
+	});
+
+	it("only Admins may change the team's details", async () => {
+		await team.load();
+		expect(team.canChangeDetails()).toBe(true);
+
+		api.get.mockResolvedValue({ ...lions, role: "editor" });
+		await team.load();
+		expect(team.canChangeDetails()).toBe(false);
+
+		api.get.mockResolvedValue({ ...lions, role: null });
+		await team.load();
+		expect(team.canChangeDetails()).toBe(false);
+	});
+
+	it("a team that doesn't exist is missing", async () => {
+		api.get.mockRejectedValue(new ApiError(404, { type: TeamApi.NOT_FOUND }));
+
+		await team.load();
+
+		expect(team.current()).toEqual({ status: "missing" });
+	});
+
+	it.each<[string, Error, string]>([
+		["no server", new ApiUnavailableError(), "The server is not reachable. Please try again later."],
+		["an ended session", new ApiError(401, {}), "Your session has ended. Please log in again."],
+		["another error", new ApiError(500, {}), "The team couldn't be loaded."],
+	])("reports a failed load: %s", async (_name, error, message) => {
+		api.get.mockRejectedValue(error);
+
+		await team.load();
+
+		expect(inEnglishDeep(team.current())).toEqual({
+			status: "failed",
+			message,
+		});
+	});
+
+	it("renames the team and shows the new name", async () => {
+		await team.load();
+
+		const result = await team.rename("Tigers");
+
+		expect(result).toEqual({ ok: true, team: { ...lions, name: "Tigers" } });
+		expect(team.team()?.name).toBe("Tigers");
+		expect(api.rename).toHaveBeenCalledWith("ABC123", "Tigers");
+	});
+
+	it("says when the new name is taken, or the team is gone", async () => {
+		await team.load();
+		api.rename.mockRejectedValueOnce(new ApiError(409, { type: TeamApi.DUPLICATE_NAME }));
+		expect(inEnglishDeep(await team.rename("Bears"))).toEqual({
+			ok: false,
+			message: "A team named “Bears” already exists. Choose another name.",
+		});
+		expect(team.current().status).toBe("loaded");
+
+		api.rename.mockRejectedValueOnce(new ApiError(404, { type: TeamApi.NOT_FOUND }));
+		expect(inEnglishDeep(await team.rename("Bears"))).toEqual({
+			ok: false,
+			message: "This team no longer exists.",
+		});
+		expect(team.current()).toEqual({ status: "missing" });
+	});
+
+	it("an ended session refreshes the login state", async () => {
+		api.rename.mockRejectedValue(new ApiError(401, {}));
+
+		await team.rename("Tigers");
+
+		expect(onSessionEnded).toHaveBeenCalledOnce();
+	});
+
+	it("sets the logo and shows the new one", async () => {
+		await team.load();
+
+		const result = await team.setLogo(logo);
+
+		expect(result).toMatchObject({
+			ok: true,
+			team: { logoUrl: "/api/teams/ABC123/logo?v=2" },
+		});
+		expect(team.team()?.logoUrl).toBe("/api/teams/ABC123/logo?v=2");
+		expect(api.setLogo).toHaveBeenCalledWith("ABC123", logo);
+	});
+
+	it("words the server's reason for a refused logo", async () => {
+		await team.load();
+		api.setLogo.mockRejectedValue(
+			new ApiError(400, {
+				type: "https://tacticalboard/errors/validation-failed",
+				fieldErrors: { logo: [{ code: "unsupported-image" }] },
+			}),
+		);
+
+		expect(inEnglishDeep(await team.setLogo(logo))).toEqual({
+			ok: false,
+			message: "The logo must be a PNG, JPEG or WebP image.",
+		});
+
+		api.setLogo.mockRejectedValue(new ApiError(500, {}));
+		expect(inEnglishDeep(await team.setLogo(logo))).toEqual({
+			ok: false,
+			message: "The logo couldn't be saved.",
+		});
+	});
+
+	it("removes the logo", async () => {
+		await team.load();
+
+		const result = await team.removeLogo();
+
+		expect(result).toEqual({ ok: true, team: { ...lions, logoUrl: null } });
+		expect(team.team()?.logoUrl).toBeNull();
+		expect(api.removeLogo).toHaveBeenCalledWith("ABC123");
+	});
+
+	it("loads the team after removing the logo when it wasn't loaded yet", async () => {
+		api.get.mockResolvedValue({ ...lions, logoUrl: null });
+
+		const result = await team.removeLogo();
+
+		expect(result).toEqual({ ok: true, team: { ...lions, logoUrl: null } });
+	});
+
+	it("reports a failed removal", async () => {
+		await team.load();
+		api.removeLogo.mockRejectedValue(new ApiError(403, { type: "https://tacticalboard/errors/forbidden" }));
+
+		expect(inEnglishDeep(await team.removeLogo())).toEqual({
+			ok: false,
+			message: "You may not do this.",
+		});
+		expect(team.team()?.logoUrl).toBe(lions.logoUrl);
+		expect(log.notify).toHaveBeenCalledWith("You may not do this.", "error");
+	});
+});

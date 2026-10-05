@@ -92,6 +92,18 @@ internal sealed class TestBrowser(HttpClient client, FakeIdentityProvider identi
         return await Client.SendAsync(request, Cancellation);
     }
 
+    /// <summary>A multipart form request (e.g. a file upload) with the antiforgery header if <paramref name="antiforgeryToken"/> is given.</summary>
+    public async Task<HttpResponseMessage> SendFormAsync(HttpMethod method, string path, MultipartFormDataContent form, string? antiforgeryToken)
+    {
+        using var request = new HttpRequestMessage(method, new Uri(path, UriKind.Relative)) { Content = form };
+        if (antiforgeryToken is not null)
+        {
+            request.Headers.Add("X-CSRF-TOKEN", antiforgeryToken);
+        }
+
+        return await Client.SendAsync(request, Cancellation);
+    }
+
     /// <summary><c>POST /auth/logout</c> as the logout form does it (form field), if <paramref name="antiforgeryToken"/> is given.</summary>
     public async Task<HttpResponseMessage> LogoutAsync(string? antiforgeryToken)
     {

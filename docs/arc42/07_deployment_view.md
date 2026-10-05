@@ -28,7 +28,7 @@ graph TB
 
 **Configuration** (environment variables): database connection, OIDC authority/client ID/client secret, the public base URL, the bootstrap system administrators (ch. 8.14), and a key store for the session/data-protection keys (a volume, so sessions survive a restart). The full list is below.
 
-The database schema is created and updated by EF Core migrations when the backend starts. Saving situations (Phase 2 step 3) added the tables `situations` and `situation_revisions` (migration `AddSituations`) and made the users' identity index partial (`AllowNewAccountAfterDeletion`); it needs no new configuration.
+The database schema is created and updated by EF Core migrations when the backend starts. Saving situations (Phase 2 step 3) added the tables `situations` and `situation_revisions` (migration `AddSituations`) and made the users' identity index partial (`AllowNewAccountAfterDeletion`); it needs no new configuration. Teams (Phase 2 step 6) added the tables `teams`, `team_memberships` and `team_logos` (migration `AddTeams`); no new configuration either. The logo upload endpoints accept request bodies up to 5 MiB + 64 KiB; a reverse proxy in front must allow at least that (Caddy has no limit by default; nginx's default `client_max_body_size` of 1 MB would have to be raised). The backend image needs no extra system packages for the image library (ADR-014).
 
 ### Implementation
 

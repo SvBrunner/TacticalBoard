@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TacticalBoard.Infrastructure.Persistence;
-using TacticalBoard.Teams;
+using TacticalBoard.Areas;
 using TacticalBoard.UnitTests.TestSupport;
 
 namespace TacticalBoard.UnitTests.Infrastructure;
@@ -25,7 +25,7 @@ public class AssemblyModelConfigurationTests
     {
         var modelBuilder = new ModelBuilder();
 
-        new AssemblyModelConfiguration(typeof(TeamsModule).Assembly).Configure(modelBuilder);
+        new AssemblyModelConfiguration(typeof(AreasModule).Assembly).Configure(modelBuilder);
 
         Assert.Empty(modelBuilder.Model.GetEntityTypes());
     }

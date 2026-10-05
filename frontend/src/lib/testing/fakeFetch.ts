@@ -6,6 +6,8 @@ export interface RecordedRequest {
 	readonly method: string;
 	readonly headers: Record<string, string>;
 	readonly body: string | undefined;
+	/** The form of a `multipart/form-data` request. */
+	readonly form: FormData | undefined;
 	readonly credentials: RequestCredentials | undefined;
 }
 
@@ -49,6 +51,7 @@ export class FakeFetch {
 			method: init?.method ?? "GET",
 			headers: { ...(init?.headers as Record<string, string> | undefined) },
 			body: typeof init?.body === "string" ? init.body : undefined,
+			form: init?.body instanceof FormData ? init.body : undefined,
 			credentials: init?.credentials,
 		};
 		this.requests.push(request);

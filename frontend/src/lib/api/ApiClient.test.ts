@@ -168,6 +168,41 @@ describe("ApiClient", () => {
 		});
 	});
 
+	describe("sendForm", () => {
+		it("sends the form as it is, with the antiforgery header and without a JSON content type", async () => {
+			server.on("POST", "/api/upload", jsonResponse(201, { id: "1" }));
+			const form = new FormData();
+			form.append("name", "Lions");
+
+			await expect(client.sendForm("POST", "/api/upload", form)).resolves.toEqual({ id: "1" });
+
+			const [request] = server.requestsTo("/api/upload");
+			expect(request.form).toBe(form);
+			expect(request.body).toBeUndefined();
+			expect(request.headers["X-CSRF-TOKEN"]).toBe("token-1");
+			expect(request.headers["Content-Type"]).toBeUndefined();
+			expect(request.credentials).toBe("same-origin");
+		});
+
+		it("retries once with a fresh token when the token was rejected", async () => {
+			let calls = 0;
+			server.on("GET", "/api/antiforgery", () => jsonResponse(200, { ...ANTIFORGERY, token: `token-${++calls}` }));
+			server.on("PUT", "/api/upload", (request) =>
+				request.headers["X-CSRF-TOKEN"] === "token-2" ? jsonResponse(200, { done: true }) : problemResponse(400, { type: ApiClient.INVALID_ANTIFORGERY_TOKEN }),
+			);
+
+			await expect(client.sendForm("PUT", "/api/upload", new FormData())).resolves.toEqual({ done: true });
+			expect(server.requestsTo("/api/upload")).toHaveLength(2);
+		});
+
+		it("doesn't retry other errors", async () => {
+			server.on("POST", "/api/upload", problemResponse(400, { type: "https://tacticalboard/errors/validation-failed" }));
+
+			await expect(client.sendForm("POST", "/api/upload", new FormData())).rejects.toBeInstanceOf(ApiError);
+			expect(server.requestsTo("/api/upload")).toHaveLength(1);
+		});
+	});
+
 	describe("antiforgery token", () => {
 		it("is the backend's token with where to send it", async () => {
 			await expect(client.antiforgeryToken()).resolves.toEqual(ANTIFORGERY);

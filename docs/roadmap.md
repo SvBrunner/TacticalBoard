@@ -44,7 +44,7 @@ Next, in this order:
 4. [x] **Personal area — folders**: create, rename (unique names), delete (only if empty); situations in folders or at the top level, moving them between folders; "New situation"/"Import" from a folder saves there. Follow-ups (product-owner decisions): names up to 64 characters, the folder list shows each folder's situation count, an empty folder offers New situation / Import in its empty state, the editor's New / Load save into the edited situation's folder and its badge leads back to the folder.
 5. [x] **Localization**: German and English (English the fallback; another language needs only a new translation file); all system texts translated, user content never; the browser's language at the start, a language switcher in the navbar, remembered in the browser and in the account (the account's language wins on login); the backend sends stable error codes (also per invalid field) that the frontend words. Plus the step-3 follow-ups: an export no longer counts as saved while logged in, numbered titles are numbered on ("Powerplay (2)" → "Powerplay (3)"), Save is disabled without unsaved changes.
    *Before teams, so every later screen is built translatable from the start.*
-6. [ ] **Teams**: create (unique name, optional logo, generated code), overview page with search (logged in), team page via link; the start page lists the user's teams.
+6. [x] **Teams**: create (unique name, optional logo, generated code), overview page with search (logged in), team page via link; the start page lists the user's teams. Also: the creator becomes Admin; Admins rename the team and set/replace/remove its logo; logos are scaled to fit 256 × 256 px and stored without metadata (ADR-014).
 7. [ ] **Membership**: join requests (accept/reject, re-request after rejection), roles and member management, member list, leaving, deleting a team (with confirmation).
 8. [ ] **Team situations and folders** with the permission matrix (ch. 8.1).
 9. [ ] **System administration**: user list, block/unblock, delete users, grant/revoke system administrator, team management.
@@ -60,9 +60,16 @@ Next, in this order:
 
 ## Open questions
 
-- **Localization (step 5):** When a user logs in whose account has no language yet, the browser's current language stays and nothing is written to the account until the user picks one in the switcher. Should the current language be stored in the account automatically instead?
-- **Localization (step 5):** A new situation's default title is stored in the UI language of the moment ("Unbenannte Situation") and stays so when the language changes later (it is user content then). Is that wanted, or should default titles always be stored in one language?
-- **Localization (step 5):** The technical detail of a failed GIF export or share (a browser/encoder message) is shown in English inside the localized message, and server field errors name the field by its technical path (e.g. "document.situation.title darf höchstens 200 Zeichen lang sein"). Good enough, or should these be worded differently?
-- **Numbered titles (step 5):** A title ending with " (n)" is numbered on from n + 1 ("Powerplay (5)" → "Powerplay (6)", even if "Powerplay (2)" is free). Confirm that lower free numbers are not to be reused.
-- **Folders in the editor (step 4 follow-ups):** An unsaved situation started in a folder (New situation / Import on the folder's page) is treated as "in that folder": the editor's New / Load save there too, and the badge leads back to that folder's page. Only after the first save does it really lie in the folder. Is that wanted, or should only saved situations count?
-- **Empty folder (step 4 follow-ups):** While a folder is empty, its page shows New situation / Import in the empty state and leaves out the separate "Start in this folder" section (so the buttons appear once); with situations, the section is back. Is that the intended layout?
+- **Teams (step 6):** Renaming a team and changing its logo are not in the permission matrix (ch. 8.1); they are implemented as **Admin-only**. Should Editors (or system administrators) be allowed to as well?
+- **Teams (step 6):** After "Create team" on the start page the new team's page opens (to see and share its code). Is that wanted, or should the start page stay with the list updated?
+- **Teams (step 6):** A non-member sees a team's name, logo, code and link (the overview shows every team to every logged-in user anyway). Should anything of a team stay hidden from non-members?
+- **Teams (step 6):** Removing a logo asks "Remove logo?" first; uploading a new one replaces the old one without asking. Is that the wanted behavior?
+
+## Resolved questions (product-owner answers)
+
+- **Localization (step 5):** The account's language is stored only when the user actively picks a language in the switcher; an account without a language keeps each browser's language — kept as implemented.
+- **Localization (step 5):** A new situation's default title is stored in the UI language active at creation and is not translated later (user content) — confirmed.
+- **Localization (step 5):** Technical details (the reason of a failed GIF export or share, field paths of server validation messages) may stay English inside localized messages — confirmed.
+- **Numbered titles (step 5):** Numbering always counts upward from the highest number; gaps are not filled ("Powerplay (5)" → "Powerplay (6)" even if "Powerplay (2)" is free) — confirmed.
+- **Folders in the editor (step 4 follow-ups):** An unsaved situation started in a folder counts as being in that folder: New/Load in the editor target it and the badge leads back to it — confirmed.
+- **Empty folder (step 4 follow-ups):** An empty folder shows New situation / Import only in its empty state, the "Start in this folder" section hidden — confirmed.

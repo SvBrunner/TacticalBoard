@@ -6,9 +6,11 @@ See also [known-limitations.md](../known-limitations.md).
 
 | Risk | Description | Related |
 |---|---|---|
-| Backend is incomplete | The backend runs (modules, database, migrations, health endpoint, login with users, saving situations and folders in the personal area), but teams are specified and not implemented yet. | ch. 5, 9, [roadmap](../roadmap.md) |
+| Backend is incomplete | The backend runs (modules, database, migrations, health endpoint, login with users, saving situations and folders in the personal area, creating teams with overview, team page and logo), but team membership management, team situations and folders, and system administration are specified and not implemented yet. | ch. 5, 9, [roadmap](../roadmap.md) |
 | Two validators of the situation format | The frontend (`SituationFileValidator`) and the backend (`SituationDocumentValidator`) check the same format; a format change must update both. Mitigated: the backend's tests port the frontend's cases and validate the frontend's fixture files. | ch. 8.3, 8.15 |
 | Database-specific row locks | Two queries in the Folders repository use PostgreSQL row locks (`FOR UPDATE` / `FOR SHARE`) to keep "delete a folder only when empty" correct under parallel requests (ADR-012). Contained in the data-access layer; another database needs its own version. Covered by integration tests. | ADR-002, ADR-012 |
+| Database-specific upsert | The team logo is written with PostgreSQL's `INSERT … ON CONFLICT DO UPDATE` inside the Teams repository (ch. 8.17). Contained in the data-access layer; another database needs its own version. | ADR-002, ch. 8.17 |
+| Native image library | Team logos are decoded with SkiaSharp's native library (ADR-014): a parser of untrusted images in the backend process. Mitigated: size and megapixel limits checked before decoding, only PNG/JPEG/WebP; keep SkiaSharp updated for security fixes. | ADR-014, ch. 8.17 |
 | Bus factor of one | Solo project; no redundancy in project knowledge. | ch. 1, 2 |
 | Unbounded growth of soft-deleted data and revisions | Nothing is purged yet (ch. 8.16, ADR-009). Fine at the expected scale; a purge/retention concept is needed before it matters. | ch. 8, 9 |
 

@@ -108,3 +108,38 @@ sequenceDiagram
 ```
 
 The other order works the same way: a deletion that locked the folder first commits, and the waiting move then no longer finds the folder (`404 folder-not-found`). The frontend shows "“<name>” can't be deleted because it still contains situations. Move or delete them first." for `folder-not-empty`, and refuses at once (without asking the server) when the folder's page already lists situations.
+
+## 6.5 Create a team with a logo, find it and open it by its link
+
+Implemented in roadmap Phase 2 step 6 (ch. 8.17).
+
+```mermaid
+sequenceDiagram
+    participant T as Trainer
+    participant P as Spieler
+    participant F as Frontend
+    participant B as Backend: Teams
+    participant DB as PostgreSQL
+
+    T->>F: Start page: Create team (name, logo file)
+    F->>F: Check type (PNG/JPEG/WebP) and size (≤ 5 MB), show preview
+    F->>B: POST /api/teams (multipart: name, logo)
+    B->>B: Validate name; detect format, check megapixels, turn upright,<br/>scale to fit 256 × 256, encode PNG (no metadata)
+    B->>DB: Name free? Random code free (also among deleted teams)?
+    B->>DB: INSERT team + Admin membership + logo (one SaveChanges)
+    alt code taken in parallel (unique index)
+        B->>B: New random code, try again (≤ 10 attempts)
+    else name taken in parallel (unique index)
+        B-->>F: 409 duplicate-team-name
+    end
+    B-->>F: 201, team { code, logoUrl: /api/teams/CODE/logo?v=hash, role: admin }
+    F-->>T: Team page /teams/CODE
+    P->>F: Teams overview: search "lions" or the code
+    F->>B: GET /api/teams?search=lions&offset=0&limit=50
+    B-->>F: { items, total }
+    P->>F: Open /teams/CODE (link)
+    F->>B: GET /api/teams/CODE
+    B-->>F: team, role: null (no member)
+    F->>B: GET /api/teams/CODE/logo?v=hash (If-None-Match on revalidation)
+    B-->>F: 200 image/png + ETag, or 304
+```

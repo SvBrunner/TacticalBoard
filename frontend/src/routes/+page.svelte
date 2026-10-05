@@ -6,8 +6,10 @@ level of the personal area. On top the shared app navbar (`AppNavbar`) with
 the account corner (log in / the user's menu). "Saved situations" shows the
 personal area when logged in (arc42 ch. 8.15): its folders (links to their
 pages, "New folder") and the situations at its top level (open, move,
-delete); otherwise it explains why there are none. Teams follow later
-(Phase 2).
+delete); otherwise it explains why there are none. "Teams" lists the
+user's teams (logo, name, code, role) with "Create team" (name and optional
+logo; afterwards the new team's page opens) and a link to the team overview
+(arc42 ch. 8.17).
 -->
 <script lang="ts">
 	import { goto } from "$app/navigation";
@@ -18,6 +20,8 @@ delete); otherwise it explains why there are none. Teams follow later
 	import SavedFolders from "$lib/components/storage/SavedFolders.svelte";
 	import SavedSituations from "$lib/components/storage/SavedSituations.svelte";
 	import StartActions from "$lib/components/storage/StartActions.svelte";
+	import CreateTeamDialog from "$lib/components/teams/CreateTeamDialog.svelte";
+	import MyTeams from "$lib/components/teams/MyTeams.svelte";
 	import { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
 	import { situationEditor } from "$lib/editor/SituationEditor";
 	import { SituationFileTransfer } from "$lib/editor/SituationFileTransfer";
@@ -31,6 +35,9 @@ delete); otherwise it explains why there are none. Teams follow later
 	import { situationLink } from "$lib/storage/SituationLink";
 	import { folderApi, situationApi, situationOpener } from "$lib/storage/situationStorage";
 	import { t } from "$lib/i18n";
+	import { MyTeamList } from "$lib/teams/MyTeamList";
+	import { TeamRoute } from "$lib/teams/TeamRoute";
+	import { teamApi } from "$lib/teams/teamStorage";
 
 	const prompt = new ConfirmationPrompt();
 	const workflow = new SituationWorkflow({
@@ -64,8 +71,11 @@ delete); otherwise it explains why there are none. Teams follow later
 		navigate: (url) => goto(url),
 	});
 	const actionState = actions.state;
+	const teams = new MyTeamList({ api: teamApi, onSessionEnded: refreshSession, log: notifications });
+	const teamState = teams.state;
 
 	let creatingFolder = $state(false);
+	let creatingTeam = $state(false);
 	let moving: SituationSummary | null = $state(null);
 	const authenticated = $derived($sessionState.status === "authenticated");
 	const folderItems = $derived($folderState.status === "loaded" ? $folderState.folders : []);
@@ -76,11 +86,20 @@ delete); otherwise it explains why there are none. Teams follow later
 		if ($sessionState.status === "authenticated") {
 			void savedList.load();
 			void folders.load();
+			void teams.load();
 		}
 	});
 
 	function openEditor() {
 		void goto("/editor");
+	}
+
+	async function createTeam(name: string, logo: File | null) {
+		const result = await teams.create(name, logo);
+		if (result.ok) {
+			void goto(TeamRoute.forTeam(result.team.code));
+		}
+		return result;
 	}
 
 	function move(situation: SituationSummary, folderId: string | null) {
@@ -129,6 +148,40 @@ delete); otherwise it explains why there are none. Teams follow later
 			{@render situationList()}
 		{/if}
 	</section>
+
+	<section class="panel" aria-labelledby="teams-heading">
+		<div class="part-head">
+			<h2 id="teams-heading" class="panel-title">{$t.teams.heading}</h2>
+			{#if authenticated}
+				<ul class="team-tools">
+					<li>
+						<a class="new-folder" href={TeamRoute.OVERVIEW}>
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+								<circle cx="11" cy="11" r="6" />
+								<path d="M20 20l-4.5-4.5" />
+							</svg>
+							{$t.teams.findTeams}
+						</a>
+					</li>
+					<li>
+						<button type="button" class="new-folder" onclick={() => (creatingTeam = true)}>
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+								<path d="M12 5v14M5 12h14" />
+							</svg>
+							{$t.teams.create}
+						</button>
+					</li>
+				</ul>
+			{/if}
+		</div>
+		{#if authenticated}
+			<MyTeams list={$teamState} onRetry={() => void teams.load()} />
+		{:else if $sessionState.status === "anonymous"}
+			<p class="hint">{$t.teams.logInHint}</p>
+		{:else if $sessionState.status === "unavailable"}
+			<p class="hint">{$t.teamOverview.unavailableHint}</p>
+		{/if}
+	</section>
 </main>
 
 {#snippet situationList()}
@@ -151,6 +204,8 @@ delete); otherwise it explains why there are none. Teams follow later
 	onSubmit={(name) => folders.create(name)}
 	onClose={() => (creatingFolder = false)}
 />
+
+<CreateTeamDialog open={creatingTeam} onSubmit={createTeam} onClose={() => (creatingTeam = false)} />
 
 <MoveSituationDialog situation={moving} folders={folderItems} onMove={move} onCancel={() => (moving = null)} />
 
@@ -220,6 +275,26 @@ delete); otherwise it explains why there are none. Teams follow later
 		font-size: 14px;
 		font-weight: 600;
 		cursor: pointer;
+	}
+
+	.new-folder {
+		text-decoration: none;
+	}
+
+	.team-tools {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.hint {
+		margin: 0;
+		font-size: 14px;
+		line-height: 1.5;
+		color: var(--text-muted);
 	}
 
 	.new-folder:focus-visible {

@@ -3,4 +3,10 @@
   <ItemGroup>
     <ProjectReference Include="..\TacticalBoard.Users\TacticalBoard.Users.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Team logos: decoding, scaling and re-encoding (ADR-014). The Linux native library without
+         system dependencies (no fontconfig), so the aspnet runtime image needs nothing extra. -->
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+  </ItemGroup>
 </Project>

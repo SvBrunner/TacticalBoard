@@ -195,6 +195,150 @@ namespace TacticalBoard.Api.Persistence.Migrations
                     b.ToTable("situation_revisions", (string)null);
                 });
 
+            modelBuilder.Entity("TacticalBoard.Teams.Domain.Team", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character(6)")
+                        .HasColumnName("code")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("LogoHash")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("logo_hash");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("normalized_name");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_teams");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_teams_code");
+
+                    b.HasIndex("NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_teams_name")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("teams", (string)null);
+                });
+
+            modelBuilder.Entity("TacticalBoard.Teams.Domain.TeamLogo", b =>
+                {
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_id");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("hash");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("TeamId")
+                        .HasName("pk_team_logos");
+
+                    b.ToTable("team_logos", (string)null);
+                });
+
+            modelBuilder.Entity("TacticalBoard.Teams.Domain.TeamMembership", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset>("JoinedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("joined_at");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("role");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_team_memberships");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_team_memberships_user")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("TeamId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_team_memberships_team_user")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("team_memberships", (string)null);
+                });
+
             modelBuilder.Entity("TacticalBoard.Users.Domain.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -259,6 +403,26 @@ namespace TacticalBoard.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_situation_revisions_situations_situation_id");
+                });
+
+            modelBuilder.Entity("TacticalBoard.Teams.Domain.TeamLogo", b =>
+                {
+                    b.HasOne("TacticalBoard.Teams.Domain.Team", null)
+                        .WithOne()
+                        .HasForeignKey("TacticalBoard.Teams.Domain.TeamLogo", "TeamId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_team_logos_teams_team_id");
+                });
+
+            modelBuilder.Entity("TacticalBoard.Teams.Domain.TeamMembership", b =>
+                {
+                    b.HasOne("TacticalBoard.Teams.Domain.Team", null)
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_team_memberships_teams_team_id");
                 });
 #pragma warning restore 612, 618
         }

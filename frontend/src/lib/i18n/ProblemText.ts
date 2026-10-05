@@ -69,6 +69,10 @@ export class ProblemText {
 				return typeof error.expected === "string" ? texts["expected-value"](error.expected) : texts.invalid;
 			case "expected-current-version":
 				return typeof error.version === "number" ? texts["expected-current-version"](error.version) : texts.invalid;
+			case "file-too-large":
+				return typeof error.maxBytes === "number" ? texts["file-too-large"](ProblemText.megabytes(error.maxBytes)) : texts.invalid;
+			case "image-too-large":
+				return typeof error.maxMegapixels === "number" ? texts["image-too-large"](error.maxMegapixels) : texts.invalid;
 			case "duplicate-id":
 				return typeof error.id === "string" ? texts["duplicate-id"](error.id) : texts.invalid;
 			default: {
@@ -76,6 +80,11 @@ export class ProblemText {
 				return typeof fixed === "string" ? fixed : texts.invalid;
 			}
 		}
+	}
+
+	/** A byte count in megabytes (MiB, as the server counts them), with at most one decimal. */
+	static megabytes(bytes: number): number {
+		return Math.round((bytes / (1024 * 1024)) * 10) / 10;
 	}
 
 	private static problemOf(m: Messages, code: string): string | null {

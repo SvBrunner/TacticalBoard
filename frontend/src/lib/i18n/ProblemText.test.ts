@@ -30,6 +30,28 @@ describe("ProblemText", () => {
 		expect(ProblemText.describe(problem("something-new"))(de)).toBe("Etwas ist schiefgelaufen. Bitte versuche es erneut.");
 	});
 
+	it("words the logo upload problems with their limits", () => {
+		const error = problem("validation-failed", {
+			fieldErrors: {
+				logo: [{ code: "file-too-large", maxBytes: 5 * 1024 * 1024 }, { code: "unsupported-image" }, { code: "image-too-large", maxMegapixels: 25 }],
+			},
+		});
+
+		expect(ProblemText.describe(error, fallback)(en)).toBe(
+			"logo must be at most 5 MB; logo must be a PNG, JPEG or WebP image; logo must have at most 25 megapixels",
+		);
+		expect(ProblemText.fieldError(error, "logo")!(de)).toBe("darf höchstens 5 MB groß sein");
+		expect(ProblemText.fieldProblem(en, { code: "file-too-large" })).toBe("is invalid");
+		expect(ProblemText.fieldProblem(en, { code: "image-too-large" })).toBe("is invalid");
+		expect(ProblemText.megabytes(1572864)).toBe(1.5);
+	});
+
+	it("words the team problems", () => {
+		expect(ProblemText.describe(problem("team-not-found"), fallback)(en)).toBe("This team doesn't exist (any more).");
+		expect(ProblemText.describe(problem("duplicate-team-name"), fallback)(de)).toBe("Ein Team mit diesem Namen existiert bereits.");
+		expect(ProblemText.describe(problem("content-too-large"), fallback)(en)).toBe("The file is too large.");
+	});
+
 	it("lists field errors by their codes, with their values", () => {
 		const error = problem("validation-failed", {
 			errors: { name: ["x"], "document.situation.frames": ["y"] },

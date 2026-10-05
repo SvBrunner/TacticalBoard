@@ -13,7 +13,11 @@
 | Arrow | An element showing a movement: a **pass** (dashed line), a **run** (wavy line), or a **shot** (thick line), drawn from a start to an end point with an arrowhead at the end. Free: not attached to players. Its type can only change to another arrow type. |
 | Bend point | A point an arrow's curve passes through between its start and end. An arrow without bend points is straight; it can have any number of them, added, moved and removed by the user. |
 | Team code | Unique, system-generated 6-character identifier of a team (A–Z, 0–9), used to find it. |
-| Team | A group of users who share access to situations and folders, with per-member roles. Has a unique name, an optional logo and a team code. |
+| Team | A group of users who share access to situations and folders, with per-member roles. Has a unique name, an optional logo and a team code. Its creator becomes its Admin. |
+| Team logo | A team's optional image: uploaded as PNG, JPEG or WebP, stored scaled down to fit 256 × 256 px as PNG without metadata. |
+| Team overview | The page `/teams` listing all teams (logo, name, code), searchable by name or code; for logged-in users. |
+| Team page | A team's own page `/teams/<CODE>`, the link to share: name, logo, code, and for members their role. |
+| Membership | A user's belonging to a team, with one role (Admin, Editor, Reader). |
 | Area | Where saved situations live: a user's personal area or a team. Situation titles are unique within an area. |
 | Personal area | A user's own area for situations and folders; only the user can access it. |
 | Revision | One saved state of a situation on the server. Every save creates a new revision; the newest is the current one. Its number is the situation's ETag. |

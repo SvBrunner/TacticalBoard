@@ -551,4 +551,105 @@ describe("start page", () => {
 			expect(screen.getByRole("button", { name: "Powerplay" })).toBeInTheDocument();
 		});
 	});
+
+	describe("teams", () => {
+		const alice = { id: "u1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null };
+		let server: FakeFetch;
+		const original = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL };
+
+		const teamsSection = () => screen.getByRole("region", { name: "Teams" });
+
+		async function loggedInWith(teams: unknown[] = []) {
+			server = new FakeFetch()
+				.on("GET", "/api/me", jsonResponse(200, alice))
+				.on("GET", "/api/antiforgery", jsonResponse(200, ANTIFORGERY))
+				.on("GET", "/api/personal-area/situations", jsonResponse(200, []))
+				.on("GET", "/api/personal-area/folders", jsonResponse(200, []))
+				.on("GET", "/api/me/teams", jsonResponse(200, teams));
+			vi.stubGlobal("fetch", server.fetch);
+			await authSession.refresh();
+		}
+
+		beforeEach(() => {
+			Object.assign(URL, { createObjectURL: () => "blob:preview", revokeObjectURL: () => undefined });
+		});
+
+		afterEach(() => {
+			vi.unstubAllGlobals();
+			Object.assign(URL, original);
+		});
+
+		it("asks to log in when logged out, without team actions", async () => {
+			vi.stubGlobal("fetch", new FakeFetch().on("GET", "/api/me", problemResponse(401, {})).fetch);
+			await authSession.refresh();
+			render(StartPage);
+
+			expect(teamsSection()).toHaveTextContent("Log in to create a team or to find one.");
+			expect(within(teamsSection()).queryByRole("button")).toBeNull();
+		});
+
+		it("explains a missing server", async () => {
+			vi.stubGlobal("fetch", new FakeFetch().on("GET", "/api/me", new Response("proxy error", { status: 502 })).fetch);
+			await authSession.refresh();
+			render(StartPage);
+
+			expect(teamsSection()).toHaveTextContent("Teams need the server, which can't be reached.");
+		});
+
+		it("lists the user's teams with logo, name and role, and links to the overview", async () => {
+			await loggedInWith([{ id: "t1", code: "ABC123", name: "Lions", logoUrl: "/api/teams/ABC123/logo?v=1", role: "admin" }]);
+			render(StartPage);
+			await settle();
+
+			const section = teamsSection();
+			expect(within(section).getByRole("heading", { level: 2, name: "Teams" })).toBeInTheDocument();
+			const list = within(section).getByRole("list", { name: "Your teams" });
+			const link = within(list).getByRole("link");
+			expect(link).toHaveAttribute("href", "/teams/ABC123");
+			expect(link).toHaveTextContent("Lions");
+			expect(link).toHaveTextContent("Admin");
+			expect(link.querySelector("img")).toHaveAttribute("src", "/api/teams/ABC123/logo?v=1");
+			expect(within(section).getByRole("link", { name: "Find a team" })).toHaveAttribute("href", "/teams");
+		});
+
+		it("says when the user is in no team yet", async () => {
+			await loggedInWith([]);
+			render(StartPage);
+			await settle();
+
+			expect(teamsSection()).toHaveTextContent("You're not in any team yet.");
+		});
+
+		it("creates a team with Create team and opens its page", async () => {
+			await loggedInWith([]);
+			server.on("POST", "/api/teams", jsonResponse(201, { id: "t1", code: "ABC123", name: "Lions", logoUrl: null, createdAt: "2026-10-04T08:00:00Z", role: "admin" }));
+			render(StartPage);
+			await settle();
+
+			await fireEvent.click(within(teamsSection()).getByRole("button", { name: "Create team" }));
+			const dialog = screen.getByRole("dialog", { name: "Create team" });
+			await fireEvent.input(within(dialog).getByRole("textbox", { name: "Team name" }), { target: { value: "Lions" } });
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+			await settle();
+
+			expect(server.requestsTo("/api/teams")[0].form?.get("name")).toBe("Lions");
+			expect(goto).toHaveBeenCalledWith("/teams/ABC123");
+		});
+
+		it("keeps the dialog open with the reason when the name is taken", async () => {
+			await loggedInWith([]);
+			server.on("POST", "/api/teams", problemResponse(409, { type: "https://tacticalboard/errors/duplicate-team-name" }));
+			render(StartPage);
+			await settle();
+
+			await fireEvent.click(within(teamsSection()).getByRole("button", { name: "Create team" }));
+			const dialog = screen.getByRole("dialog", { name: "Create team" });
+			await fireEvent.input(within(dialog).getByRole("textbox", { name: "Team name" }), { target: { value: "Lions" } });
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+			await settle();
+
+			expect(within(dialog).getByRole("alert")).toHaveTextContent("A team named “Lions” already exists. Choose another name.");
+			expect(goto).not.toHaveBeenCalled();
+		});
+	});
 });

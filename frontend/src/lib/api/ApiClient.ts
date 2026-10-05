@@ -129,6 +129,23 @@ export class ApiClient {
 		}
 	}
 
+	/**
+	 * A state-changing request with a `multipart/form-data` body (e.g. a file
+	 * upload) and the antiforgery header; the browser sets the content type
+	 * with its boundary. Retried once with a fresh token like `send`.
+	 */
+	async sendForm<T>(method: MutatingMethod, path: string, form: FormData): Promise<T> {
+		try {
+			return await this.sendOnce<T>(method, path, form, {});
+		} catch (error) {
+			if (!(error instanceof ApiError && error.type === ApiClient.INVALID_ANTIFORGERY_TOKEN)) {
+				throw error;
+			}
+			this.forgetAntiforgeryToken();
+			return this.sendOnce<T>(method, path, form, {});
+		}
+	}
+
 	/** The antiforgery token of the current session (cached until forgotten or rejected). */
 	antiforgeryToken(): Promise<AntiforgeryToken> {
 		if (!this.antiforgery) {
@@ -152,7 +169,9 @@ export class ApiClient {
 		const { token, headerName } = await this.antiforgeryToken();
 		const headers: Record<string, string> = { ...extraHeaders, [headerName]: token };
 		const init: RequestInit = { method, headers };
-		if (body !== undefined) {
+		if (body instanceof FormData) {
+			init.body = body;
+		} else if (body !== undefined) {
 			headers["Content-Type"] = "application/json";
 			init.body = JSON.stringify(body);
 		}

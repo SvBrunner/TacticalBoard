@@ -13,7 +13,15 @@ public sealed class PostgresFixture : IAsyncLifetime
 {
     public const string Image = "postgres:18-alpine";
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder(Image).Build();
+    /// <summary>
+    /// Every test runs its own backend (with its own connection pool) in parallel with the others,
+    /// so the server allows more connections than PostgreSQL's default of 100.
+    /// </summary>
+    public const int MaxConnections = 400;
+
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder(Image)
+        .WithCommand("-c", $"max_connections={MaxConnections}")
+        .Build();
 
     /// <summary>A connection string for a fresh, not yet existing database.</summary>
     public string NewDatabaseConnectionString() =>
