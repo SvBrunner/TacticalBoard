@@ -32,15 +32,22 @@ public class TeamsModuleTests
     }
 
     [Fact]
-    public void Provides_the_service_repositories_and_the_authorization_per_request()
+    public void Provides_the_services_repositories_and_the_authorization_per_request()
     {
         using var services = Build();
         using var scope = services.CreateScope();
         var provider = scope.ServiceProvider;
 
         Assert.NotNull(provider.GetRequiredService<TeamService>());
+        Assert.NotNull(provider.GetRequiredService<TeamMembershipService>());
+        Assert.NotNull(provider.GetRequiredService<TeamJoinRequestService>());
+        Assert.NotNull(provider.GetRequiredService<TeamDeletionService>());
+        Assert.Same(provider.GetRequiredService<TeamLocks>(), provider.GetRequiredService<TeamLocks>());
         Assert.IsType<TeamAuthorization>(provider.GetRequiredService<ITeamAuthorization>());
-        Assert.Same(provider.GetRequiredService<ITeamRepository>(), provider.GetRequiredService<ITeamMembershipRepository>());
+        Assert.IsType<EfTeamRepository>(provider.GetRequiredService<ITeamRepository>());
+        Assert.IsType<EfTeamMembershipRepository>(provider.GetRequiredService<ITeamMembershipRepository>());
+        Assert.IsType<EfTeamJoinRequestRepository>(provider.GetRequiredService<ITeamJoinRequestRepository>());
+        Assert.Empty(provider.GetServices<ITeamDeletionParticipant>());
         Assert.IsType<RandomTeamCodeGenerator>(provider.GetRequiredService<ITeamCodeGenerator>());
         Assert.IsType<SkiaLogoImageProcessor>(provider.GetRequiredService<ILogoImageProcessor>());
     }
@@ -71,6 +78,14 @@ public class TeamsModuleTests
         Assert.Equal("deleted_at IS NULL", teamUser.GetFilter());
         Assert.NotNull(memberships.FindDeclaredQueryFilter(SoftDeleteQueryFilter.Name));
 
+        var requests = model.FindEntityType(typeof(TeamJoinRequest))!;
+        Assert.Equal(TeamJoinRequestConfiguration.TableName, requests.GetTableName());
+        var pending = requests.GetIndexes().Single(index => index.GetDatabaseName() == TeamJoinRequestConfiguration.PendingIndexName);
+        Assert.True(pending.IsUnique);
+        Assert.Equal("status = 'Pending' AND deleted_at IS NULL", pending.GetFilter());
+        Assert.Equal(["TeamId", "UserId"], pending.Properties.Select(property => property.Name));
+        Assert.NotNull(requests.FindDeclaredQueryFilter(SoftDeleteQueryFilter.Name));
+
         var logos = model.FindEntityType(typeof(TeamLogo))!;
         Assert.Equal(TeamLogoConfiguration.TableName, logos.GetTableName());
         Assert.Equal(["TeamId"], logos.FindPrimaryKey()!.Properties.Select(property => property.Name));
@@ -91,18 +106,28 @@ public class TeamsModuleTests
             .ToList();
         Assert.Equal(
             [
-                "DELETE /api/teams/{code}/logo",
+                "DELETE /api/teams/{team}",
+                "DELETE /api/teams/{team}/logo",
+                "DELETE /api/teams/{team}/members/{userId:guid}",
+                "DELETE /api/teams/{team}/members/me",
                 "GET /api/me/teams/",
                 "GET /api/teams/",
-                "GET /api/teams/{code}",
-                "GET /api/teams/{code}/logo",
+                "GET /api/teams/{team}",
+                "GET /api/teams/{team}/join-requests",
+                "GET /api/teams/{team}/logo",
+                "GET /api/teams/{team}/members",
                 "POST /api/teams/",
-                "PUT /api/teams/{code}",
-                "PUT /api/teams/{code}/logo",
+                "POST /api/teams/{team}/join-requests",
+                "POST /api/teams/{team}/join-requests/{requestId:guid}/accept",
+                "POST /api/teams/{team}/join-requests/{requestId:guid}/reject",
+                "PUT /api/teams/{team}",
+                "PUT /api/teams/{team}/logo",
+                "PUT /api/teams/{team}/members/{userId:guid}/role",
             ],
             routes);
         Assert.All(endpoints, endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>()));
-        var uploads = endpoints.Where(endpoint => endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()!.HttpMethods.Single() is "POST" || endpoint.RoutePattern.RawText == "/api/teams/{code}/logo" && endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()!.HttpMethods.Single() == "PUT").ToList();
+        var uploads = endpoints.Where(endpoint => endpoint.Metadata.GetMetadata<IRequestSizeLimitMetadata>() is not null).ToList();
+        Assert.Equal(["/api/teams/", "/api/teams/{team}/logo"], uploads.Select(endpoint => endpoint.RoutePattern.RawText).Order());
         Assert.Equal(2, uploads.Count);
         Assert.All(uploads, endpoint => Assert.Equal(TeamEndpoints.MaxUploadRequestBytes, endpoint.Metadata.GetMetadata<IRequestSizeLimitMetadata>()!.MaxRequestBodySize));
     }

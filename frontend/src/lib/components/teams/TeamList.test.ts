@@ -13,6 +13,7 @@ const teams = [
 	},
 	{ id: "t2", code: "XYZ789", name: "Tigers", logoUrl: null },
 ];
+const strangers = [{ id: "t3", code: null, name: "Bears", logoUrl: null }];
 
 describe("TeamList", () => {
 	afterEach(() => cleanup());
@@ -48,5 +49,28 @@ describe("TeamList", () => {
 		});
 
 		expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([expect.stringContaining("Leser"), expect.stringContaining("Bearbeiter")]);
+	});
+
+	it("links a team without a code by its id and shows no code", () => {
+		render(TeamList, { props: { teams: strangers } });
+
+		const link = screen.getByRole("link", { name: /Bears/ });
+		expect(link).toHaveAttribute("href", "/teams/t3");
+		expect(link).not.toHaveTextContent("Code");
+	});
+
+	it("shows how many join requests wait, for teams with some", () => {
+		render(TeamList, {
+			props: {
+				teams: [
+					{ ...teams[0], pendingJoinRequests: 1 },
+					{ ...teams[1], role: "admin" as const, pendingJoinRequests: 0 },
+				],
+			},
+		});
+
+		const [lions, tigers] = screen.getAllByRole("listitem");
+		expect(lions).toHaveTextContent("1 join request");
+		expect(tigers).not.toHaveTextContent("join request");
 	});
 });

@@ -6,6 +6,12 @@ import { TeamApi } from "./TeamApi";
 /** The outcome of a change of a team: the result, or a message for the user. */
 export type TeamChange<T> = { readonly ok: true; readonly team: T } | { readonly ok: false; readonly message: Translatable };
 
+/** The outcome of a change of a team's members or join requests: the result, or a message for the user. */
+export type MembershipOutcome<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly message: Translatable };
+
+/** What the user tried when a membership request failed: it decides how "last Admin" is worded. */
+export type MembershipAction = "leave" | "change";
+
 /** What the user is told when a team request fails (arc42 ch. 8.2 problem codes, worded in ch. 8.18). */
 export class TeamMessages {
 	static readonly MISSING: Translatable = (m) => m.teams.missing;
@@ -42,6 +48,36 @@ export class TeamMessages {
 			}
 		}
 		return TeamMessages.general(error, fallback);
+	}
+
+	/**
+	 * The message for a failed change of the members or join requests of
+	 * the team named `teamName`: leaving, a role change, removing a member,
+	 * asking to join, accepting or rejecting a request.
+	 */
+	static forMembership(error: unknown, teamName: string, action: MembershipAction, fallback: Translatable): Translatable {
+		if (error instanceof ApiError) {
+			switch (error.type) {
+				case TeamApi.LAST_ADMIN:
+					return action === "leave" ? (m) => m.teamMembers.lastAdminLeave(teamName) : (m) => m.teamMembers.lastAdmin(teamName);
+				case TeamApi.MEMBER_NOT_FOUND:
+					return (m) => m.teamMembers.memberGone;
+				case TeamApi.JOIN_REQUEST_NOT_FOUND:
+					return (m) => m.joinRequests.requestGone;
+				case TeamApi.JOIN_REQUEST_PENDING:
+					return (m) => m.joinRequests.alreadyPending;
+				case TeamApi.ALREADY_MEMBER:
+					return (m) => m.joinRequests.alreadyMember;
+				case TeamApi.NOT_FOUND:
+					return TeamMessages.MISSING;
+			}
+		}
+		return TeamMessages.general(error, fallback);
+	}
+
+	/** Whether the server said the current user may not (any more) do this in the team (e.g. they were removed or demoted meanwhile). */
+	static isAccessLost(error: unknown): boolean {
+		return error instanceof ApiError && (error.type === TeamApi.FORBIDDEN || error.status === 403);
 	}
 
 	/** The message for any other failure. */

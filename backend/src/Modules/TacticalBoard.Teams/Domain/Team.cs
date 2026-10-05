@@ -4,8 +4,8 @@ namespace TacticalBoard.Teams.Domain;
 
 /// <summary>
 /// A team (arc42 ch. 1, 8.17): a unique name (among non-deleted teams), an optional logo, and a
-/// system-generated code that never changes. Soft-deleted (ch. 8.16; deleting teams comes with
-/// roadmap Phase 2 step 7). Its members are <see cref="TeamMembership"/>s.
+/// system-generated code that never changes. Soft-deleted (ch. 8.16) by its Admins, together with
+/// its memberships, pending join requests and content. Its members are <see cref="TeamMembership"/>s.
 /// </summary>
 internal sealed class Team : SoftDeletableEntity
 {
@@ -70,6 +70,18 @@ internal sealed class Team : SoftDeletableEntity
     public void ChangeLogo(TeamLogoImage? logo, DateTimeOffset at, Guid by)
     {
         LogoHash = logo?.Hash;
+        Touch(at, by);
+    }
+
+    /// <summary>Soft-deletes the team (ch. 8.16); its name is free again, its code stays taken.</summary>
+    public void Delete(DateTimeOffset at, Guid by)
+    {
+        if (IsDeleted)
+        {
+            return;
+        }
+
+        MarkDeleted(at);
         Touch(at, by);
     }
 

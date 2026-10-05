@@ -27,14 +27,23 @@ internal sealed class SequenceTeamCodeGenerator(params string[] codes) : ITeamCo
 }
 
 /// <summary>
-/// <see cref="ITeamRepository"/> and <see cref="ITeamMembershipRepository"/> on lists. Enforces the
-/// unique name and code like the database and can simulate parallel saves taking them.
+/// <see cref="ITeamRepository"/>, <see cref="ITeamMembershipRepository"/> and
+/// <see cref="ITeamJoinRequestRepository"/> on lists. Enforces the unique name and code and the one
+/// pending join request like the database and can simulate parallel saves taking them.
 /// </summary>
-internal sealed class InMemoryTeamRepository(FakeUnitOfWork? transactions = null) : ITeamRepository, ITeamMembershipRepository
+internal sealed class InMemoryTeamRepository(FakeUnitOfWork? transactions = null) : ITeamRepository, ITeamMembershipRepository, ITeamJoinRequestRepository
 {
     public List<Team> Teams { get; } = [];
 
     public List<TeamMembership> Memberships { get; } = [];
+
+    public List<TeamJoinRequest> JoinRequests { get; } = [];
+
+    /// <summary>The teams locked (by id), with whether a transaction was running.</summary>
+    public List<(Guid TeamId, bool InTransaction)> Locks { get; } = [];
+
+    /// <summary>When set, the next save of a join request fails as if a parallel request was first.</summary>
+    public bool JoinRequestTakenInParallel { get; set; }
 
     public Dictionary<Guid, TeamLogo> Logos { get; } = [];
 
@@ -52,8 +61,19 @@ internal sealed class InMemoryTeamRepository(FakeUnitOfWork? transactions = null
     /// <summary>The searches made (name fragment, code fragment, offset, limit).</summary>
     public List<(string? Name, string? Code, int Offset, int Limit)> Searches { get; } = [];
 
-    public Task<Team?> FindByCodeAsync(TeamCode code, CancellationToken cancellationToken) =>
-        Task.FromResult(Teams.SingleOrDefault(team => team.Code == code.Value && !team.IsDeleted));
+    public Task<Team?> FindAsync(TeamKey key, CancellationToken cancellationToken) =>
+        Task.FromResult(Teams.SingleOrDefault(team => key.Matches(team) && !team.IsDeleted));
+
+    public Task<Team?> LockAsync(TeamKey key, CancellationToken cancellationToken)
+    {
+        var team = Teams.SingleOrDefault(candidate => key.Matches(candidate) && !candidate.IsDeleted);
+        if (team is not null)
+        {
+            Locks.Add((team.Id, transactions?.InTransaction ?? false));
+        }
+
+        return Task.FromResult(team);
+    }
 
     public Task<(IReadOnlyList<Team> Teams, int Total)> SearchAsync(string? nameFragment, string? codeFragment, int offset, int limit, CancellationToken cancellationToken)
     {
@@ -84,6 +104,48 @@ internal sealed class InMemoryTeamRepository(FakeUnitOfWork? transactions = null
                 .Where(membership => Teams.Any(team => team.Id == teamId && !team.IsDeleted))
                 .Select(membership => (TeamRole?)membership.Role)
                 .SingleOrDefault());
+
+    public Task<IReadOnlyList<TeamMembership>> ListAsync(Guid teamId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TeamMembership>>(Memberships.Where(membership => membership.TeamId == teamId && !membership.IsDeleted).ToList());
+
+    public void Add(TeamMembership membership) => Memberships.Add(membership);
+
+    public Task DeleteAllOfTeamAsync(Guid teamId, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        foreach (var membership in Memberships.Where(membership => membership.TeamId == teamId))
+        {
+            membership.MarkDeleted(at);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> HasPendingAsync(Guid teamId, Guid userId, CancellationToken cancellationToken) =>
+        Task.FromResult(PendingRequests.Any(request => request.TeamId == teamId && request.UserId == userId));
+
+    public Task<TeamJoinRequest?> FindPendingAsync(Guid teamId, Guid requestId, CancellationToken cancellationToken) =>
+        Task.FromResult(PendingRequests.SingleOrDefault(request => request.TeamId == teamId && request.Id == requestId));
+
+    public Task<IReadOnlyList<TeamJoinRequest>> ListPendingAsync(Guid teamId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TeamJoinRequest>>(PendingRequests.Where(request => request.TeamId == teamId).OrderBy(request => request.RequestedAt).ToList());
+
+    public Task<IReadOnlyDictionary<Guid, int>> CountPendingAsync(IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, int>>(
+            PendingRequests.Where(request => teamIds.Contains(request.TeamId)).GroupBy(request => request.TeamId).ToDictionary(group => group.Key, group => group.Count()));
+
+    public void Add(TeamJoinRequest request) => JoinRequests.Add(request);
+
+    public Task DeletePendingOfTeamAsync(Guid teamId, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        foreach (var request in PendingRequests.Where(request => request.TeamId == teamId).ToList())
+        {
+            request.MarkDeleted(at);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private IEnumerable<TeamJoinRequest> PendingRequests => JoinRequests.Where(request => request.IsPending && !request.IsDeleted);
 
     public Task<bool> IsNameTakenAsync(string normalizedName, Guid? exceptTeamId, CancellationToken cancellationToken) =>
         Task.FromResult(Teams.Any(team => !team.IsDeleted && team.Id != exceptTeamId && team.NormalizedName == normalizedName));
@@ -135,13 +197,51 @@ internal sealed class InMemoryTeamRepository(FakeUnitOfWork? transactions = null
             ThrowIfNameTaken(team);
         }
 
+        if (JoinRequestTakenInParallel)
+        {
+            JoinRequestTakenInParallel = false;
+            JoinRequests.RemoveAll(request => request.IsPending && !request.IsDeleted && !SavedRequests.Contains(request.Id));
+            throw new JoinRequestUniquenessViolationException();
+        }
+
+        if (PendingRequests.GroupBy(request => (request.TeamId, request.UserId)).Any(group => group.Count() > 1))
+        {
+            throw new JoinRequestUniquenessViolationException();
+        }
+
+        SavedRequests.UnionWith(JoinRequests.Select(request => request.Id));
+
         SaveCount++;
         return Task.CompletedTask;
     }
 
-    /// <summary>Adds a membership of <paramref name="userId"/> with <paramref name="role"/> (memberships come with step 7).</summary>
-    public void AddMember(Team team, Guid userId, TeamRole role) =>
-        Memberships.Add(TestTeams.Membership(team, userId, role));
+    /// <summary>Adds a membership of <paramref name="userId"/> with <paramref name="role"/>.</summary>
+    public TeamMembership AddMember(Team team, Guid userId, TeamRole role)
+    {
+        var membership = TestTeams.Membership(team, userId, role);
+        Memberships.Add(membership);
+        return membership;
+    }
+
+    /// <summary>Adds a team (already saved) whose creator <paramref name="admin"/> is its Admin.</summary>
+    public Team AddTeam(Guid admin, string name = "Lions", string code = "ABC123")
+    {
+        var team = TestTeams.Team(name, code, admin);
+        Teams.Add(team);
+        Memberships.Add(TeamMembership.ForCreator(Guid.NewGuid(), team));
+        return team;
+    }
+
+    /// <summary>Adds a saved, pending join request of <paramref name="userId"/>.</summary>
+    public TeamJoinRequest AddJoinRequest(Team team, Guid userId, DateTimeOffset? at = null)
+    {
+        var request = TeamJoinRequest.Send(Guid.NewGuid(), team, userId, at ?? TestTeams.Now);
+        JoinRequests.Add(request);
+        SavedRequests.Add(request.Id);
+        return request;
+    }
+
+    private HashSet<Guid> SavedRequests { get; } = [];
 
     private void ThrowIfNameTaken(Team team)
     {
@@ -180,4 +280,33 @@ internal static class TestTeams
 
     public static TeamLogoImage Logo(byte seed = 1, int width = 10, int height = 10) =>
         TeamLogoImage.Create([seed, 2, 3, 4], "image/png", width, height);
+}
+
+/// <summary>An <see cref="IUserDirectory"/> with given display names; any other user counts as deleted.</summary>
+internal sealed class FakeUserDirectory(Dictionary<Guid, string>? names = null) : TacticalBoard.Users.Contracts.IUserDirectory
+{
+    public Dictionary<Guid, string> Names { get; } = names ?? [];
+
+    public int Queries { get; private set; }
+
+    public Task<IReadOnlyDictionary<Guid, string>> FindDisplayNamesAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken)
+    {
+        Queries++;
+        return Task.FromResult<IReadOnlyDictionary<Guid, string>>(
+            userIds.Where(Names.ContainsKey).Distinct().ToDictionary(id => id, id => Names[id]));
+    }
+}
+
+/// <summary>An <see cref="ITeamDeletionParticipant"/> that records the deletions (and can fail).</summary>
+internal sealed class RecordingTeamDeletionParticipant(FakeUnitOfWork? transactions = null) : ITeamDeletionParticipant
+{
+    public List<(TeamDeletion Deletion, bool InTransaction)> Deletions { get; } = [];
+
+    public Exception? Failure { get; set; }
+
+    public Task TeamDeletingAsync(TeamDeletion deletion, CancellationToken cancellationToken)
+    {
+        Deletions.Add((deletion, transactions?.InTransaction ?? false));
+        return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+    }
 }

@@ -45,9 +45,9 @@ Next, in this order:
 5. [x] **Localization**: German and English (English the fallback; another language needs only a new translation file); all system texts translated, user content never; the browser's language at the start, a language switcher in the navbar, remembered in the browser and in the account (the account's language wins on login); the backend sends stable error codes (also per invalid field) that the frontend words. Plus the step-3 follow-ups: an export no longer counts as saved while logged in, numbered titles are numbered on ("Powerplay (2)" → "Powerplay (3)"), Save is disabled without unsaved changes.
    *Before teams, so every later screen is built translatable from the start.*
 6. [x] **Teams**: create (unique name, optional logo, generated code), overview page with search (logged in), team page via link; the start page lists the user's teams. Also: the creator becomes Admin; Admins rename the team and set/replace/remove its logo; logos are scaled to fit 256 × 256 px and stored without metadata (ADR-014).
-7. [ ] **Membership**: join requests (accept/reject, re-request after rejection), roles and member management, member list, leaving, deleting a team (with confirmation).
+7. [x] **Membership**: join requests (accept/reject, re-request after rejection), roles and member management, member list, leaving, deleting a team (with confirmation). Also the step-6 follow-ups (product-owner decisions): non-members see only a team's name and logo (no code or link, also not in the overview), removing a logo no longer asks, and the deletion of a team's content is prepared as a contract chain that step 8 implements.
 8. [ ] **Team situations and folders** with the permission matrix (ch. 8.1).
-9. [ ] **System administration**: user list, block/unblock, delete users, grant/revoke system administrator, team management.
+9. [ ] **System administration**: user list, block/unblock, delete users, grant/revoke system administrator, team management (incl. renaming a team and changing its logo — confirmed: system administrators may do that too, through `ITeamAuthorization.CanChangeDetailsAsync`).
 10. [ ] **Account deletion** (by the user and by a system administrator), incl. the last-Admin rule.
 
 ## Later
@@ -60,12 +60,20 @@ Next, in this order:
 
 ## Open questions
 
-- **Teams (step 6):** Renaming a team and changing its logo are not in the permission matrix (ch. 8.1); they are implemented as **Admin-only**. Should Editors (or system administrators) be allowed to as well?
-- **Teams (step 6):** After "Create team" on the start page the new team's page opens (to see and share its code). Is that wanted, or should the start page stay with the list updated?
-- **Teams (step 6):** A non-member sees a team's name, logo, code and link (the overview shows every team to every logged-in user anyway). Should anything of a team stay hidden from non-members?
-- **Teams (step 6):** Removing a logo asks "Remove logo?" first; uploading a new one replaces the old one without asking. Is that the wanted behavior?
+- **Membership (step 7):** A rejected requester is not told about the rejection; their request is just no longer pending and the team's page offers "Ask to join" again. Should they see "Your request was rejected" (once, or until they ask again), or get any other notice?
+- **Membership (step 7):** Admins may remove other Admins directly (as long as one Admin remains), like every other member. Is that wanted, or should an Admin have to be demoted first?
+- **Membership (step 7):** Changing a role (also demoting oneself from Admin) takes effect at once, without a confirmation; only removing, leaving and deleting the team ask. Should demoting oneself (or any role change) ask first?
+- **Membership (step 7):** The member list is sorted by display name. Should Admins (or roles in general) come first?
+- **Membership (step 7):** Admins see the number of waiting join requests on the team's page and as a badge on the start page's team list. Is any other notice wanted (e.g. in the navbar)?
+- **Membership (step 7):** The member list shows display names and roles only (no "member since", no e-mail). Is anything else wanted?
+- **Membership (step 7):** A pending join request stays pending without a time limit. Should requests expire?
 
 ## Resolved questions (product-owner answers)
+
+- **Teams (step 6):** Renaming a team and changing its logo: the team's **Admins and system administrators** — the system-administrator part is built with system administration (step 9).
+- **Teams (step 6):** After "Create team" the new team's page opens — confirmed.
+- **Teams (step 6):** Non-members see only a team's **name and logo**; its code and the link are not shown to them, neither on the team's page nor in the overview (the overview stays searchable by code), and the API doesn't send them the code — implemented in step 7.
+- **Teams (step 6):** Removing a logo does **not** ask for confirmation — implemented in step 7; uploading a new one replaces the old one without asking, as before.
 
 - **Localization (step 5):** The account's language is stored only when the user actively picks a language in the switcher; an account without a language keeps each browser's language — kept as implemented.
 - **Localization (step 5):** A new situation's default title is stored in the UI language active at creation and is not translated later (user content) — confirmed.

@@ -4,6 +4,7 @@ using TacticalBoard.Areas;
 using TacticalBoard.Areas.Application;
 using TacticalBoard.Areas.Contracts;
 using TacticalBoard.Infrastructure;
+using TacticalBoard.Teams.Contracts;
 using TacticalBoard.Users;
 
 namespace TacticalBoard.UnitTests.Areas;
@@ -26,5 +27,7 @@ public class AreasModuleTests
         Assert.IsType<AreaAccess>(scope.ServiceProvider.GetRequiredService<IAreaAccess>());
         Assert.IsType<ActorDirectory>(scope.ServiceProvider.GetRequiredService<IActorDirectory>());
         Assert.Equal([AreaKind.Personal], scope.ServiceProvider.GetServices<IAreaAccessRule>().Select(rule => rule.Kind));
+        Assert.IsType<TeamAreaDeletion>(Assert.Single(scope.ServiceProvider.GetServices<ITeamDeletionParticipant>()));
+        Assert.Empty(scope.ServiceProvider.GetServices<IAreaContentDeletion>());
     }
 }

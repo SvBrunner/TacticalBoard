@@ -5,7 +5,7 @@ import { MyTeamList } from "./MyTeamList";
 import { TeamApi, type MyTeam, type Team } from "./TeamApi";
 
 function teamOf(code: string, name: string, role: MyTeam["role"] = "admin"): MyTeam {
-	return { id: code.toLowerCase(), code, name, logoUrl: null, role };
+	return { id: code.toLowerCase(), code, name, logoUrl: null, role, pendingJoinRequests: role === "admin" ? 0 : null };
 }
 
 describe("MyTeamList", () => {
@@ -37,7 +37,7 @@ describe("MyTeamList", () => {
 					created.push({ name, logo });
 					const team = teamOf("BBBBBB", name);
 					teams = [...teams, team];
-					return { ...team, createdAt: "2026-10-04T08:00:00Z" };
+					return { ...team, createdAt: "2026-10-04T08:00:00Z", joinRequestPending: false };
 				},
 			},
 			onSessionEnded,

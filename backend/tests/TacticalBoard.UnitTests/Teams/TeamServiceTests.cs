@@ -25,11 +25,11 @@ public class TeamServiceTests
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     private TeamService Service =>
-        new(_repository, new TeamAuthorization(_currentUser, _repository), _currentUser, _codes, _transactions, _ids, _clock);
+        new(_repository, _repository, new TeamAuthorization(_currentUser, _repository), _currentUser, _codes, _transactions, _ids, _clock);
 
     private Task<TeamView> CreateAsync(string name, TeamLogoImage? logo = null) => Service.CreateAsync(TestTeams.Name(name), logo, Cancellation);
 
-    private static TeamCode Code(string code) => TeamCode.Parse(code);
+    private static TeamKey Code(string? code) => TeamKey.OfCode(TeamCode.Parse(code!));
 
     [Fact]
     public async Task Creates_a_team_with_a_new_code_and_makes_its_creator_Admin()
@@ -95,7 +95,7 @@ public class TeamServiceTests
         _repository.Teams[0].MarkDeleted(TestTeams.Now);
         _codes.Add("AAAAAA");
         var codes = new SequenceTeamCodeGenerator("AAAAAA", "EEEEEE");
-        var service = new TeamService(_repository, new TeamAuthorization(_currentUser, _repository), _currentUser, codes, _transactions, _ids, _clock);
+        var service = new TeamService(_repository, _repository, new TeamAuthorization(_currentUser, _repository), _currentUser, codes, _transactions, _ids, _clock);
 
         var view = await service.CreateAsync(TestTeams.Name("Tigers"), null, Cancellation);
 
@@ -153,6 +153,8 @@ public class TeamServiceTests
 
         var team = Assert.Single(result.Teams);
         Assert.Equal(("Tigers", "BBBBBB"), (team.Name, team.Code));
+        _currentUser.UserId = Bob;
+        Assert.Null(Assert.Single((await Service.SearchAsync(search!, Cancellation)).Teams).Code);
     }
 
     [Fact]
@@ -179,6 +181,92 @@ public class TeamServiceTests
         _currentUser.UserId = Bob;
         var asStranger = await Service.GetAsync(Code(created.Code), Cancellation);
         Assert.Equal((created.Id, "Lions", null), (asStranger.Id, asStranger.Name, asStranger.Role));
+    }
+
+    [Fact]
+    public async Task Members_see_the_code_and_non_members_only_name_and_logo()
+    {
+        var created = await CreateAsync("Lions", TestTeams.Logo());
+        _repository.AddMember(_repository.Teams[0], Bob, TeamRole.Reader);
+        _currentUser.UserId = Bob;
+        Assert.Equal("AAAAAA", (await Service.GetAsync(Code(created.Code), Cancellation)).Code);
+
+        _currentUser.UserId = Guid.NewGuid();
+        var stranger = await Service.GetAsync(TeamKey.OfId(created.Id), Cancellation);
+
+        Assert.Equal((null, "Lions", created.LogoHash, null), (stranger.Code, stranger.Name, stranger.LogoHash, stranger.Role));
+    }
+
+    [Fact]
+    public async Task Gets_a_team_by_its_id_too()
+    {
+        var created = await CreateAsync("Lions");
+
+        var view = await Service.GetAsync(TeamKey.OfId(created.Id), Cancellation);
+
+        Assert.Equal(("AAAAAA", TeamRole.Admin), (view.Code, view.Role));
+        await Assert.ThrowsAsync<TeamNotFoundException>(() => Service.GetAsync(TeamKey.OfId(Guid.NewGuid()), Cancellation));
+    }
+
+    [Fact]
+    public async Task A_non_member_sees_whether_their_join_request_is_pending_and_an_Admin_how_many_wait()
+    {
+        var created = await CreateAsync("Lions");
+        var team = _repository.Teams[0];
+        Assert.Equal((false, 0), ((await Service.GetAsync(Code(created.Code), Cancellation)).JoinRequestPending, (await Service.GetAsync(Code(created.Code), Cancellation)).PendingJoinRequests));
+        _repository.AddJoinRequest(team, Bob);
+        _repository.AddJoinRequest(team, Guid.NewGuid());
+
+        Assert.Equal(2, (await Service.GetAsync(Code(created.Code), Cancellation)).PendingJoinRequests);
+        _currentUser.UserId = Bob;
+        var asRequester = await Service.GetAsync(Code(created.Code), Cancellation);
+        Assert.Equal((true, (int?)null, (string?)null), (asRequester.JoinRequestPending, asRequester.PendingJoinRequests, asRequester.Code));
+        _currentUser.UserId = Guid.NewGuid();
+        Assert.False((await Service.GetAsync(Code(created.Code), Cancellation)).JoinRequestPending);
+    }
+
+    [Theory]
+    [InlineData(TeamRole.Editor)]
+    [InlineData(TeamRole.Reader)]
+    public async Task Editors_and_Readers_get_no_count_of_join_requests(TeamRole role)
+    {
+        var created = await CreateAsync("Lions");
+        _repository.AddMember(_repository.Teams[0], Bob, role);
+        _repository.AddJoinRequest(_repository.Teams[0], Guid.NewGuid());
+        _currentUser.UserId = Bob;
+
+        var view = await Service.GetAsync(Code(created.Code), Cancellation);
+
+        Assert.Equal((role, (int?)null, false), (view.Role!.Value, view.PendingJoinRequests, view.JoinRequestPending));
+    }
+
+    [Fact]
+    public async Task Search_shows_the_code_only_of_the_users_own_teams()
+    {
+        await CreateAsync("Lions");
+        _currentUser.UserId = Bob;
+        await CreateAsync("Tigers");
+        TeamSearch.TryCreate(null, null, null, out var search, out _);
+
+        var result = await Service.SearchAsync(search!, Cancellation);
+
+        Assert.Equal([("Lions", null), ("Tigers", "BBBBBB")], result.Teams.Select(team => (team.Name, team.Code)));
+    }
+
+    [Fact]
+    public async Task Lists_the_number_of_pending_join_requests_for_the_teams_the_user_is_Admin_of()
+    {
+        await CreateAsync("Lions");
+        _currentUser.UserId = Bob;
+        await CreateAsync("Tigers");
+        _repository.AddMember(_repository.Teams[0], Bob, TeamRole.Editor);
+        _repository.AddJoinRequest(_repository.Teams[0], Guid.NewGuid());
+        _repository.AddJoinRequest(_repository.Teams[1], Guid.NewGuid());
+        _repository.AddJoinRequest(_repository.Teams[1], Guid.NewGuid());
+
+        var mine = await Service.ListMineAsync(Cancellation);
+
+        Assert.Equal([("Lions", TeamRole.Editor, (int?)null), ("Tigers", TeamRole.Admin, 2)], mine.Select(entry => (entry.Team.Name, entry.Role, entry.PendingJoinRequests)));
     }
 
     [Fact]

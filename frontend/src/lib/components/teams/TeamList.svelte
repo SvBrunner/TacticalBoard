@@ -1,7 +1,9 @@
 <!--
 @component
-A list of teams (arc42 ch. 8.17): each a link to its page (`/teams/<CODE>`)
-with logo, name and code, and — for the user's own teams — their role.
+A list of teams (arc42 ch. 8.17): each a link to its page (`/teams/<CODE>`,
+or `/teams/<id>` for a team whose code the user doesn't get) with logo and
+name; for the user's own teams also the code, their role and — for its
+Admins — how many join requests wait.
 -->
 <script lang="ts">
 	import { t } from "$lib/i18n";
@@ -10,7 +12,7 @@ with logo, name and code, and — for the user's own teams — their role.
 	import TeamLogo from "./TeamLogo.svelte";
 
 	interface Props {
-		teams: readonly (TeamSummary & { readonly role?: TeamRole })[];
+		teams: readonly (TeamSummary & { readonly role?: TeamRole; readonly pendingJoinRequests?: number | null })[];
 		/** The list's accessible name, if it needs one (e.g. "Your teams"). */
 		label?: string;
 	}
@@ -21,16 +23,23 @@ with logo, name and code, and — for the user's own teams — their role.
 <ul class="team-list" aria-label={label}>
 	{#each teams as team (team.id)}
 		<li>
-			<a class="team" href={TeamRoute.forTeam(team.code)}>
+			<a class="team" href={TeamRoute.of(team)}>
 				<TeamLogo logoUrl={team.logoUrl} name={team.name} />
 				<span class="text">
 					<span class="name">{team.name}</span>
-					<span class="meta">
-						<span class="code">{$t.teams.codeLabel(team.code)}</span>
-						{#if team.role}
-							<span class="role">{$t.teams.roles[team.role]}</span>
-						{/if}
-					</span>
+					{#if team.code || team.role}
+						<span class="meta">
+							{#if team.code}
+								<span class="code">{$t.teams.codeLabel(team.code)}</span>
+							{/if}
+							{#if team.role}
+								<span class="role">{$t.teams.roles[team.role]}</span>
+							{/if}
+							{#if team.pendingJoinRequests}
+								<span class="badge">{$t.joinRequests.count(team.pendingJoinRequests)}</span>
+							{/if}
+						</span>
+					{/if}
 				</span>
 			</a>
 		</li>
@@ -93,6 +102,14 @@ with logo, name and code, and — for the user's own teams — their role.
 	.code {
 		font-variant-numeric: tabular-nums;
 		letter-spacing: 0.04em;
+	}
+
+	.badge {
+		padding: 0 6px;
+		border-radius: var(--radius-sm);
+		background: var(--accent);
+		color: var(--accent-contrast);
+		font-weight: 600;
 	}
 
 	.role {

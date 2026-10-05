@@ -11,6 +11,8 @@ const team: Team = {
 	logoUrl: null,
 	createdAt: "2026-10-04T08:00:00Z",
 	role: "admin",
+	joinRequestPending: false,
+	pendingJoinRequests: 0,
 };
 const withLogo: Team = { ...team, logoUrl: "/api/teams/ABC123/logo?v=1" };
 
@@ -112,20 +114,30 @@ describe("TeamLogoEditor", () => {
 		expect(screen.getByRole("status")).toHaveTextContent("");
 	});
 
-	it("removes the logo through remove, and says nothing when that was cancelled", async () => {
-		const remove = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ ok: true, team });
+	it("removes the logo at once through remove", async () => {
+		const remove = vi.fn().mockResolvedValueOnce({ ok: true, team });
 		render(TeamLogoEditor, {
 			props: { team: withLogo, upload: vi.fn(), remove },
 		});
 
 		await fireEvent.click(screen.getByRole("button", { name: "Remove logo" }));
 		await settle();
-		expect(screen.getByRole("status")).toHaveTextContent("");
+
+		expect(screen.getByRole("status")).toHaveTextContent("Logo removed.");
+		expect(remove).toHaveBeenCalledOnce();
+	});
+
+	it("shows why the logo couldn't be removed", async () => {
+		const remove = vi.fn().mockResolvedValueOnce({ ok: false, message: () => "The logo couldn't be removed." });
+		render(TeamLogoEditor, {
+			props: { team: withLogo, upload: vi.fn(), remove },
+		});
 
 		await fireEvent.click(screen.getByRole("button", { name: "Remove logo" }));
 		await settle();
-		expect(screen.getByRole("status")).toHaveTextContent("Logo removed.");
-		expect(remove).toHaveBeenCalledTimes(2);
+
+		expect(screen.getByRole("alert")).toHaveTextContent("The logo couldn't be removed.");
+		expect(screen.getByRole("status")).toHaveTextContent("");
 	});
 
 	it("ignores an empty file choice", async () => {

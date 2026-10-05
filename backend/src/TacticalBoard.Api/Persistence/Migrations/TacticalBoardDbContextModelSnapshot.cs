@@ -259,6 +259,53 @@ namespace TacticalBoard.Api.Persistence.Migrations
                     b.ToTable("teams", (string)null);
                 });
 
+            modelBuilder.Entity("TacticalBoard.Teams.Domain.TeamJoinRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TeamId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("team_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_team_join_requests");
+
+                    b.HasIndex("TeamId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_team_join_requests_pending")
+                        .HasFilter("status = 'Pending' AND deleted_at IS NULL");
+
+                    b.ToTable("team_join_requests", (string)null);
+                });
+
             modelBuilder.Entity("TacticalBoard.Teams.Domain.TeamLogo", b =>
                 {
                     b.Property<Guid>("TeamId")
@@ -403,6 +450,16 @@ namespace TacticalBoard.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_situation_revisions_situations_situation_id");
+                });
+
+            modelBuilder.Entity("TacticalBoard.Teams.Domain.TeamJoinRequest", b =>
+                {
+                    b.HasOne("TacticalBoard.Teams.Domain.Team", null)
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_team_join_requests_teams_team_id");
                 });
 
             modelBuilder.Entity("TacticalBoard.Teams.Domain.TeamLogo", b =>

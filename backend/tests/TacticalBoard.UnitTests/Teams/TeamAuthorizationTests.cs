@@ -31,6 +31,42 @@ public class TeamAuthorizationTests
         Assert.Equal(allowed, await Authorization.CanChangeDetailsAsync(team.Id, Cancellation));
     }
 
+    [Theory]
+    [InlineData(TeamRole.Admin, true, true, true, true)]
+    [InlineData(TeamRole.Editor, true, false, false, false)]
+    [InlineData(TeamRole.Reader, true, false, false, false)]
+    public async Task Follows_the_permission_matrix_for_members(TeamRole role, bool seeMembers, bool manageMembers, bool decideJoinRequests, bool deleteTeam)
+    {
+        var team = TestTeams.Team(creator: Alice);
+        _repository.Teams.Add(team);
+        _repository.AddMember(team, Bob, role);
+        _currentUser.UserId = Bob;
+
+        Assert.Equal(
+            (seeMembers, manageMembers, decideJoinRequests, deleteTeam),
+            (await Authorization.CanSeeMembersAsync(team.Id, Cancellation),
+                await Authorization.CanManageMembersAsync(team.Id, Cancellation),
+                await Authorization.CanDecideJoinRequestsAsync(team.Id, Cancellation),
+                await Authorization.CanDeleteTeamAsync(team.Id, Cancellation)));
+    }
+
+    [Fact]
+    public async Task A_removed_member_loses_every_right_at_once()
+    {
+        var team = TestTeams.Team(creator: Alice);
+        _repository.Teams.Add(team);
+        var membership = _repository.AddMember(team, Bob, TeamRole.Admin);
+        _currentUser.UserId = Bob;
+        Assert.True(await Authorization.CanManageMembersAsync(team.Id, Cancellation));
+
+        membership.MarkDeleted(TestTeams.Now);
+
+        Assert.Null(await Authorization.RoleOfCurrentUserAsync(team.Id, Cancellation));
+        Assert.False(await Authorization.CanSeeMembersAsync(team.Id, Cancellation));
+        Assert.False(await Authorization.CanManageMembersAsync(team.Id, Cancellation));
+        Assert.False(await Authorization.CanDeleteTeamAsync(team.Id, Cancellation));
+    }
+
     [Fact]
     public async Task Non_members_anonymous_users_and_deleted_teams_have_no_role()
     {
@@ -60,5 +96,9 @@ public class TeamAuthorizationTests
         _currentUser.IsSystemAdministrator = true;
 
         Assert.False(await Authorization.CanChangeDetailsAsync(team.Id, Cancellation));
+        Assert.False(await Authorization.CanSeeMembersAsync(team.Id, Cancellation));
+        Assert.False(await Authorization.CanManageMembersAsync(team.Id, Cancellation));
+        Assert.False(await Authorization.CanDecideJoinRequestsAsync(team.Id, Cancellation));
+        Assert.False(await Authorization.CanDeleteTeamAsync(team.Id, Cancellation));
     }
 }

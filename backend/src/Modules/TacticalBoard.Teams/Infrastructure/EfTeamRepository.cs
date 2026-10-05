@@ -6,8 +6,8 @@ using TacticalBoard.Teams.Domain;
 
 namespace TacticalBoard.Teams.Infrastructure;
 
-/// <summary><see cref="ITeamRepository"/> and <see cref="ITeamMembershipRepository"/> on the shared EF Core context.</summary>
-internal sealed class EfTeamRepository(TacticalBoardDbContext context) : ITeamRepository, ITeamMembershipRepository
+/// <summary><see cref="ITeamRepository"/> on the shared EF Core context.</summary>
+internal sealed class EfTeamRepository(TacticalBoardDbContext context) : ITeamRepository
 {
     private DbSet<Team> Teams => context.Set<Team>();
 
@@ -15,10 +15,28 @@ internal sealed class EfTeamRepository(TacticalBoardDbContext context) : ITeamRe
 
     private DbSet<TeamLogo> Logos => context.Set<TeamLogo>();
 
-    public Task<Team?> FindByCodeAsync(TeamCode code, CancellationToken cancellationToken)
+    public Task<Team?> FindAsync(TeamKey key, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(code);
-        return Teams.SingleOrDefaultAsync(team => team.Code == code.Value, cancellationToken);
+        ArgumentNullException.ThrowIfNull(key);
+        if (key.Id is { } id)
+        {
+            return Teams.SingleOrDefaultAsync(team => team.Id == id, cancellationToken);
+        }
+
+        var code = key.Code!.Value;
+        return Teams.SingleOrDefaultAsync(team => team.Code == code, cancellationToken);
+    }
+
+    // A row lock (PostgreSQL syntax, kept inside the data-access layer, ADR-002). The condition on
+    // deleted_at is part of the locking statement, so after waiting for a parallel deletion it is
+    // checked again on the deleted row and the team is no longer found.
+    public async Task<Team?> LockAsync(TeamKey key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        var query = key.Id is { } id
+            ? Teams.FromSql($"SELECT * FROM teams WHERE id = {id} AND deleted_at IS NULL FOR UPDATE")
+            : Teams.FromSql($"SELECT * FROM teams WHERE code = {key.Code!.Value} AND deleted_at IS NULL FOR UPDATE");
+        return (await query.IgnoreQueryFilters([SoftDeleteQueryFilter.Name]).ToListAsync(cancellationToken)).SingleOrDefault();
     }
 
     public async Task<(IReadOnlyList<Team> Teams, int Total)> SearchAsync(
@@ -54,15 +72,6 @@ internal sealed class EfTeamRepository(TacticalBoardDbContext context) : ITeamRe
             .Join(Teams.AsNoTracking(), membership => membership.TeamId, team => team.Id, (membership, team) => new { Team = team, membership.Role })
             .ToListAsync(cancellationToken);
         return rows.Select(row => (row.Team, row.Role)).ToList();
-    }
-
-    public async Task<TeamRole?> FindRoleAsync(Guid teamId, Guid userId, CancellationToken cancellationToken)
-    {
-        var roles = await Memberships.AsNoTracking()
-            .Where(membership => membership.TeamId == teamId && membership.UserId == userId)
-            .Join(Teams.AsNoTracking(), membership => membership.TeamId, team => team.Id, (membership, _) => membership.Role)
-            .ToListAsync(cancellationToken);
-        return roles.Count == 0 ? null : roles[0];
     }
 
     public Task<bool> IsNameTakenAsync(string normalizedName, Guid? exceptTeamId, CancellationToken cancellationToken)
@@ -104,7 +113,7 @@ internal sealed class EfTeamRepository(TacticalBoardDbContext context) : ITeamRe
                 context.Entry(logo).State = EntityState.Detached;
             }
 
-            throw Translate(exception);
+            throw TeamUniqueIndexes.Translate(exception);
         }
     }
 
@@ -141,14 +150,7 @@ internal sealed class EfTeamRepository(TacticalBoardDbContext context) : ITeamRe
         }
         catch (DbUpdateException exception) when (DatabaseErrors.IsUniqueViolation(exception))
         {
-            throw Translate(exception);
+            throw TeamUniqueIndexes.Translate(exception);
         }
     }
-
-    private static Exception Translate(DbUpdateException exception) => DatabaseErrors.UniqueViolationConstraint(exception) switch
-    {
-        TeamConfiguration.NameIndexName => new TeamNameUniquenessViolationException("Another team has this name.", exception),
-        TeamConfiguration.CodeIndexName => new TeamCodeUniquenessViolationException("Another team has this code.", exception),
-        _ => exception,
-    };
 }

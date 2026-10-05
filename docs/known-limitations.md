@@ -51,12 +51,19 @@ A new or imported situation that isn't saved on the server (always in local mode
 
 ## Teams
 
-- **No members besides the creator yet.** Join requests, member management, leaving and deleting a team come with roadmap Phase 2 step 7; until then every team has exactly one member, its creator (Admin). A non-member's team page only says that joining isn't possible yet.
+- **No notifications.** A join request, its acceptance or rejection, a role change or a removal is not announced anywhere else: the requester sees the outcome only on the team's page (a rejected request just isn't pending any more — "Ask to join" is offered again, without saying that it was rejected), and Admins see waiting requests only on the team's page and as a count on the start page. Nothing is sent by e-mail.
+- **No history in the UI.** Decided join requests are kept in the database but not shown anywhere; there is no list of past members and no "who changed which role".
+- **Changing a role takes effect at once**, without a confirmation — also when Admins demote themselves (they then lose the Admin sections right away; another Admin has to promote them again). Removing a member, leaving and deleting the team ask first.
+- **Deleting a team can't be undone in the app** (soft delete in the database, no restore UI). Its folders and situations will be deleted with it once teams have them (roadmap step 8).
+- **The member list is not live**: changes by other Admins appear after reloading the team's page; an action on a member who changed meanwhile reloads the list and says why it failed.
+- **Members are sorted by display name** with a culture-independent, case-insensitive comparison; display names are not unique, so two members can look the same.
+- **A non-member doesn't get the team's code or link** (by design); they can only open the team through a link someone shares, by its id (from the overview), or after joining. A non-member who opened the team's link knows the code from the address bar anyway.
 - **Team names**: at most 64 characters, no line breaks or other control characters; a taken name is refused. Renaming has no conflict check; the last rename wins. A team's code never changes, and the code of a deleted team is never given to another team.
 - **The overview is searched by substring** of the name or the code, ignoring case (e.g. "ions" finds "Lions"); there is no fuzzy matching, no ranking, and no search for accents ("Zurich" doesn't find "Zürich"). It loads 50 teams at a time ("Show more"); the order is the database's order of the upper-cased names, which may differ slightly from a language's alphabetical order. The search scans all team names (no index for substrings); fine for thousands of teams.
-- **The lists are not live**: the start page's teams and the overview are loaded when the page is shown.
+- **The lists are not live**: the start page's teams (with the count of waiting join requests) and the overview are loaded when the page is shown.
 - **Logo uploads**: PNG, JPEG or WebP of at most 5 MB and 25 megapixels; no SVG or GIF, no cropping. The logo is stored as a PNG fitting 256 × 256 px (never scaled up, the aspect ratio kept), so a photo's logo can be larger in bytes than the original JPEG of the same size; an animated image keeps its first frame. Metadata (EXIF, comments, color profiles) is dropped; colors are converted to sRGB. A request larger than about 5 MB is cut off by the server (the app checks the size before uploading).
-- **A logo is shown to every logged-in user** (it is part of the team's public data), and it is revalidated with the server on every display (cheap, but a request per logo).
+- **A logo is shown to every logged-in user** (it is part of the team's public data), and it is revalidated with the server on every display (cheap, but a request per logo). Removing a logo happens at once, without asking (by design).
+- **System administrators can't manage teams yet** (renaming, logos, members, deleting): that comes with system administration (roadmap step 9).
 
 ## Hidden-half elements of half-field situations
 

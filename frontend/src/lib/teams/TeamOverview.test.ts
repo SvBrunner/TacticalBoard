@@ -40,7 +40,7 @@ describe("TeamOverview", () => {
 		if (failWith) {
 			return Promise.reject(failWith);
 		}
-		const matches = ALL.filter((team) => team.name.toLowerCase().includes(text.toLowerCase()) || team.code.includes(text.toUpperCase()));
+		const matches = ALL.filter((team) => team.name.toLowerCase().includes(text.toLowerCase()) || (team.code ?? "").includes(text.toUpperCase()));
 		return Promise.resolve({
 			items: matches.slice(offset, offset + limit),
 			total: matches.length,

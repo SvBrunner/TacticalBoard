@@ -3,8 +3,8 @@
 The logo part of a team's page for its Admins (arc42 ch. 8.17): "Upload
 logo" (or "Replace logo") opens the file picker; a PNG, JPEG or WebP of at
 most 5 MB is uploaded at once, anything else is refused with the reason.
-"Remove logo" asks first (through `remove`). Progress and the outcome are
-announced; failures are shown as an alert.
+"Remove logo" removes it at once, without asking (product decision). Progress
+and the outcome are announced; failures are shown as an alert.
 -->
 <script lang="ts">
 	import { t } from "$lib/i18n";
@@ -17,8 +17,8 @@ announced; failures are shown as an alert.
 		team: Team;
 		/** Uploads the file as the team's logo. */
 		upload: (file: File) => Promise<TeamChange<Team>>;
-		/** Removes the logo after asking; `null` when the user cancelled. */
-		remove: () => Promise<TeamChange<Team> | null>;
+		/** Removes the logo. */
+		remove: () => Promise<TeamChange<Team>>;
 	}
 
 	let { team, upload, remove }: Props = $props();
@@ -28,14 +28,14 @@ announced; failures are shown as an alert.
 	let status: Translatable | null = $state(null);
 	let error: Translatable | null = $state(null);
 
-	async function run(action: () => Promise<TeamChange<Team> | null>, progress: Translatable | null, done: Translatable) {
+	async function run(action: () => Promise<TeamChange<Team>>, progress: Translatable | null, done: Translatable) {
 		busy = true;
 		error = null;
 		status = progress;
 		const outcome = await action();
 		busy = false;
-		status = outcome?.ok ? done : null;
-		if (outcome && !outcome.ok) {
+		status = outcome.ok ? done : null;
+		if (!outcome.ok) {
 			error = outcome.message;
 		}
 	}

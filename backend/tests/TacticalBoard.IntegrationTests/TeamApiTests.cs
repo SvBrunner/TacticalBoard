@@ -132,7 +132,8 @@ public sealed class TeamApiTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(new Uri($"http://localhost/api/teams/{code}"), response.Headers.Location);
         Assert.Equal("Lions Zürich", team.GetProperty("name").GetString());
         Assert.Equal("admin", team.GetProperty("role").GetString());
-        Assert.StartsWith($"/api/teams/{code}/logo?v=", team.GetProperty("logoUrl").GetString(), StringComparison.Ordinal);
+        Assert.StartsWith($"/api/teams/{team.GetProperty("id").GetGuid()}/logo?v=", team.GetProperty("logoUrl").GetString(), StringComparison.Ordinal);
+        Assert.Equal((false, 0), (team.GetProperty("joinRequestPending").GetBoolean(), team.GetProperty("pendingJoinRequests").GetInt32()));
         Assert.Equal(1, await CountAsync("SELECT count(*) FROM team_memberships WHERE role = 'Admin'"));
 
         var mine = await GetJsonAsync(alice, "/api/me/teams");
@@ -190,7 +191,7 @@ public sealed class TeamApiTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Another_user_finds_the_team_by_name_or_code_and_opens_it_without_a_role()
+    public async Task Another_user_finds_the_team_by_name_or_code_and_opens_it_without_a_role_or_its_code()
     {
         using var alice = await LoggedInAsync("alice", "Alice");
         var lions = await CreateTeamAsync(alice, "Lions Zürich");
@@ -205,8 +206,17 @@ public sealed class TeamApiTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(["100% Hockey"], await SearchNamesAsync(bob, "search=" + Uri.EscapeDataString("%")));
         Assert.Empty(await SearchNamesAsync(bob, "search=_"));
 
+        var found = await GetJsonAsync(bob, $"{Teams}?search={code}");
+        var item = Assert.Single(found.GetProperty("items").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, item.GetProperty("code").ValueKind);
+        Assert.Equal(code, Assert.Single((await GetJsonAsync(alice, $"{Teams}?search={code}")).GetProperty("items").EnumerateArray()).GetProperty("code").GetString());
+
         var page = await GetJsonAsync(bob, $"{Teams}/{code.ToLowerInvariant()}");
-        Assert.Equal(("Lions Zürich", code, JsonValueKind.Null), (page.GetProperty("name").GetString(), page.GetProperty("code").GetString(), page.GetProperty("role").ValueKind));
+        Assert.Equal(("Lions Zürich", JsonValueKind.Null, JsonValueKind.Null), (page.GetProperty("name").GetString(), page.GetProperty("code").ValueKind, page.GetProperty("role").ValueKind));
+        Assert.Equal((false, JsonValueKind.Null), (page.GetProperty("joinRequestPending").GetBoolean(), page.GetProperty("pendingJoinRequests").ValueKind));
+        var byId = await GetJsonAsync(bob, $"{Teams}/{item.GetProperty("id").GetGuid()}");
+        Assert.Equal(page.ToString(), byId.ToString());
+        Assert.DoesNotContain(code, page.ToString(), StringComparison.Ordinal);
         Assert.Empty((await GetJsonAsync(bob, "/api/me/teams")).EnumerateArray());
     }
 
@@ -290,7 +300,7 @@ public sealed class TeamApiTests(PostgresFixture postgres) : IAsyncLifetime
         var existing = await CreateTeamAsync(alice, "Lions");
         var takenCode = TeamCode.Parse(existing.GetProperty("code").GetString()!);
         await using var scope = _factory.Services.CreateAsyncScope();
-        var repository = scope.ServiceProvider.GetRequiredService<EfTeamRepository>();
+        var repository = Assert.IsType<EfTeamRepository>(scope.ServiceProvider.GetRequiredService<ITeamRepository>());
         var creator = Guid.NewGuid();
         var clash = Team.Create(Guid.NewGuid(), Name("Tigers"), takenCode, DateTimeOffset.UtcNow, creator);
 

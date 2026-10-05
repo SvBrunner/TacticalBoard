@@ -6,8 +6,17 @@ namespace TacticalBoard.Teams.Application;
 /// <summary>Stores <see cref="Team"/>s with their creator's membership and their logos.</summary>
 internal interface ITeamRepository
 {
-    /// <summary>The non-deleted team with <paramref name="code"/>, tracked for changes.</summary>
-    Task<Team?> FindByCodeAsync(TeamCode code, CancellationToken cancellationToken);
+    /// <summary>The non-deleted team named by <paramref name="key"/> (its code or id), tracked for changes.</summary>
+    Task<Team?> FindAsync(TeamKey key, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The non-deleted team named by <paramref name="key"/>, tracked, and locked exclusively until the
+    /// running transaction ends (needs one, <c>IUnitOfWork</c>): every change of the team's members,
+    /// join requests or existence takes this lock first, so they run one after another and the
+    /// "at least one Admin" rule holds under parallel requests (arc42 ch. 8.17). Waits for a running
+    /// change; a team deleted meanwhile is not found.
+    /// </summary>
+    Task<Team?> LockAsync(TeamKey key, CancellationToken cancellationToken);
 
     /// <summary>
     /// One page of the non-deleted teams whose normalized name contains <paramref name="nameFragment"/>
@@ -44,11 +53,68 @@ internal interface ITeamRepository
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }
 
-/// <summary>Looks up memberships.</summary>
+/// <summary>Stores <see cref="TeamMembership"/>s.</summary>
 internal interface ITeamMembershipRepository
 {
-    /// <summary>The role of <paramref name="userId"/> in the non-deleted team <paramref name="teamId"/>, or <c>null</c> if no member.</summary>
+    /// <summary>The role of <paramref name="userId"/> in the non-deleted team <paramref name="teamId"/>, or <c>null</c> if no member (read fresh, not from tracked entities).</summary>
     Task<TeamRole?> FindRoleAsync(Guid teamId, Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>The non-deleted memberships of the team <paramref name="teamId"/>, tracked for changes.</summary>
+    Task<IReadOnlyList<TeamMembership>> ListAsync(Guid teamId, CancellationToken cancellationToken);
+
+    /// <summary>Adds a new membership (saved with <see cref="SaveChangesAsync"/>).</summary>
+    void Add(TeamMembership membership);
+
+    /// <summary>Soft-deletes every non-deleted membership of the team <paramref name="teamId"/> at <paramref name="at"/> (written at once).</summary>
+    Task DeleteAllOfTeamAsync(Guid teamId, DateTimeOffset at, CancellationToken cancellationToken);
+
+    /// <summary>Saves added and changed memberships.</summary>
+    Task SaveChangesAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>Stores <see cref="TeamJoinRequest"/>s.</summary>
+internal interface ITeamJoinRequestRepository
+{
+    /// <summary>Whether <paramref name="userId"/> has a pending (non-deleted) request for the team <paramref name="teamId"/>.</summary>
+    Task<bool> HasPendingAsync(Guid teamId, Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>The pending (non-deleted) request <paramref name="requestId"/> of the team <paramref name="teamId"/>, tracked, or <c>null</c>.</summary>
+    Task<TeamJoinRequest?> FindPendingAsync(Guid teamId, Guid requestId, CancellationToken cancellationToken);
+
+    /// <summary>The pending (non-deleted) requests of the team <paramref name="teamId"/> (read-only), oldest first.</summary>
+    Task<IReadOnlyList<TeamJoinRequest>> ListPendingAsync(Guid teamId, CancellationToken cancellationToken);
+
+    /// <summary>The number of pending (non-deleted) requests per team of <paramref name="teamIds"/>, in one query; a team without any is missing.</summary>
+    Task<IReadOnlyDictionary<Guid, int>> CountPendingAsync(IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken);
+
+    /// <summary>Adds a new request (saved with <see cref="SaveChangesAsync"/>).</summary>
+    void Add(TeamJoinRequest request);
+
+    /// <summary>Soft-deletes every pending request of the team <paramref name="teamId"/> at <paramref name="at"/> (written at once).</summary>
+    Task DeletePendingOfTeamAsync(Guid teamId, DateTimeOffset at, CancellationToken cancellationToken);
+
+    /// <summary>Saves added and changed requests.</summary>
+    /// <exception cref="JoinRequestUniquenessViolationException">The user got a pending request for the team in the meantime.</exception>
+    Task SaveChangesAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>The database's unique index on pending join requests rejected a save (a parallel request was first).</summary>
+internal sealed class JoinRequestUniquenessViolationException : Exception
+{
+    public JoinRequestUniquenessViolationException()
+        : base("The user already has a pending join request for this team.")
+    {
+    }
+
+    public JoinRequestUniquenessViolationException(string message)
+        : base(message)
+    {
+    }
+
+    public JoinRequestUniquenessViolationException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
 }
 
 /// <summary>The database's unique name index rejected a save (a parallel save took the name first).</summary>

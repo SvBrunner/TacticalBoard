@@ -49,4 +49,55 @@ describe("TeamMessages", () => {
 		expect(TeamMessages.isSessionEnded(new ApiError(401, null))).toBe(true);
 		expect(TeamMessages.isSessionEnded(new ApiError(403, null))).toBe(false);
 	});
+
+	it.each<[string, string, "leave" | "change", string, string]>([
+		[
+			"the last Admin leaving",
+			TeamApi.LAST_ADMIN,
+			"leave",
+			"You're the last Admin of “Lions”. Make another member Admin first, or delete the team.",
+			"Du bist der letzte Admin von „Lions“. Mache zuerst ein anderes Mitglied zum Admin oder lösche das Team.",
+		],
+		[
+			"the last Admin changed",
+			TeamApi.LAST_ADMIN,
+			"change",
+			"“Lions” needs at least one Admin. Make another member Admin first.",
+			"„Lions“ braucht mindestens einen Admin. Mache zuerst ein anderes Mitglied zum Admin.",
+		],
+		["a member gone", TeamApi.MEMBER_NOT_FOUND, "change", "This person is no longer a member of the team.", "Diese Person ist kein Mitglied des Teams mehr."],
+		[
+			"a request decided",
+			TeamApi.JOIN_REQUEST_NOT_FOUND,
+			"change",
+			"This request was already decided or no longer exists.",
+			"Über diese Anfrage wurde schon entschieden oder es gibt sie nicht mehr.",
+		],
+		[
+			"a pending request",
+			TeamApi.JOIN_REQUEST_PENDING,
+			"change",
+			"You've already asked to join this team. An Admin will accept or reject your request.",
+			"Du hast den Beitritt zu diesem Team schon angefragt. Ein Admin nimmt deine Anfrage an oder lehnt sie ab.",
+		],
+		["already a member", TeamApi.ALREADY_MEMBER, "change", "You're already a member of this team.", "Du bist bereits Mitglied dieses Teams."],
+		["the team gone", TeamApi.NOT_FOUND, "leave", "This team no longer exists.", "Dieses Team existiert nicht mehr."],
+	])("words membership failures: %s", (_name, type, action, english, german) => {
+		const message = TeamMessages.forMembership(new ApiError(409, { type }), "Lions", action, fallback);
+
+		expect(message(en)).toBe(english);
+		expect(message(de)).toBe(german);
+	});
+
+	it("falls back for other membership failures", () => {
+		expect(TeamMessages.forMembership(new ApiError(500, {}), "Lions", "change", fallback)(en)).toBe("Fallback.");
+		expect(TeamMessages.forMembership(new ApiUnavailableError(), "Lions", "change", fallback)(en)).toBe("The server is not reachable. Please try again later.");
+	});
+
+	it("knows when the user lost their rights", () => {
+		expect(TeamMessages.isAccessLost(new ApiError(403, { type: TeamApi.FORBIDDEN }))).toBe(true);
+		expect(TeamMessages.isAccessLost(new ApiError(403, {}))).toBe(true);
+		expect(TeamMessages.isAccessLost(new ApiError(409, { type: TeamApi.LAST_ADMIN }))).toBe(false);
+		expect(TeamMessages.isAccessLost(new Error("x"))).toBe(false);
+	});
 });

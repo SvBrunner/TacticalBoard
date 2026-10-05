@@ -14,15 +14,18 @@ namespace TacticalBoard.Teams.Endpoints;
 /// Teams over REST (arc42 ch. 8.17). All need a session (otherwise <c>401</c>); the state-changing
 /// ones also the antiforgery header (ch. 8.13).
 /// <list type="bullet">
-/// <item><c>GET /api/teams?search=&amp;offset=&amp;limit=</c>: the overview, one page of all teams (name, code, logo), searchable by name or code.</item>
+/// <item><c>GET /api/teams?search=&amp;offset=&amp;limit=</c>: the overview, one page of all teams (name, logo; the code only of the user's own teams), searchable by name or code.</item>
 /// <item><c>POST /api/teams</c> (multipart: <c>name</c>, optional <c>logo</c>): create; the current user becomes Admin → <c>201</c>, <c>Location</c>.</item>
-/// <item><c>GET /api/me/teams</c>: the current user's teams with their role.</item>
-/// <item><c>GET /api/teams/{code}</c>: one team, with the current user's role (<c>null</c> for non-members).</item>
-/// <item><c>PUT /api/teams/{code}</c> with <c>{ name }</c>: rename (Admins).</item>
-/// <item><c>PUT /api/teams/{code}/logo</c> (multipart: <c>logo</c>): set or replace the logo (Admins).</item>
-/// <item><c>DELETE /api/teams/{code}/logo</c>: remove the logo (Admins) → <c>204</c>.</item>
-/// <item><c>GET /api/teams/{code}/logo</c>: the logo (PNG) with an <c>ETag</c>; <c>304</c> for a matching <c>If-None-Match</c>.</item>
+/// <item><c>GET /api/me/teams</c>: the current user's teams with their role (and, for Admins, the number of pending join requests).</item>
+/// <item><c>GET /api/teams/{team}</c>: one team, with the current user's role (<c>null</c> for non-members) and join request state.</item>
+/// <item><c>PUT /api/teams/{team}</c> with <c>{ name }</c>: rename (Admins).</item>
+/// <item><c>DELETE /api/teams/{team}</c>: delete the team (Admins) → <c>204</c>.</item>
+/// <item><c>PUT /api/teams/{team}/logo</c> (multipart: <c>logo</c>): set or replace the logo (Admins).</item>
+/// <item><c>DELETE /api/teams/{team}/logo</c>: remove the logo (Admins) → <c>204</c>.</item>
+/// <item><c>GET /api/teams/{team}/logo</c>: the logo (PNG) with an <c>ETag</c>; <c>304</c> for a matching <c>If-None-Match</c>.</item>
 /// </list>
+/// <c>{team}</c> is the team's code (any case) or its id (<see cref="TeamKey"/>). Members and join
+/// requests: <see cref="TeamMemberEndpoints"/>.
 /// </summary>
 internal static class TeamEndpoints
 {
@@ -58,14 +61,16 @@ internal static class TeamEndpoints
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(MaxUploadRequestBytes))
             .WithFormOptions(multipartBodyLengthLimit: MaxUploadRequestBytes);
-        teams.MapGet("/{code}", GetAsync).WithName(GetTeamRoute);
-        teams.MapPut("/{code}", RenameAsync);
-        teams.MapGet("/{code}/logo", GetLogoAsync);
-        teams.MapPut("/{code}/logo", SetLogoAsync)
+        teams.MapGet("/{team}", GetAsync).WithName(GetTeamRoute);
+        teams.MapPut("/{team}", RenameAsync);
+        teams.MapDelete("/{team}", DeleteAsync);
+        teams.MapGet("/{team}/logo", GetLogoAsync);
+        teams.MapPut("/{team}/logo", SetLogoAsync)
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(MaxUploadRequestBytes))
             .WithFormOptions(multipartBodyLengthLimit: MaxUploadRequestBytes);
-        teams.MapDelete("/{code}/logo", RemoveLogoAsync);
+        teams.MapDelete("/{team}/logo", RemoveLogoAsync);
+        TeamMemberEndpoints.Map(teams);
 
         api.MapGroup(MyTeamsPath).RequireAuthorization().MapGet(string.Empty, ListMineAsync);
     }
@@ -126,34 +131,41 @@ internal static class TeamEndpoints
         }
 
         var view = await service.CreateAsync(teamName, image, cancellationToken);
-        return TypedResults.CreatedAtRoute(TeamResponse.From(view), GetTeamRoute, new { code = view.Code });
+        return TypedResults.CreatedAtRoute(TeamResponse.From(view), GetTeamRoute, new { team = view.Code });
     }
 
-    public static async Task<Ok<TeamResponse>> GetAsync(string code, [FromServices] TeamService service, CancellationToken cancellationToken)
+    public static async Task<Ok<TeamResponse>> GetAsync(string team, [FromServices] TeamService service, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(service);
-        return TypedResults.Ok(TeamResponse.From(await service.GetAsync(ParseCode(code), cancellationToken)));
+        return TypedResults.Ok(TeamResponse.From(await service.GetAsync(ParseKey(team), cancellationToken)));
+    }
+
+    public static async Task<NoContent> DeleteAsync(string team, [FromServices] TeamDeletionService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+        await service.DeleteAsync(ParseKey(team), cancellationToken);
+        return TypedResults.NoContent();
     }
 
     public static async Task<Results<Ok<TeamResponse>, ValidationProblem>> RenameAsync(
-        string code,
+        string team,
         [FromBody] TeamNameRequest request,
         [FromServices] TeamService service,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(service);
-        var teamCode = ParseCode(code);
+        var key = ParseKey(team);
         if (!TeamName.TryCreate(request.Name, out var name, out var error))
         {
             return Problem(new FieldErrors().Add(NameField, error));
         }
 
-        return TypedResults.Ok(TeamResponse.From(await service.RenameAsync(teamCode, name, cancellationToken)));
+        return TypedResults.Ok(TeamResponse.From(await service.RenameAsync(key, name, cancellationToken)));
     }
 
     public static async Task<Results<Ok<TeamResponse>, ValidationProblem>> SetLogoAsync(
-        string code,
+        string team,
         [FromForm(Name = LogoField)] IFormFile? logo,
         [FromServices] TeamService service,
         [FromServices] ILogoImageProcessor processor,
@@ -161,7 +173,7 @@ internal static class TeamEndpoints
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(processor);
-        var teamCode = ParseCode(code);
+        var key = ParseKey(team);
         if (logo is null)
         {
             return Problem(new FieldErrors().Add(LogoField, FieldError.Required("a logo file is required")));
@@ -173,25 +185,25 @@ internal static class TeamEndpoints
             return Problem(new FieldErrors().Add(LogoField, processed.Error!));
         }
 
-        return TypedResults.Ok(TeamResponse.From(await service.SetLogoAsync(teamCode, processed.Logo, cancellationToken)));
+        return TypedResults.Ok(TeamResponse.From(await service.SetLogoAsync(key, processed.Logo, cancellationToken)));
     }
 
-    public static async Task<NoContent> RemoveLogoAsync(string code, [FromServices] TeamService service, CancellationToken cancellationToken)
+    public static async Task<NoContent> RemoveLogoAsync(string team, [FromServices] TeamService service, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(service);
-        await service.RemoveLogoAsync(ParseCode(code), cancellationToken);
+        await service.RemoveLogoAsync(ParseKey(team), cancellationToken);
         return TypedResults.NoContent();
     }
 
     public static async Task<Results<FileContentHttpResult, StatusCodeHttpResult>> GetLogoAsync(
-        string code,
+        string team,
         HttpContext context,
         [FromServices] TeamService service,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(service);
-        var logo = await service.GetLogoAsync(ParseCode(code), cancellationToken);
+        var logo = await service.GetLogoAsync(ParseKey(team), cancellationToken);
         var tag = new EntityTagHeaderValue("\"" + logo.Hash + "\"");
         var headers = context.Response.GetTypedHeaders();
         headers.ETag = tag;
@@ -206,8 +218,9 @@ internal static class TeamEndpoints
         return TypedResults.Bytes(logo.Content, logo.ContentType);
     }
 
-    private static TeamCode ParseCode(string code) =>
-        TeamCode.TryParse(code, out var teamCode) ? teamCode : throw new TeamNotFoundException(code);
+    /// <summary>The team named in the route (code or id); anything else names no team (<c>404</c>).</summary>
+    public static TeamKey ParseKey(string team) =>
+        TeamKey.TryParse(team, out var key) ? key : throw new TeamNotFoundException(team);
 
     private static async Task<LogoProcessingResult> ProcessAsync(IFormFile file, ILogoImageProcessor processor, CancellationToken cancellationToken)
     {
@@ -225,6 +238,6 @@ internal static class TeamEndpoints
         return processor.Process(buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
     }
 
-    private static ValidationProblem Problem(FieldErrors errors) =>
+    public static ValidationProblem Problem(FieldErrors errors) =>
         TypedResults.ValidationProblem(errors.Messages(), extensions: errors.Extensions());
 }

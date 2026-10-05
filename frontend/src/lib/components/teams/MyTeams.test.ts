@@ -44,6 +44,15 @@ describe("MyTeams", () => {
 							name: "Lions",
 							logoUrl: null,
 							role: "editor",
+							pendingJoinRequests: null,
+						},
+						{
+							id: "t2",
+							code: "XYZ789",
+							name: "Tigers",
+							logoUrl: null,
+							role: "admin",
+							pendingJoinRequests: 2,
 						},
 					],
 				},
@@ -54,5 +63,7 @@ describe("MyTeams", () => {
 		const link = screen.getByRole("link", { name: /Lions/ });
 		expect(link).toHaveAttribute("href", "/teams/ABC123");
 		expect(screen.getByRole("list", { name: "Your teams" })).toHaveTextContent("Editor");
+		expect(link).not.toHaveTextContent("join request");
+		expect(screen.getByRole("link", { name: /Tigers/ })).toHaveTextContent("2 join requests");
 	});
 });

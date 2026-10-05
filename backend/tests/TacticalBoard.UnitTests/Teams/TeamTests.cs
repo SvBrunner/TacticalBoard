@@ -67,4 +67,17 @@ public class TeamTests
         Assert.False(membership.IsDeleted);
         Assert.Throws<ArgumentException>(() => TeamMembership.ForCreator(Guid.Empty, team));
     }
+
+    [Fact]
+    public void Is_soft_deleted_once_and_records_who_deleted_it()
+    {
+        var team = TestTeams.Team(creator: Alice);
+        var later = TestTeams.Now.AddHours(1);
+
+        team.Delete(later, Bob);
+        team.Delete(later.AddHours(1), Alice);
+
+        Assert.True(team.IsDeleted);
+        Assert.Equal((later, later, Bob), (team.DeletedAt, team.UpdatedAt, team.UpdatedBy));
+    }
 }

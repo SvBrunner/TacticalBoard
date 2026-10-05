@@ -26,6 +26,7 @@ public class TeamEndpointsTests
     {
         _service = new TeamService(
             _repository,
+            _repository,
             new TeamAuthorization(_currentUser, _repository),
             _currentUser,
             new SequenceTeamCodeGenerator("AAAAAA", "BBBBBB", "CCCCCC"),
@@ -57,8 +58,8 @@ public class TeamEndpointsTests
 
         var created = Assert.IsType<CreatedAtRoute<TeamResponse>>(result.Result);
         Assert.Equal(TeamEndpoints.GetTeamRoute, created.RouteName);
-        Assert.Equal("AAAAAA", created.RouteValues["code"]);
-        Assert.Equal(("AAAAAA", "Lions", null, "admin"), (created.Value!.Code, created.Value.Name, created.Value.LogoUrl, created.Value.Role));
+        Assert.Equal("AAAAAA", created.RouteValues["team"]);
+        Assert.Equal(("AAAAAA", "Lions", null, "admin", false, 0), (created.Value!.Code, created.Value.Name, created.Value.LogoUrl, created.Value.Role, created.Value.JoinRequestPending, created.Value.PendingJoinRequests));
     }
 
     [Fact]
@@ -67,7 +68,7 @@ public class TeamEndpointsTests
         var team = await CreateAsync("Lions", File(Png()));
 
         var hash = _repository.Teams[0].LogoHash;
-        Assert.Equal($"/api/teams/AAAAAA/logo?v={hash}", team.LogoUrl);
+        Assert.Equal($"/api/teams/{team.Id}/logo?v={hash}", team.LogoUrl);
         var stored = TestImages.Decode(_repository.Logos[team.Id].Content);
         Assert.Equal((256, 128), (stored.Width, stored.Height));
     }
@@ -98,22 +99,26 @@ public class TeamEndpointsTests
     }
 
     [Fact]
-    public async Task Get_returns_the_team_with_the_current_users_role()
+    public async Task Get_returns_the_team_with_the_current_users_role_and_the_code_only_for_members()
     {
         var created = await CreateAsync();
 
         var asAdmin = await TeamEndpoints.GetAsync("aaaaaa", _service, Cancellation);
         _currentUser.UserId = Bob;
         var asStranger = await TeamEndpoints.GetAsync("AAAAAA", _service, Cancellation);
+        var byId = await TeamEndpoints.GetAsync(created.Id.ToString(), _service, Cancellation);
 
         Assert.Equal(created, asAdmin.Value);
-        Assert.Equal(created with { Role = null }, asStranger.Value);
+        Assert.Equal(created with { Role = null, Code = null, PendingJoinRequests = null }, asStranger.Value);
+        Assert.Equal(asStranger.Value, byId.Value);
     }
 
     [Theory]
     [InlineData("ZZZZZZ")]
     [InlineData("not-a-code")]
-    public async Task An_unknown_or_malformed_code_is_not_found(string code)
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    [InlineData("0199a6d0-0000-7000-8000-0000000000ff")]
+    public async Task An_unknown_or_malformed_code_or_id_is_not_found(string code)
     {
         await Assert.ThrowsAsync<TeamNotFoundException>(() => TeamEndpoints.GetAsync(code, _service, Cancellation));
         await Assert.ThrowsAsync<TeamNotFoundException>(() => TeamEndpoints.RemoveLogoAsync(code, _service, Cancellation));
@@ -131,6 +136,10 @@ public class TeamEndpointsTests
         var page = Assert.IsType<Ok<TeamSearchResponse>>(result.Result).Value!;
         Assert.Equal((2, 0, 1), (page.Total, page.Offset, page.Limit));
         Assert.Equal(["Lionesses"], page.Items.Select(team => team.Name));
+        Assert.Equal("CCCCCC", page.Items[0].Code);
+        _currentUser.UserId = Bob;
+        var asStranger = Assert.IsType<Ok<TeamSearchResponse>>((await TeamEndpoints.SearchAsync("LION", 0, 1, _service, Cancellation)).Result).Value!;
+        Assert.Null(asStranger.Items[0].Code);
     }
 
     [Fact]
@@ -152,7 +161,7 @@ public class TeamEndpointsTests
         var mine = await TeamEndpoints.ListMineAsync(_service, Cancellation);
 
         var team = Assert.Single(mine.Value!);
-        Assert.Equal(("Lions", "AAAAAA", "editor", null), (team.Name, team.Code, team.Role, team.LogoUrl));
+        Assert.Equal(("Lions", "AAAAAA", "editor", null, null), (team.Name, team.Code, team.Role, team.LogoUrl, team.PendingJoinRequests));
     }
 
     [Fact]
@@ -175,7 +184,7 @@ public class TeamEndpointsTests
 
         var set = await TeamEndpoints.SetLogoAsync("AAAAAA", File(Png(64, 64)), _service, _processor, Cancellation);
         var withLogo = Assert.IsType<Ok<TeamResponse>>(set.Result).Value!;
-        Assert.StartsWith("/api/teams/AAAAAA/logo?v=", withLogo.LogoUrl, StringComparison.Ordinal);
+        Assert.StartsWith($"/api/teams/{created.Id}/logo?v=", withLogo.LogoUrl, StringComparison.Ordinal);
 
         var removed = await TeamEndpoints.RemoveLogoAsync("AAAAAA", _service, Cancellation);
         Assert.IsType<NoContent>(removed);
@@ -248,6 +257,23 @@ public class TeamEndpointsTests
         Assert.Equal(["admin", "editor", "reader"], Enum.GetValues<TeamRole>().Select(TeamJson.Role));
         Assert.Throws<ArgumentOutOfRangeException>(() => TeamJson.Role((TeamRole)42));
     }
+
+    [Theory]
+    [InlineData("admin", TeamRole.Admin)]
+    [InlineData(" Editor ", TeamRole.Editor)]
+    [InlineData("READER", TeamRole.Reader)]
+    public void Roles_are_read_ignoring_case(string text, TeamRole expected)
+    {
+        Assert.True(TeamJson.TryParseRole(text, out var role));
+        Assert.Equal(expected, role);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("owner")]
+    [InlineData("0")]
+    public void Other_roles_are_not_read(string? text) => Assert.False(TeamJson.TryParseRole(text, out _));
 
     [Fact]
     public void The_upload_limit_leaves_room_for_the_form_around_the_file()

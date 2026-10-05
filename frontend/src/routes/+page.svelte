@@ -97,7 +97,7 @@ logo; afterwards the new team's page opens) and a link to the team overview
 	async function createTeam(name: string, logo: File | null) {
 		const result = await teams.create(name, logo);
 		if (result.ok) {
-			void goto(TeamRoute.forTeam(result.team.code));
+			void goto(TeamRoute.of(result.team));
 		}
 		return result;
 	}

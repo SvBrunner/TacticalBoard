@@ -9,13 +9,16 @@ using TacticalBoard.Users.Contracts;
 namespace TacticalBoard.Teams.Application;
 
 /// <summary>
-/// The use cases of teams of roadmap Phase 2 step 6 (arc42 ch. 8.17): the overview with search, the
-/// current user's teams, a team's page, creating a team (its creator becomes Admin), renaming it and
-/// setting or removing its logo (Admins only, through <see cref="ITeamAuthorization"/>).
-/// Every logged-in user may see every team's public data (name, code, logo).
+/// The use cases of teams themselves (arc42 ch. 8.17): the overview with search, the current user's
+/// teams, a team's page, creating a team (its creator becomes Admin), renaming it and setting or
+/// removing its logo (Admins only, through <see cref="ITeamAuthorization"/>).
+/// Every logged-in user may see every team's name and logo; its code only its members (product
+/// decision, roadmap Phase 2 step 7). Members and join requests: <see cref="TeamMembershipService"/>,
+/// <see cref="TeamJoinRequestService"/>; deleting: <see cref="TeamDeletionService"/>.
 /// </summary>
 internal sealed class TeamService(
     ITeamRepository teams,
+    ITeamJoinRequestRepository joinRequests,
     ITeamAuthorization authorization,
     ICurrentUser currentUser,
     ITeamCodeGenerator codes,
@@ -31,25 +34,31 @@ internal sealed class TeamService(
     {
         ArgumentNullException.ThrowIfNull(search);
         var (found, total) = await teams.SearchAsync(search.NameFragment, search.CodeFragment, search.Offset, search.Limit, cancellationToken);
-        return new TeamSearchResult(found.Select(Summary).ToList(), total, search.Offset, search.Limit);
+        var mine = (await teams.ListOfMemberAsync(currentUser.Id, cancellationToken)).Select(entry => entry.Team.Id).ToHashSet();
+        return new TeamSearchResult(found.Select(team => Summary(team, mine.Contains(team.Id))).ToList(), total, search.Offset, search.Limit);
     }
 
     /// <summary>The teams the current user is a member of, with their role, by name (ignoring case, then exactly).</summary>
     public async Task<IReadOnlyList<MemberTeamView>> ListMineAsync(CancellationToken cancellationToken)
     {
         var list = await teams.ListOfMemberAsync(currentUser.Id, cancellationToken);
+        var decided = list.Where(entry => TeamPermissions.Allows(entry.Role, TeamPermission.DecideJoinRequests)).Select(entry => entry.Team.Id).ToList();
+        var pending = decided.Count == 0 ? new Dictionary<Guid, int>() : await joinRequests.CountPendingAsync(decided, cancellationToken);
         return list
             .OrderBy(entry => entry.Team.Name, StringComparer.Create(CultureInfo.InvariantCulture, CompareOptions.IgnoreCase))
             .ThenBy(entry => entry.Team.Name, StringComparer.Ordinal)
-            .Select(entry => new MemberTeamView(Summary(entry.Team), entry.Role))
+            .Select(entry => new MemberTeamView(
+                Summary(entry.Team, isMember: true),
+                entry.Role,
+                decided.Contains(entry.Team.Id) ? pending.GetValueOrDefault(entry.Team.Id) : null))
             .ToList();
     }
 
-    /// <summary>The team with <paramref name="code"/>, with the current user's role.</summary>
+    /// <summary>The team named by <paramref name="key"/>, with the current user's role and join request state.</summary>
     /// <exception cref="TeamNotFoundException">There is no such team.</exception>
-    public async Task<TeamView> GetAsync(TeamCode code, CancellationToken cancellationToken)
+    public async Task<TeamView> GetAsync(TeamKey key, CancellationToken cancellationToken)
     {
-        var team = await FindAsync(code, cancellationToken);
+        var team = await FindAsync(key, cancellationToken);
         return await ViewAsync(team, cancellationToken);
     }
 
@@ -85,7 +94,7 @@ internal sealed class TeamService(
                 throw new DuplicateTeamNameException(name.Value);
             }
 
-            return View(team, creator.Role);
+            return new TeamView(team.Id, team.Code, team.Name, team.LogoHash, team.CreatedAt, creator.Role, JoinRequestPending: false, PendingJoinRequests: 0);
         }
 
         throw new InvalidOperationException($"No free team code found in {MaxCodeAttempts} attempts.");
@@ -95,10 +104,10 @@ internal sealed class TeamService(
     /// <exception cref="TeamNotFoundException">There is no such team.</exception>
     /// <exception cref="TeamAccessDeniedException">The current user is not its Admin.</exception>
     /// <exception cref="DuplicateTeamNameException">Another team has the name.</exception>
-    public async Task<TeamView> RenameAsync(TeamCode code, TeamName name, CancellationToken cancellationToken)
+    public async Task<TeamView> RenameAsync(TeamKey key, TeamName name, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(name);
-        var team = await FindChangeableAsync(code, cancellationToken);
+        var team = await FindChangeableAsync(key, cancellationToken);
         await EnsureNameIsFreeAsync(name, team.Id, cancellationToken);
         team.Rename(name, clock.UtcNow, currentUser.Id);
         try
@@ -110,16 +119,16 @@ internal sealed class TeamService(
             throw new DuplicateTeamNameException(name.Value);
         }
 
-        return View(team, TeamRole.Admin);
+        return await ViewAsync(team, cancellationToken);
     }
 
     /// <summary>Sets or replaces the team's logo. Admins only.</summary>
     /// <exception cref="TeamNotFoundException">There is no such team.</exception>
     /// <exception cref="TeamAccessDeniedException">The current user is not its Admin.</exception>
-    public async Task<TeamView> SetLogoAsync(TeamCode code, TeamLogoImage logo, CancellationToken cancellationToken)
+    public async Task<TeamView> SetLogoAsync(TeamKey key, TeamLogoImage logo, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(logo);
-        var team = await FindChangeableAsync(code, cancellationToken);
+        var team = await FindChangeableAsync(key, cancellationToken);
         var now = clock.UtcNow;
         var by = currentUser.Id;
         await transactions.InTransactionAsync(
@@ -131,15 +140,15 @@ internal sealed class TeamService(
                 return true;
             },
             cancellationToken);
-        return View(team, TeamRole.Admin);
+        return await ViewAsync(team, cancellationToken);
     }
 
     /// <summary>Removes the team's logo (nothing happens without one). Admins only.</summary>
     /// <exception cref="TeamNotFoundException">There is no such team.</exception>
     /// <exception cref="TeamAccessDeniedException">The current user is not its Admin.</exception>
-    public async Task<TeamView> RemoveLogoAsync(TeamCode code, CancellationToken cancellationToken)
+    public async Task<TeamView> RemoveLogoAsync(TeamKey key, CancellationToken cancellationToken)
     {
-        var team = await FindChangeableAsync(code, cancellationToken);
+        var team = await FindChangeableAsync(key, cancellationToken);
         await transactions.InTransactionAsync(
             async cancellation =>
             {
@@ -149,28 +158,28 @@ internal sealed class TeamService(
                 return true;
             },
             cancellationToken);
-        return View(team, TeamRole.Admin);
+        return await ViewAsync(team, cancellationToken);
     }
 
     /// <summary>The team's logo.</summary>
     /// <exception cref="TeamNotFoundException">There is no such team.</exception>
     /// <exception cref="TeamLogoNotFoundException">It has no logo.</exception>
-    public async Task<TeamLogoView> GetLogoAsync(TeamCode code, CancellationToken cancellationToken)
+    public async Task<TeamLogoView> GetLogoAsync(TeamKey key, CancellationToken cancellationToken)
     {
-        var team = await FindAsync(code, cancellationToken);
-        var logo = await teams.FindLogoAsync(team.Id, cancellationToken) ?? throw new TeamLogoNotFoundException(code.Value);
+        var team = await FindAsync(key, cancellationToken);
+        var logo = await teams.FindLogoAsync(team.Id, cancellationToken) ?? throw new TeamLogoNotFoundException(key.ToString());
         return new TeamLogoView(logo.Content, logo.ContentType, logo.Hash);
     }
 
-    private async Task<Team> FindAsync(TeamCode code, CancellationToken cancellationToken)
+    private async Task<Team> FindAsync(TeamKey key, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(code);
-        return await teams.FindByCodeAsync(code, cancellationToken) ?? throw new TeamNotFoundException(code.Value);
+        ArgumentNullException.ThrowIfNull(key);
+        return await teams.FindAsync(key, cancellationToken) ?? throw new TeamNotFoundException(key.ToString());
     }
 
-    private async Task<Team> FindChangeableAsync(TeamCode code, CancellationToken cancellationToken)
+    private async Task<Team> FindChangeableAsync(TeamKey key, CancellationToken cancellationToken)
     {
-        var team = await FindAsync(code, cancellationToken);
+        var team = await FindAsync(key, cancellationToken);
         if (!await authorization.CanChangeDetailsAsync(team.Id, cancellationToken))
         {
             throw new TeamAccessDeniedException();
@@ -187,10 +196,16 @@ internal sealed class TeamService(
         }
     }
 
-    private async Task<TeamView> ViewAsync(Team team, CancellationToken cancellationToken) =>
-        View(team, await authorization.RoleOfCurrentUserAsync(team.Id, cancellationToken));
+    private async Task<TeamView> ViewAsync(Team team, CancellationToken cancellationToken)
+    {
+        var role = await authorization.RoleOfCurrentUserAsync(team.Id, cancellationToken);
+        var isMember = role is not null;
+        var joinRequestPending = !isMember && await joinRequests.HasPendingAsync(team.Id, currentUser.Id, cancellationToken);
+        int? pending = TeamPermissions.Allows(role, TeamPermission.DecideJoinRequests)
+            ? (await joinRequests.CountPendingAsync([team.Id], cancellationToken)).GetValueOrDefault(team.Id)
+            : null;
+        return new TeamView(team.Id, isMember ? team.Code : null, team.Name, team.LogoHash, team.CreatedAt, role, joinRequestPending, pending);
+    }
 
-    private static TeamView View(Team team, TeamRole? role) => new(team.Id, team.Code, team.Name, team.LogoHash, team.CreatedAt, role);
-
-    private static TeamSummary Summary(Team team) => new(team.Id, team.Code, team.Name, team.LogoHash);
+    private static TeamSummary Summary(Team team, bool isMember) => new(team.Id, isMember ? team.Code : null, team.Name, team.LogoHash);
 }
