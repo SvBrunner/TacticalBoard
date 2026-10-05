@@ -30,6 +30,7 @@ logo; afterwards the new team's page opens) and a link to the team overview
 	import { FolderList } from "$lib/storage/FolderList";
 	import { SavedSituationActions } from "$lib/storage/SavedSituationActions";
 	import { SavedSituationList } from "$lib/storage/SavedSituationList";
+	import { PERSONAL_AREA } from "$lib/storage/Area";
 	import { TOP_LEVEL } from "$lib/storage/SaveTarget";
 	import type { SituationSummary } from "$lib/storage/SituationApi";
 	import { situationLink } from "$lib/storage/SituationLink";
@@ -61,7 +62,7 @@ logo; afterwards the new team's page opens) and a link to the team overview
 		log: notifications,
 	});
 	const savedState = savedList.state;
-	const folders = new FolderList({ api: folderApi, onSessionEnded: refreshSession, log: notifications });
+	const folders = new FolderList({ api: folderApi, area: () => PERSONAL_AREA, onSessionEnded: refreshSession, log: notifications });
 	const folderState = folders.state;
 	const actions = new SavedSituationActions({
 		list: savedList,

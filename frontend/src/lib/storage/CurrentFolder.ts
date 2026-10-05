@@ -3,6 +3,7 @@ import { ApiError } from "$lib/api/ApiClient";
 import type { ConfirmationRequest } from "$lib/dialogs/ConfirmationPrompt";
 import { inEnglish } from "$lib/i18n";
 import type { Translatable } from "$lib/i18n/Messages";
+import { areaOf, type Area } from "./Area";
 import { FolderApi, type Folder } from "./FolderApi";
 import { FolderMessages, type FolderChange, type FolderDeletion } from "./FolderMessages";
 
@@ -21,6 +22,14 @@ export type CurrentFolderState =
 	| { readonly status: "missing" }
 	| { readonly status: "failed"; readonly message: Translatable };
 
+/** The team a team folder belongs to, for the folder page's breadcrumb and links. */
+export interface FolderTeam {
+	readonly id: string;
+	readonly name: string;
+	/** Its code (members get it), or `null`. */
+	readonly code: string | null;
+}
+
 export interface CurrentFolderDependencies {
 	readonly api: {
 		get(id: string): Promise<Folder>;
@@ -28,20 +37,28 @@ export interface CurrentFolderDependencies {
 		delete(id: string): Promise<void>;
 	};
 	readonly id: string;
+	/** Looks up the team of a team folder (its name for the breadcrumb); without it no team is loaded. */
+	readonly teams?: { get(key: string): Promise<FolderTeam> };
 	/** Called when the server says the session has ended. */
 	readonly onSessionEnded?: () => void;
 	readonly log?: { notify(message: string, level?: "info" | "warn" | "error"): void };
 }
 
 /**
- * The folder a folder page shows (arc42 ch. 8.15): loads it, renames it, and
- * deletes it — which the server refuses while it still contains situations;
- * that reason is passed on to the user.
+ * The folder a folder page shows (arc42 ch. 8.15) — of the personal area or of
+ * a team: loads it (and, for a team folder, its team, `team`), renames it,
+ * and deletes it — which the server refuses while it still contains
+ * situations; that reason is passed on to the user. Whether the user may
+ * change it comes from the server (`canWrite`; false for a team Reader).
  */
 export class CurrentFolder {
 	private readonly store = writable<CurrentFolderState>({ status: "loading" });
+	private readonly teamStore = writable<FolderTeam | null>(null);
 
 	readonly state: Readable<CurrentFolderState> = { subscribe: this.store.subscribe };
+
+	/** The team of a team folder, once loaded; `null` for a personal folder (or while unknown). */
+	readonly team: Readable<FolderTeam | null> = { subscribe: this.teamStore.subscribe };
 
 	constructor(private readonly deps: CurrentFolderDependencies) {}
 
@@ -55,11 +72,25 @@ export class CurrentFolder {
 		return state.status === "loaded" ? state.folder.name : null;
 	}
 
-	/** Loads the folder. Never throws. */
+	/** The folder's area, if loaded. */
+	area(): Area | null {
+		const state = this.current();
+		return state.status === "loaded" ? areaOf(state.folder.area) : null;
+	}
+
+	/** Whether the user may change the folder and put situations into it (false while not loaded). */
+	canWrite(): boolean {
+		const state = this.current();
+		return state.status === "loaded" && state.folder.canWrite;
+	}
+
+	/** Loads the folder, then the team of a team folder (a failure there only leaves `team` empty). Never throws. */
 	async load(): Promise<void> {
 		this.store.set({ status: "loading" });
 		try {
-			this.store.set({ status: "loaded", folder: await this.deps.api.get(this.deps.id) });
+			const folder = await this.deps.api.get(this.deps.id);
+			this.store.set({ status: "loaded", folder });
+			await this.loadTeam(folder);
 		} catch (error) {
 			if (error instanceof ApiError && error.status === 404) {
 				this.store.set({ status: "missing" });
@@ -128,6 +159,21 @@ export class CurrentFolder {
 				return { ok: true };
 			}
 			return { ok: false, message: this.failure(error, (m) => m.folders.deleteFailed(name)) };
+		}
+	}
+
+	private async loadTeam(folder: Folder): Promise<void> {
+		const area = areaOf(folder.area);
+		if (area.kind !== "team" || !this.deps.teams) {
+			this.teamStore.set(null);
+			return;
+		}
+		try {
+			const team = await this.deps.teams.get(area.teamId);
+			this.teamStore.set({ id: team.id, name: team.name, code: team.code });
+		} catch (error) {
+			this.teamStore.set(null);
+			this.log(`Loading the team of folder ${this.deps.id} failed: ${String(error)}`, "error");
 		}
 	}
 

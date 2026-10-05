@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TacticalBoard.Areas;
+using TacticalBoard.Areas.Contracts;
 using TacticalBoard.Folders;
 using TacticalBoard.Folders.Contracts;
 using TacticalBoard.Infrastructure;
@@ -10,6 +11,7 @@ using TacticalBoard.Situations;
 using TacticalBoard.Situations.Application;
 using TacticalBoard.Situations.Domain;
 using TacticalBoard.Situations.Infrastructure;
+using TacticalBoard.Teams;
 using TacticalBoard.Users;
 
 namespace TacticalBoard.UnitTests.Situations;
@@ -24,6 +26,7 @@ public class SituationsModuleTests
         var services = new ServiceCollection().AddLogging().AddSingleton<IConfiguration>(configuration);
         services.AddSharedKernelServices().AddPersistence("TacticalBoard.Api");
         new UsersModule().RegisterServices(services, configuration);
+        new TeamsModule().RegisterServices(services, configuration);
         new AreasModule().RegisterServices(services, configuration);
         new FoldersModule().RegisterServices(services, configuration);
         new SituationsModule().RegisterServices(services, configuration);
@@ -39,6 +42,7 @@ public class SituationsModuleTests
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<SituationService>());
         Assert.IsType<EfSituationRepository>(scope.ServiceProvider.GetRequiredService<ISituationRepository>());
         Assert.IsType<SituationFolderContents>(scope.ServiceProvider.GetRequiredService<IFolderContents>());
+        Assert.Contains(scope.ServiceProvider.GetServices<IAreaContentDeletion>(), deletion => deletion is SituationAreaContentDeletion);
     }
 
     [Fact]

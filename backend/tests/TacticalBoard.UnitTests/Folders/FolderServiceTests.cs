@@ -283,4 +283,42 @@ public class FolderServiceTests
         Assert.Null(await directory.FindAsync(created.Id, Cancellation));
         Assert.Null(await directory.FindForPlacingAsync(created.Id, Cancellation));
     }
+
+    [Fact]
+    public async Task Views_carry_the_area_and_whether_the_user_may_change_it()
+    {
+        var team = new AreaReference(AreaKind.Team, Guid.NewGuid());
+        _areas.Readable.Add(team);
+        _areas.Writable.Add(team);
+        var created = await CreateAsync("Set pieces", team);
+        Assert.Equal((team, true), (created.Area, created.CanWrite));
+
+        _areas.Writable.Remove(team);
+
+        Assert.False((await Service.GetAsync(created.Id, Cancellation)).CanWrite);
+        Assert.False(Assert.Single(await Service.ListAsync(team, Cancellation)).Folder.CanWrite);
+        await Assert.ThrowsAsync<FolderAccessDeniedException>(() => Service.RenameAsync(created.Id, Name("Other"), Cancellation));
+        await Assert.ThrowsAsync<FolderAccessDeniedException>(() => Service.DeleteAsync(created.Id, Cancellation));
+        await Assert.ThrowsAsync<FolderAccessDeniedException>(() => CreateAsync("New", team));
+    }
+
+    [Fact]
+    public async Task Deleting_an_areas_content_soft_deletes_all_its_folders_also_full_ones()
+    {
+        var team = new AreaReference(AreaKind.Team, Guid.NewGuid());
+        _areas.Readable.Add(team);
+        _areas.Writable.Add(team);
+        var mine = await CreateAsync("Mine");
+        var full = await CreateAsync("Full", team);
+        await CreateAsync("Empty", team);
+        _contents.NonEmpty.Add(full.Id);
+        var at = _clock.UtcNow.AddHours(1);
+
+        await new FolderAreaContentDeletion(_repository).DeleteContentAsync(team, at, Cancellation);
+
+        Assert.All(_repository.Folders.Where(folder => folder.Area == team), folder => Assert.Equal(at, folder.DeletedAt));
+        Assert.False(_repository.Folders.Single(folder => folder.Id == mine.Id).IsDeleted);
+        Assert.Empty(await Service.ListAsync(team, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => new FolderAreaContentDeletion(_repository).DeleteContentAsync(null!, at, Cancellation));
+    }
 }

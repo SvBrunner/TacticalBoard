@@ -78,7 +78,7 @@ describe("SavedSituationList", () => {
 	it("lists its place: a folder", async () => {
 		await listAt(inFolder("f1")).load();
 
-		expect(listedPlaces).toEqual([{ folderId: "f1" }]);
+		expect(listedPlaces).toEqual([inFolder("f1")]);
 	});
 
 	it.each<[string, Error, string]>([

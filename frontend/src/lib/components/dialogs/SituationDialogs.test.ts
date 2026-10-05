@@ -104,7 +104,7 @@ describe("SituationDialogs", () => {
 
 			await fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-			expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: { area: { kind: "personal" }, folderId: "f1" } });
 		});
 
 		it("cancelling the form changes nothing", async () => {
@@ -173,7 +173,7 @@ describe("SituationDialogs", () => {
 
 			await component.importFile(file);
 
-			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f1" } });
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: { area: { kind: "personal" }, folderId: "f1" } });
 		});
 
 		it("does not report anything opened when the user keeps the unsaved changes", async () => {

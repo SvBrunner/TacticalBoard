@@ -7,6 +7,15 @@ export type TeamRole = "admin" | "editor" | "reader";
 export const TEAM_ROLES: readonly TeamRole[] = ["admin", "editor", "reader"];
 
 /**
+ * Whether a member with `role` may change the team's situations and folders
+ * (arc42 ch. 8.1: Admins and Editors, not Readers). The UI only hides what
+ * isn't allowed; the server decides.
+ */
+export function canWriteContent(role: TeamRole | null): boolean {
+	return role === "admin" || role === "editor";
+}
+
+/**
  * A team in a list (the overview): name and logo; the code only of the
  * user's own teams (`null` otherwise; non-members never get a team's code).
  */

@@ -50,6 +50,12 @@ internal interface ISituationRepository
     /// <returns><c>false</c> if the situation was deleted in the meantime.</returns>
     Task<bool> SaveFolderAsync(Situation situation, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Soft-deletes every non-deleted situation of <paramref name="area"/> at once (a bulk update with
+    /// <paramref name="deletedAt"/>); their revisions stay, like for a single delete.
+    /// </summary>
+    Task DeleteAllInAreaAsync(AreaReference area, DateTimeOffset deletedAt, CancellationToken cancellationToken);
+
     /// <summary>Saves the changes of tracked situations (e.g. a soft delete).</summary>
     /// <exception cref="ConcurrentRevisionException">Someone else saved a revision in the meantime.</exception>
     Task SaveChangesAsync(CancellationToken cancellationToken);

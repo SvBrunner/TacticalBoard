@@ -41,17 +41,21 @@ internal sealed class FolderService(
 
         var list = await folders.ListAsync(area, cancellationToken);
         var counts = await contents.CountSituationsByFolderAsync(area, cancellationToken);
+        var canWrite = await areas.CanWriteAsync(area, cancellationToken);
         return list
             .OrderBy(folder => folder.Name, StringComparer.Create(CultureInfo.InvariantCulture, CompareOptions.IgnoreCase))
             .ThenBy(folder => folder.Name, StringComparer.Ordinal)
-            .Select(folder => new FolderSummary(View(folder), counts.GetValueOrDefault(folder.Id)))
+            .Select(folder => new FolderSummary(View(folder, canWrite), counts.GetValueOrDefault(folder.Id)))
             .ToList();
     }
 
     /// <summary>The folder with <paramref name="id"/>.</summary>
     /// <exception cref="FolderNotFoundException">It doesn't exist or the user may not read its area.</exception>
-    public async Task<FolderView> GetAsync(Guid id, CancellationToken cancellationToken) =>
-        View(await FindReadableAsync(id, cancellationToken));
+    public async Task<FolderView> GetAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var folder = await FindReadableAsync(id, cancellationToken);
+        return View(folder, await areas.CanWriteAsync(folder.Area, cancellationToken));
+    }
 
     /// <summary>Creates a folder in <paramref name="area"/>.</summary>
     /// <exception cref="FolderAccessDeniedException">The user may not write in the area.</exception>
@@ -76,7 +80,7 @@ internal sealed class FolderService(
             throw new DuplicateFolderNameException(name.Value);
         }
 
-        return View(folder);
+        return View(folder, canWrite: true);
     }
 
     /// <summary>Renames the folder; its own name (e.g. in another case) is no conflict.</summary>
@@ -98,7 +102,7 @@ internal sealed class FolderService(
             throw new DuplicateFolderNameException(name.Value);
         }
 
-        return View(folder);
+        return View(folder, canWrite: true);
     }
 
     /// <summary>
@@ -159,5 +163,6 @@ internal sealed class FolderService(
         }
     }
 
-    private static FolderView View(Folder folder) => new(folder.Id, folder.Name, folder.CreatedAt, folder.UpdatedAt);
+    private static FolderView View(Folder folder, bool canWrite) =>
+        new(folder.Id, folder.Name, folder.CreatedAt, folder.UpdatedAt, folder.Area, canWrite);
 }

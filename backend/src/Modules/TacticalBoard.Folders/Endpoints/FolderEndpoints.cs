@@ -16,6 +16,7 @@ namespace TacticalBoard.Folders.Endpoints;
 /// <list type="bullet">
 /// <item><c>GET /api/personal-area/folders</c>: the current user's folders, by name, each with its <c>situationCount</c>.</item>
 /// <item><c>POST /api/personal-area/folders</c> with <c>{ name }</c>: create → <c>201</c>, <c>Location</c>.</item>
+/// <item><c>GET /api/teams/{team}/folders</c>, <c>POST /api/teams/{team}/folders</c>: the same for a team's area (<c>{team}</c>: its code or id; <c>404 team-not-found</c>; members read, Admins and Editors create, otherwise <c>403</c>).</item>
 /// <item><c>GET /api/folders/{id}</c>: one folder.</item>
 /// <item><c>PUT /api/folders/{id}</c> with <c>{ name }</c>: rename.</item>
 /// <item><c>DELETE /api/folders/{id}</c>: soft delete of an empty folder → <c>204</c>, otherwise <c>409 folder-not-empty</c>.</item>
@@ -25,6 +26,7 @@ namespace TacticalBoard.Folders.Endpoints;
 internal static class FolderEndpoints
 {
     public const string PersonalAreaPath = "/personal-area/folders";
+    public const string TeamAreaPath = "/teams/{team}/folders";
     public const string FoldersPath = "/folders";
     public const string GetFolderRoute = "GetFolder";
 
@@ -36,6 +38,10 @@ internal static class FolderEndpoints
         var personal = api.MapGroup(PersonalAreaPath).RequireAuthorization();
         personal.MapGet(string.Empty, ListPersonalAsync);
         personal.MapPost(string.Empty, CreatePersonalAsync);
+
+        var team = api.MapGroup(TeamAreaPath).RequireAuthorization();
+        team.MapGet(string.Empty, ListTeamAsync);
+        team.MapPost(string.Empty, CreateTeamAsync);
 
         var folders = api.MapGroup(FoldersPath).RequireAuthorization();
         folders.MapGet("/{id:guid}", GetAsync).WithName(GetFolderRoute);
@@ -50,8 +56,36 @@ internal static class FolderEndpoints
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(areas);
-        var list = await service.ListAsync(areas.CurrentUsersPersonalArea(), cancellationToken);
-        return TypedResults.Ok(list.Select(FolderSummaryResponse.From).ToList());
+        return await ListAsync(service, areas.CurrentUsersPersonalArea(), cancellationToken);
+    }
+
+    public static async Task<Ok<List<FolderSummaryResponse>>> ListTeamAsync(
+        string team,
+        [FromServices] FolderService service,
+        [FromServices] IAreaDirectory areas,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+        ArgumentNullException.ThrowIfNull(areas);
+        return await ListAsync(service, await areas.TeamAreaAsync(team, cancellationToken), cancellationToken);
+    }
+
+    public static async Task<Results<CreatedAtRoute<FolderResponse>, ValidationProblem>> CreateTeamAsync(
+        string team,
+        [FromBody] FolderNameRequest request,
+        [FromServices] FolderService service,
+        [FromServices] IAreaDirectory areas,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(service);
+        ArgumentNullException.ThrowIfNull(areas);
+        if (!FolderName.TryCreate(request.Name, out var name, out var error))
+        {
+            return NameProblem(error);
+        }
+
+        return await CreateAsync(service, await areas.TeamAreaAsync(team, cancellationToken), name, cancellationToken);
     }
 
     public static async Task<Results<CreatedAtRoute<FolderResponse>, ValidationProblem>> CreatePersonalAsync(
@@ -68,8 +102,7 @@ internal static class FolderEndpoints
             return NameProblem(error);
         }
 
-        var view = await service.CreateAsync(areas.CurrentUsersPersonalArea(), name, cancellationToken);
-        return TypedResults.CreatedAtRoute(FolderResponse.From(view), GetFolderRoute, new { id = view.Id });
+        return await CreateAsync(service, areas.CurrentUsersPersonalArea(), name, cancellationToken);
     }
 
     public static async Task<Ok<FolderResponse>> GetAsync(Guid id, [FromServices] FolderService service, CancellationToken cancellationToken)
@@ -99,6 +132,22 @@ internal static class FolderEndpoints
         ArgumentNullException.ThrowIfNull(service);
         await service.DeleteAsync(id, cancellationToken);
         return TypedResults.NoContent();
+    }
+
+    private static async Task<Ok<List<FolderSummaryResponse>>> ListAsync(FolderService service, AreaReference area, CancellationToken cancellationToken)
+    {
+        var list = await service.ListAsync(area, cancellationToken);
+        return TypedResults.Ok(list.Select(FolderSummaryResponse.From).ToList());
+    }
+
+    private static async Task<Results<CreatedAtRoute<FolderResponse>, ValidationProblem>> CreateAsync(
+        FolderService service,
+        AreaReference area,
+        FolderName name,
+        CancellationToken cancellationToken)
+    {
+        var view = await service.CreateAsync(area, name, cancellationToken);
+        return TypedResults.CreatedAtRoute(FolderResponse.From(view), GetFolderRoute, new { id = view.Id });
     }
 
     private static ValidationProblem NameProblem(FieldError error)

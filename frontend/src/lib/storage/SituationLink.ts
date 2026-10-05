@@ -1,4 +1,5 @@
 import { get, writable, type Readable } from "svelte/store";
+import { areaOf } from "./Area";
 import type { SituationSummary } from "./SituationApi";
 import { TOP_LEVEL, type SaveTarget } from "./SaveTarget";
 
@@ -35,9 +36,9 @@ export class SituationLink {
 	}
 
 	/**
-	 * The place of the personal area the situation belongs to: a server
-	 * situation's folder (or top level), or where an unsaved one was started
-	 * (where its first save goes).
+	 * The place the situation belongs to — an area (personal or a team's) and
+	 * a folder of it or its top level: a server situation's, or where an
+	 * unsaved one was started (where its first save goes).
 	 */
 	place(): SaveTarget {
 		return SituationLink.placeOf(this.current());
@@ -45,7 +46,21 @@ export class SituationLink {
 
 	/** The place a link in `state` belongs to (see `place`). */
 	static placeOf(state: LinkState): SaveTarget {
-		return state.kind === "saved" ? { folderId: state.summary.folderId } : state.target;
+		return state.kind === "saved" ? { area: areaOf(state.summary.area), folderId: state.summary.folderId } : state.target;
+	}
+
+	/**
+	 * Whether the user may change the situation on the server: an unsaved one
+	 * always (it is saved where it was started), a server situation as the
+	 * server last said (`canWrite`; false for a team Reader, arc42 ch. 8.1).
+	 */
+	writable(): boolean {
+		return SituationLink.isWritable(this.current());
+	}
+
+	/** Whether a link in `state` may be changed (see `writable`). */
+	static isWritable(state: LinkState): boolean {
+		return state.kind === "unsaved" || state.summary.canWrite;
 	}
 
 	/** A new situation was created in the app, started at `target` (where its first save goes). */

@@ -20,7 +20,7 @@ vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
 const alice = { id: "u1", displayName: "Alice", isSystemAdministrator: false, preferredLanguage: null };
 
 function folderOf(id: string, name: string): Folder {
-	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z" };
+	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z", area: { kind: "personal", id: "u1" }, canWrite: true };
 }
 
 function summaryOfFolder(folder: Folder, situationCount = 0): FolderSummary {
@@ -178,7 +178,7 @@ describe("folder page", () => {
 		await settle();
 		await fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
+		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { area: { kind: "personal" }, folderId: "f1" } });
 		expect(goto).toHaveBeenCalledWith("/editor");
 	});
 
@@ -201,7 +201,7 @@ describe("folder page", () => {
 		await fireEvent.change(input);
 		await settle();
 
-		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f1" } });
+		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { area: { kind: "personal" }, folderId: "f1" } });
 		expect(goto).toHaveBeenCalledWith("/editor");
 	});
 
@@ -213,7 +213,7 @@ describe("folder page", () => {
 		await settle();
 		await fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
+		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { area: { kind: "personal" }, folderId: "f1" } });
 		expect(goto).toHaveBeenCalledWith("/editor");
 	});
 
@@ -236,7 +236,7 @@ describe("folder page", () => {
 		await fireEvent.change(input);
 		await settle();
 
-		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f1" } });
+		expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { area: { kind: "personal" }, folderId: "f1" } });
 		expect(goto).toHaveBeenCalledWith("/editor");
 	});
 
@@ -428,5 +428,78 @@ describe("folder page", () => {
 
 		expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Corners");
 		expect(situationsSection()).toHaveTextContent("This folder is empty.");
+	});
+
+	describe("a team's folder", () => {
+		const teamFolder = (canWrite: boolean): Folder => ({ ...folderOf("f1", "Set pieces"), area: { kind: "team", id: "t1" }, canWrite });
+
+		async function loggedInWithTeamFolder(canWrite: boolean) {
+			const folder = teamFolder(canWrite);
+			await loggedInWith([summaryOf({ id: "s1", title: "Powerplay", folderId: "f1", area: { kind: "team", id: "t1" }, canWrite })], folder);
+			server
+				.on("GET", "/api/teams/t1", jsonResponse(200, { id: "t1", code: "ABC123", name: "Lions", logoUrl: null, createdAt: "", role: canWrite ? "editor" : "reader", joinRequestPending: false, pendingJoinRequests: null }))
+				.on("GET", "/api/teams/t1/folders", jsonResponse(200, [summaryOfFolder(folder, 1), summaryOfFolder({ ...teamFolder(canWrite), id: "f2", name: "Breakouts" })]));
+		}
+
+		it("leads the breadcrumb through the team overview and the team's page", async () => {
+			await loggedInWithTeamFolder(true);
+			await renderPage();
+
+			const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
+			expect(within(breadcrumb).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+				["Start page", "/"],
+				["Teams", "/teams"],
+				["Lions", "/teams/ABC123"],
+			]);
+		});
+
+		it("offers an Editor everything, starts new situations in this team folder and moves only within the team", async () => {
+			await loggedInWithTeamFolder(true);
+			await renderPage();
+
+			expect(screen.getByRole("region", { name: "Folder" })).toBeInTheDocument();
+			await fireEvent.click(within(screen.getByRole("region", { name: "Start in this folder" })).getByRole("button", { name: "New situation" }));
+			await settle();
+			await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+			expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { area: { kind: "team", teamId: "t1" }, folderId: "f1" } });
+			expect(server.requestsTo("/api/personal-area/folders")).toHaveLength(0);
+			expect(server.requestsTo("/api/teams/t1/folders")).toHaveLength(1);
+		});
+
+		it("shows a Reader the situations to open, without changing anything", async () => {
+			await loggedInWithTeamFolder(false);
+			await renderPage();
+
+			expect(screen.queryByRole("region", { name: "Folder" })).toBeNull();
+			expect(screen.queryByRole("region", { name: "Start in this folder" })).toBeNull();
+			const situations = situationsSection();
+			expect(situations).toHaveTextContent("As a Reader you can open, play back and export the situations in this folder, but not change them.");
+			expect(within(situations).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual(["Powerplay"]);
+		});
+
+		it("lets a Reader open a situation after Discard changes?", async () => {
+			await loggedInWithTeamFolder(false);
+			const situation = new Situation({
+				id: "x",
+				title: "Powerplay",
+				description: "",
+				sport: "floorball",
+				fieldType: "full",
+				createdAt: "2026-01-01T00:00:00.000Z",
+				updatedAt: "2026-01-01T00:00:00.000Z",
+				frames: [new Frame("fr1", "", [])],
+			});
+			server.on("GET", "/api/situations/s1", jsonResponse(200, storedFrom(situation, { id: "s1", area: { kind: "team", id: "t1" }, canWrite: false })));
+			situationEditor.changeTitle("Dirty");
+			await renderPage();
+
+			await fireEvent.click(within(situationsSection()).getByRole("button", { name: "Powerplay" }));
+			await settle();
+			await fireEvent.click(within(screen.getByRole("alertdialog", { name: "Discard changes?" })).getByRole("button", { name: "Discard" }));
+			await settle();
+
+			expect(goto).toHaveBeenCalledWith("/editor?situation=s1");
+			expect(situationLink.writable()).toBe(false);
+		});
 	});
 });

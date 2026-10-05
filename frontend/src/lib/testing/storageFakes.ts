@@ -15,6 +15,8 @@ export function summaryOf(overrides: Partial<SituationSummary> = {}): SituationS
 		createdBy: { id: "u1", displayName: "Alice" },
 		updatedAt: "2026-10-04T08:00:00.000Z",
 		updatedBy: { id: "u1", displayName: "Alice" },
+		area: { kind: "personal", id: "u1" },
+		canWrite: true,
 		...overrides,
 	};
 }

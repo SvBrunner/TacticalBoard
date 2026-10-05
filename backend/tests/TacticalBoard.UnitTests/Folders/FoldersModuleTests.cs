@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TacticalBoard.Areas;
+using TacticalBoard.Areas.Contracts;
 using TacticalBoard.Folders;
 using TacticalBoard.Folders.Application;
 using TacticalBoard.Folders.Contracts;
@@ -11,6 +12,7 @@ using TacticalBoard.Infrastructure;
 using TacticalBoard.Infrastructure.Persistence;
 using TacticalBoard.SharedKernel.Persistence;
 using TacticalBoard.UnitTests.TestSupport;
+using TacticalBoard.Teams;
 using TacticalBoard.Users;
 
 namespace TacticalBoard.UnitTests.Folders;
@@ -25,6 +27,7 @@ public class FoldersModuleTests
         var services = new ServiceCollection().AddLogging().AddSingleton<IConfiguration>(configuration);
         services.AddSharedKernelServices().AddPersistence("TacticalBoard.Api");
         new UsersModule().RegisterServices(services, configuration);
+        new TeamsModule().RegisterServices(services, configuration);
         new AreasModule().RegisterServices(services, configuration);
         new FoldersModule().RegisterServices(services, configuration);
 
@@ -43,6 +46,7 @@ public class FoldersModuleTests
         Assert.IsType<EfFolderRepository>(scope.ServiceProvider.GetRequiredService<IFolderRepository>());
         Assert.IsType<FolderDirectory>(scope.ServiceProvider.GetRequiredService<IFolderDirectory>());
         Assert.IsType<EfUnitOfWork>(scope.ServiceProvider.GetRequiredService<IUnitOfWork>());
+        Assert.IsType<FolderAreaContentDeletion>(Assert.Single(scope.ServiceProvider.GetServices<IAreaContentDeletion>()));
     }
 
     [Fact]

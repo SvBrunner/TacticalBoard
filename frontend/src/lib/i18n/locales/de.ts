@@ -34,6 +34,7 @@ const messages: Messages = {
 		account: "Konto",
 		startPage: "Startseite",
 		backToFolder: "Zurück zum Ordner",
+		backToTeam: "Zurück zum Team",
 	},
 	account: {
 		logIn: "Anmelden",
@@ -73,6 +74,7 @@ const messages: Messages = {
 		exportGif: "Animiertes GIF",
 		toggleTheme: "Farbschema wechseln",
 		field: "Spielfeld",
+		readOnly: "Nur ansehen: Du bist Leser in diesem Team. Du kannst diese Situation abspielen und exportieren, aber nicht ändern.",
 	},
 	tools: {
 		panel: "Werkzeuge",
@@ -242,7 +244,7 @@ const messages: Messages = {
 		moveTo: "Verschieben nach",
 		topLevel: "Oberste Ebene (kein Ordner)",
 		current: "(aktuell)",
-		noFolders: "Es gibt noch keine Ordner. Erstelle zuerst einen auf der Startseite.",
+		noFolders: "Hier gibt es noch keine Ordner. Erstelle zuerst einen.",
 	},
 	folders: {
 		loading: "Ordner werden geladen…",
@@ -282,6 +284,19 @@ const messages: Messages = {
 		startHere: "In diesem Ordner beginnen",
 		situations: "Situationen",
 		empty: "Dieser Ordner ist leer. Beginne hier eine neue Situation, importiere eine oder verschiebe Situationen hierher.",
+		emptyReadOnly: "Dieser Ordner ist leer.",
+		readOnly: "Als Leser kannst du die Situationen in diesem Ordner öffnen, abspielen und exportieren, aber nicht ändern.",
+		teams: "Teams",
+	},
+	teamContent: {
+		startHere: "In diesem Team beginnen",
+		heading: "Situationen des Teams",
+		folders: "Ordner",
+		newFolder: "Neuer Ordner",
+		situations: "Situationen",
+		empty: "Dieses Team hat noch keine Situationen.",
+		noTopLevelSituations: "Keine Situationen außerhalb der Ordner.",
+		readOnly: "Als Leser kannst du die Situationen des Teams öffnen, abspielen und exportieren, aber nicht ändern.",
 	},
 	teams: {
 		heading: "Teams",
@@ -395,6 +410,10 @@ const messages: Messages = {
 		lastAdmin: (team) => `„${team}“ braucht mindestens einen Admin. Mache zuerst ein anderes Mitglied zum Admin.`,
 		lastAdminLeave: (team) => `Du bist der letzte Admin von „${team}“. Mache zuerst ein anderes Mitglied zum Admin oder lösche das Team.`,
 		memberGone: "Diese Person ist kein Mitglied des Teams mehr.",
+		demoteSelfQuestion: "Eigene Rolle ändern?",
+		demoteSelfMessage: (team, role) =>
+			`Du bist dann ${role} in „${team}“ und verlierst die Rechte deiner jetzigen Rolle sofort. Nur ein Admin kann sie dir zurückgeben.`,
+		demoteSelfConfirm: "Rolle ändern",
 	},
 	joinRequests: {
 		heading: "Beitrittsanfragen",
@@ -426,6 +445,8 @@ const messages: Messages = {
 		folderGone: "Der Ordner zum Speichern existiert nicht mehr (er wurde gelöscht). Exportiere die Situation, um sie zu behalten.",
 		failed: "Die Situation konnte nicht gespeichert werden.",
 		failedWith: (reason) => `Die Situation konnte nicht gespeichert werden: ${reason}`,
+		forbidden:
+			"Du darfst diese Situation nicht (mehr) ändern, z. B. weil sich deine Rolle im Team geändert hat. Exportiere sie, um deine Änderungen zu behalten.",
 	},
 	conflict: {
 		heading: "Von jemand anderem gespeichert",

@@ -138,6 +138,16 @@ internal sealed class InMemoryFolderRepository(FakeUnitOfWork? transactions = nu
         return Task.CompletedTask;
     }
 
+    public Task DeleteAllInAreaAsync(AreaReference area, DateTimeOffset deletedAt, CancellationToken cancellationToken)
+    {
+        foreach (var folder in Folders.Where(folder => folder.Area == area && !folder.IsDeleted))
+        {
+            folder.MarkDeleted(deletedAt);
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         foreach (var folder in Folders.Where(folder => !folder.IsDeleted))

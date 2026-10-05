@@ -9,12 +9,11 @@ level of the personal area).
 -->
 <script lang="ts">
 	import type { ConfirmationPrompt } from "$lib/dialogs/ConfirmationPrompt";
-	import { t } from "$lib/i18n";
 	import type { NewSituationInput } from "$lib/editor/SituationEditor";
 	import type { SituationWorkflow } from "$lib/editor/SituationWorkflow";
 	import { TOP_LEVEL, type SaveTarget } from "$lib/storage/SaveTarget";
-	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import NewSituationDialog from "./NewSituationDialog.svelte";
+	import PromptDialog from "./PromptDialog.svelte";
 
 	interface Props {
 		workflow: Pick<SituationWorkflow, "confirmDiscardIfDirty" | "createNew" | "importFile">;
@@ -27,7 +26,6 @@ level of the personal area).
 
 	let { workflow, prompt, target = TOP_LEVEL, onOpened }: Props = $props();
 
-	const question = $derived(prompt.pending);
 	let newSituationOpen = $state(false);
 
 	/** Asks to discard unsaved changes if needed, then shows the "New situation" form. */
@@ -51,14 +49,6 @@ level of the personal area).
 	}
 </script>
 
-<ConfirmDialog
-	open={$question !== null}
-	title={$question?.title($t) ?? ""}
-	message={$question?.message($t) ?? ""}
-	confirmLabel={$question?.confirmLabel($t) ?? $t.common.ok}
-	cancelLabel={$question?.cancelLabel?.($t)}
-	onConfirm={() => prompt.answer(true)}
-	onCancel={() => prompt.answer(false)}
-/>
+<PromptDialog {prompt} />
 
 <NewSituationDialog open={newSituationOpen} onCreate={create} onCancel={() => (newSituationOpen = false)} />

@@ -34,4 +34,18 @@ public interface ITeamAuthorization
 
     /// <summary>Whether the current user may delete the team: its Admins (system administrators from step 9 on).</summary>
     Task<bool> CanDeleteTeamAsync(Guid teamId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether the current user may see the team's folders and situations: every member (Admin,
+    /// Editor, Reader). Never system administrators as such — they have no access to content
+    /// (arc42 ch. 8.1); only a membership counts.
+    /// </summary>
+    Task<bool> CanReadContentAsync(Guid teamId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether the current user may create, change and delete the team's situations and folders
+    /// (and move situations between its folders): its Admins and Editors, never Readers or system
+    /// administrators as such (arc42 ch. 8.1).
+    /// </summary>
+    Task<bool> CanWriteContentAsync(Guid teamId, CancellationToken cancellationToken);
 }

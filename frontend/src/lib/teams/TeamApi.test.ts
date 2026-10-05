@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ApiClient, ApiError } from "$lib/api/ApiClient";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
-import { TEAM_ROLES, TeamApi, type Team } from "./TeamApi";
+import { canWriteContent, TEAM_ROLES, TeamApi, type Team } from "./TeamApi";
 
 const team: Team = {
 	id: "t1",
@@ -168,6 +168,7 @@ describe("TeamApi", () => {
 		expect(TeamApi.JOIN_REQUEST_PENDING).toBe("https://tacticalboard/errors/join-request-pending");
 		expect(TeamApi.ALREADY_MEMBER).toBe("https://tacticalboard/errors/already-team-member");
 		expect(TEAM_ROLES).toEqual(["admin", "editor", "reader"]);
+		expect([...TEAM_ROLES, null].map(canWriteContent)).toEqual([true, true, false, false]);
 		expect(TeamApi.DUPLICATE_NAME).toBe("https://tacticalboard/errors/duplicate-team-name");
 		expect(TeamApi.NOT_FOUND).toBe("https://tacticalboard/errors/team-not-found");
 		expect(TeamApi.MAX_NAME_LENGTH).toBe(64);

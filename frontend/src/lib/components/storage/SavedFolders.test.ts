@@ -43,8 +43,8 @@ describe("SavedFolders", () => {
 		const { container } = renderWith({
 			status: "loaded",
 			folders: [
-				{ id: "f1", name: "Breakouts", createdAt: "", updatedAt: "", situationCount: 0 },
-				{ id: "f/2", name: "Set pieces", createdAt: "", updatedAt: "", situationCount: 3 },
+				{ id: "f1", name: "Breakouts", createdAt: "", updatedAt: "", area: { kind: "personal", id: "u1" }, canWrite: true, situationCount: 0 },
+				{ id: "f/2", name: "Set pieces", createdAt: "", updatedAt: "", area: { kind: "personal", id: "u1" }, canWrite: true, situationCount: 3 },
 			],
 		});
 
@@ -60,8 +60,8 @@ describe("SavedFolders", () => {
 		renderWith({
 			status: "loaded",
 			folders: [
-				{ id: "f1", name: "Breakouts", createdAt: "", updatedAt: "", situationCount: 1 },
-				{ id: "f2", name: "Set pieces", createdAt: "", updatedAt: "", situationCount: 2 },
+				{ id: "f1", name: "Breakouts", createdAt: "", updatedAt: "", area: { kind: "personal", id: "u1" }, canWrite: true, situationCount: 1 },
+				{ id: "f2", name: "Set pieces", createdAt: "", updatedAt: "", area: { kind: "personal", id: "u1" }, canWrite: true, situationCount: 2 },
 			],
 		});
 

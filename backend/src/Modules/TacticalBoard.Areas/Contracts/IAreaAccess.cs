@@ -2,8 +2,9 @@ namespace TacticalBoard.Areas.Contracts;
 
 /// <summary>
 /// Answers whether the current user may read or write in an area (arc42 ch. 5.2, 8.1). Situations
-/// and Folders ask this instead of checking roles themselves. A personal area: only its owner.
-/// Unknown kinds (e.g. teams before their rule exists) are denied.
+/// and Folders ask this instead of checking roles themselves. A personal area: only its owner; a
+/// team area: every member reads, Admins and Editors write (ch. 8.1). System administrators have no
+/// access as such. A kind without a rule is denied.
 /// </summary>
 public interface IAreaAccess
 {

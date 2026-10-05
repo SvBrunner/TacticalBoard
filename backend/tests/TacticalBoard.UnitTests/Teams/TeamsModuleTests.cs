@@ -44,6 +44,7 @@ public class TeamsModuleTests
         Assert.NotNull(provider.GetRequiredService<TeamDeletionService>());
         Assert.Same(provider.GetRequiredService<TeamLocks>(), provider.GetRequiredService<TeamLocks>());
         Assert.IsType<TeamAuthorization>(provider.GetRequiredService<ITeamAuthorization>());
+        Assert.IsType<TeamDirectory>(provider.GetRequiredService<ITeamDirectory>());
         Assert.IsType<EfTeamRepository>(provider.GetRequiredService<ITeamRepository>());
         Assert.IsType<EfTeamMembershipRepository>(provider.GetRequiredService<ITeamMembershipRepository>());
         Assert.IsType<EfTeamJoinRequestRepository>(provider.GetRequiredService<ITeamJoinRequestRepository>());

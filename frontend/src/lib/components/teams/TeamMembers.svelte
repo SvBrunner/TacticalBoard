@@ -2,8 +2,10 @@
 @component
 A team's member list (arc42 ch. 8.17): every member sees it — display name
 (the current user marked "(you)", a deleted user as "Deleted user") and
-role. For the team's Admins each member has a role picker (Admin, Editor,
-Reader; their own included) and a Remove button (`onRemove` asks first).
+role, in the server's order (Admins, Editors, Readers, each by name). For
+the team's Admins each member has a role picker (Admin, Editor, Reader;
+their own included — a lower own role asks first, `onChangeRole`) and a
+Remove button (`onRemove` asks first).
 The outcome of a change is announced; a refusal (e.g. the team's last
 Admin) is shown as an alert.
 -->
@@ -20,7 +22,8 @@ Admin) is shown as an alert.
 		currentUserId: string;
 		/** Whether the user may change roles and remove members (the team's Admins). */
 		canManage: boolean;
-		onChangeRole: (member: TeamMember, role: TeamRole) => Promise<MembershipOutcome<TeamMember>>;
+		/** Changes the role (giving oneself a lower one asks first); `null` when the user cancelled. */
+		onChangeRole: (member: TeamMember, role: TeamRole) => Promise<MembershipOutcome<TeamMember> | null>;
 		/** Removes the member after asking; `null` when the user cancelled. */
 		onRemove: (member: TeamMember) => Promise<MembershipOutcome<TeamMember> | null>;
 		onRetry: () => void;

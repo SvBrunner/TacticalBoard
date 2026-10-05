@@ -18,6 +18,7 @@ namespace TacticalBoard.Situations.Endpoints;
 /// <list type="bullet">
 /// <item><c>GET /api/personal-area/situations</c>: the situations at the top level of the current user's personal area (metadata only).</item>
 /// <item><c>POST /api/personal-area/situations</c>: first save at that top level → <c>201</c>, <c>Location</c>, <c>ETag</c>.</item>
+/// <item><c>GET /api/teams/{team}/situations</c>, <c>POST /api/teams/{team}/situations</c>: the same for the top level of a team's area (<c>{team}</c>: its code or id; <c>404 team-not-found</c>; members read, Admins and Editors save, otherwise <c>403</c>).</item>
 /// <item><c>GET /api/folders/{folderId}/situations</c>: the situations in a folder (metadata only).</item>
 /// <item><c>POST /api/folders/{folderId}/situations</c>: first save in a folder → <c>201</c>, <c>Location</c>, <c>ETag</c>.</item>
 /// <item><c>GET /api/situations/{id}</c>: metadata + document, <c>ETag</c>.</item>
@@ -29,6 +30,7 @@ namespace TacticalBoard.Situations.Endpoints;
 internal static class SituationEndpoints
 {
     public const string PersonalAreaPath = "/personal-area/situations";
+    public const string TeamAreaPath = "/teams/{team}/situations";
     public const string SituationsPath = "/situations";
     public const string FolderSituationsPath = "/folders/{folderId:guid}/situations";
     public const string GetSituationRoute = "GetSituation";
@@ -44,6 +46,10 @@ internal static class SituationEndpoints
         var personal = api.MapGroup(PersonalAreaPath).RequireAuthorization();
         personal.MapGet(string.Empty, ListPersonalAsync);
         personal.MapPost(string.Empty, CreatePersonalAsync);
+
+        var team = api.MapGroup(TeamAreaPath).RequireAuthorization();
+        team.MapGet(string.Empty, ListTeamAsync);
+        team.MapPost(string.Empty, CreateTeamAsync);
 
         var inFolder = api.MapGroup(FolderSituationsPath).RequireAuthorization();
         inFolder.MapGet(string.Empty, ListInFolderAsync);
@@ -79,6 +85,37 @@ internal static class SituationEndpoints
         ArgumentNullException.ThrowIfNull(areas);
         ArgumentNullException.ThrowIfNull(response);
         var area = areas.CurrentUsersPersonalArea();
+        return await CreateAsync(
+            request,
+            (title, document, origin) => service.CreateAsync(area, title, document, origin, cancellationToken),
+            response);
+    }
+
+    public static async Task<Ok<List<SituationSummaryResponse>>> ListTeamAsync(
+        string team,
+        [FromServices] SituationService service,
+        [FromServices] IAreaDirectory areas,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+        ArgumentNullException.ThrowIfNull(areas);
+        var list = await service.ListAsync(await areas.TeamAreaAsync(team, cancellationToken), cancellationToken);
+        return TypedResults.Ok(list.Select(SituationSummaryResponse.From).ToList());
+    }
+
+    public static async Task<Results<CreatedAtRoute<SituationResponse>, ValidationProblem>> CreateTeamAsync(
+        string team,
+        [FromBody] CreateSituationRequest request,
+        [FromServices] SituationService service,
+        [FromServices] IAreaDirectory areas,
+        HttpResponse response,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(service);
+        ArgumentNullException.ThrowIfNull(areas);
+        ArgumentNullException.ThrowIfNull(response);
+        var area = await areas.TeamAreaAsync(team, cancellationToken);
         return await CreateAsync(
             request,
             (title, document, origin) => service.CreateAsync(area, title, document, origin, cancellationToken),

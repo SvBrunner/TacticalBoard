@@ -24,6 +24,12 @@ public class TeamPermissionsTests
     [InlineData(TeamRole.Reader, "DecideJoinRequests", false)]
     [InlineData(TeamRole.Reader, "Leave", true)]
     [InlineData(TeamRole.Reader, "DeleteTeam", false)]
+    [InlineData(TeamRole.Admin, "ReadContent", true)]
+    [InlineData(TeamRole.Admin, "WriteContent", true)]
+    [InlineData(TeamRole.Editor, "ReadContent", true)]
+    [InlineData(TeamRole.Editor, "WriteContent", true)]
+    [InlineData(TeamRole.Reader, "ReadContent", true)]
+    [InlineData(TeamRole.Reader, "WriteContent", false)]
     public void Follow_the_matrix(TeamRole role, string permission, bool allowed) =>
         Assert.Equal(allowed, TeamPermissions.Allows(role, Enum.Parse<TeamPermission>(permission)));
 

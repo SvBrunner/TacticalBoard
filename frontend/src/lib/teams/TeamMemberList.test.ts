@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiError } from "$lib/api/ApiClient";
+import type { ConfirmationRequest } from "$lib/dialogs/ConfirmationPrompt";
 import { inEnglishDeep } from "$lib/testing/i18n";
 import { TeamApi, type TeamMember, type TeamRole } from "./TeamApi";
 import { TeamMemberList } from "./TeamMemberList";
@@ -60,14 +61,66 @@ describe("TeamMemberList", () => {
 		expect(states).toEqual(["loaded", "loaded"]);
 	});
 
-	it("changes a role and shows it in the list", async () => {
+	it("changes a role, shows it in the list and loads the list again in the server's order", async () => {
 		await list.load();
+		api.members.mockClear();
+		api.members.mockResolvedValue([alice, { ...bob, role: "editor" }]);
 
 		const outcome = await list.changeRole(bob, "editor", "Lions");
 
 		expect(api.changeRole).toHaveBeenCalledWith("ABC123", "u2", "editor");
 		expect(outcome).toEqual({ ok: true, value: { ...bob, role: "editor" } });
 		expect(list.members()).toEqual([alice, { ...bob, role: "editor" }]);
+		expect(api.members).toHaveBeenCalledOnce();
+	});
+
+	it("knows which role changes are demotions", () => {
+		expect(TeamMemberList.isDemotion("admin", "editor")).toBe(true);
+		expect(TeamMemberList.isDemotion("admin", "reader")).toBe(true);
+		expect(TeamMemberList.isDemotion("editor", "reader")).toBe(true);
+		expect(TeamMemberList.isDemotion("reader", "editor")).toBe(false);
+		expect(TeamMemberList.isDemotion("editor", "admin")).toBe(false);
+		expect(TeamMemberList.isDemotion("admin", "admin")).toBe(false);
+	});
+
+	describe("giving oneself a lower role", () => {
+		let confirm: ReturnType<typeof vi.fn<(request: ConfirmationRequest) => Promise<boolean>>>;
+
+		beforeEach(async () => {
+			confirm = vi.fn(async () => true);
+			list = new TeamMemberList({ api, key: "ABC123", currentUserId: () => "u1", confirm, log });
+			await list.load();
+		});
+
+		it("asks first, naming the team and the new role, and changes it when confirmed", async () => {
+			const outcome = await list.changeRole(alice, "editor", "Lions");
+
+			expect(confirm).toHaveBeenCalledOnce();
+			expect(inEnglishDeep(confirm.mock.calls[0][0])).toEqual({
+				title: "Change your own role?",
+				message: "You'll be Editor in “Lions” and lose the rights of your current role at once. Only an Admin can give them back.",
+				confirmLabel: "Change role",
+				cancelLabel: "Cancel",
+			});
+			expect(outcome?.ok).toBe(true);
+			expect(api.changeRole).toHaveBeenCalledWith("ABC123", "u1", "editor");
+		});
+
+		it("changes nothing when cancelled", async () => {
+			confirm.mockResolvedValue(false);
+
+			await expect(list.changeRole(alice, "reader", "Lions")).resolves.toBeNull();
+
+			expect(api.changeRole).not.toHaveBeenCalled();
+		});
+
+		it("doesn't ask for other members or for a higher own role", async () => {
+			await list.changeRole(bob, "reader", "Lions");
+			await list.changeRole({ ...bob, userId: "u1", role: "reader" }, "admin", "Lions");
+
+			expect(confirm).not.toHaveBeenCalled();
+			expect(api.changeRole).toHaveBeenCalledTimes(2);
+		});
 	});
 
 	it("words the last-Admin rule with the team's name and loads the list again", async () => {

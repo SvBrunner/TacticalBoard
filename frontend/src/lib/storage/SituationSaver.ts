@@ -8,7 +8,8 @@ import type { Situation } from "$lib/model/Situation";
 import type { SituationFileDto } from "$lib/model/serialization/SituationFileDto";
 import { FolderApi } from "./FolderApi";
 import { SituationApi, type CreateOptions, type SituationOrigin, type SituationSummary, type StoredSituation } from "./SituationApi";
-import type { LinkState } from "./SituationLink";
+import { areaOf } from "./Area";
+import { SituationLink, type LinkState } from "./SituationLink";
 import type { SaveTarget } from "./SaveTarget";
 
 /** What the user chooses when someone else saved the situation in the meantime (arc42 ch. 8.15). */
@@ -73,11 +74,12 @@ export interface SituationSaverDependencies {
  * something to save when the situation was never saved on the server (also
  * without edits) or has changes since its last save; otherwise saving does
  * nothing (the Save button is disabled, arc42 ch. 8.7): the first save
- * creates it where it was started (a folder of the personal area or its top
- * level, `LinkState.target`), later saves update it on top of the revision
+ * creates it where it was started (a folder or the top level of the personal
+ * area or of a team, `LinkState.target`), later saves update it on top of the revision
  * they are based on. A save conflict asks the user: overwrite (save again on
  * top of the newest revision), save as a copy (a new situation in the same
- * folder or top level as the original), or cancel. Afterwards the editor shows the server's state (id,
+ * area and folder or top level as the original), or cancel. A refusal (`403`,
+ * e.g. the user became a team Reader meanwhile) is reported as such. Afterwards the editor shows the server's state (id,
  * title, timestamps) and is clean. Failures (e.g. a taken title) end up in
  * `state` as a message for the editor.
  */
@@ -104,9 +106,13 @@ export class SituationSaver {
 		}
 	}
 
-	/** Whether there is something to save: a never-saved situation, or changes since the last save. */
+	/**
+	 * Whether there is something to save: a never-saved situation, or changes
+	 * since the last save — never for a server situation the user may only
+	 * read (a team Reader; the editor shows it read-only).
+	 */
 	static hasChanges(link: LinkState, dirty: boolean): boolean {
-		return link.kind === "unsaved" || dirty;
+		return SituationLink.isWritable(link) && (link.kind === "unsaved" || dirty);
 	}
 
 	/** Whether there is something to save right now. */
@@ -162,7 +168,8 @@ export class SituationSaver {
 					return null;
 				}
 				if (choice === "copy") {
-					return this.deps.api.create(document, "copy", { folderId: link.summary.folderId });
+					// The copy goes where the original is: its area, its folder or top level.
+					return this.deps.api.create(document, "copy", { area: areaOf(link.summary.area), folderId: link.summary.folderId });
 				}
 				revision = SituationSaver.currentRevisionOf(error) ?? revision;
 			}
@@ -202,6 +209,10 @@ export class SituationSaver {
 		}
 		if (error.type === FolderApi.NOT_FOUND) {
 			return (m) => m.saving.folderGone;
+		}
+		if (error.status === 403) {
+			// E.g. demoted to Reader (or removed) in the team while editing (arc42 ch. 8.15).
+			return (m) => m.saving.forbidden;
 		}
 		const reason = ProblemText.describe(error, () => "");
 		return (m) => {

@@ -57,7 +57,8 @@ internal sealed class SituationService(
             .ThenBy(situation => situation.NormalizedTitle, StringComparer.Ordinal)
             .ToList();
         var names = await NamesAsync(found, cancellationToken);
-        return found.Select(situation => Summary(situation, names)).ToList();
+        var canWrite = await areas.CanWriteAsync(area, cancellationToken);
+        return found.Select(situation => Summary(situation, names, canWrite)).ToList();
     }
 
     /// <summary>The situation with its current document.</summary>
@@ -65,7 +66,7 @@ internal sealed class SituationService(
     public async Task<SituationView> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var situation = await FindReadableAsync(id, cancellationToken);
-        return await ViewAsync(situation, cancellationToken);
+        return await ViewAsync(situation, await areas.CanWriteAsync(situation.Area, cancellationToken), cancellationToken);
     }
 
     /// <summary>The first save of a situation: creates it at the top level of <paramref name="area"/> with revision 1.</summary>
@@ -138,7 +139,7 @@ internal sealed class SituationService(
             try
             {
                 await situations.AddAsync(situation, revision, cancellationToken);
-                return await ViewAsync(situation, revision, cancellationToken);
+                return await ViewAsync(situation, revision, canWrite: true, cancellationToken);
             }
             catch (TitleUniquenessViolationException) when (numbered && attempt < TitleAttempts)
             {
@@ -187,12 +188,13 @@ internal sealed class SituationService(
             throw new SituationSaveConflictException(exception.CurrentRevision);
         }
 
-        return await ViewAsync(situation, revision, cancellationToken);
+        return await ViewAsync(situation, revision, canWrite: true, cancellationToken);
     }
 
     /// <summary>
     /// Moves the situation into the folder <paramref name="folderId"/> of its area, or to the top
-    /// level (<c>null</c>). Not into another area (ch. 1). A metadata change (ch. 8.15): no new
+    /// level (<c>null</c>). Never into another area (ch. 1: copying between areas only through export
+    /// and import) — a folder of another area counts as not found. A metadata change (ch. 8.15): no new
     /// revision, the revision number (ETag) and "last changed" stay, and no <c>If-Match</c> is
     /// needed, because a move doesn't conflict with saving the content.
     /// </summary>
@@ -224,7 +226,7 @@ internal sealed class SituationService(
             cancellationToken);
 
         var names = await NamesAsync([situation], cancellationToken);
-        return Summary(situation, names);
+        return Summary(situation, names, canWrite: true);
     }
 
     /// <summary>Soft-deletes the situation (with its revisions); its title becomes free again.</summary>
@@ -307,17 +309,17 @@ internal sealed class SituationService(
         return now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMillisecond));
     }
 
-    private async Task<SituationView> ViewAsync(Situation situation, CancellationToken cancellationToken)
+    private async Task<SituationView> ViewAsync(Situation situation, bool canWrite, CancellationToken cancellationToken)
     {
         var revision = await situations.FindRevisionAsync(situation.Id, situation.CurrentRevision, cancellationToken)
             ?? throw new InvalidOperationException($"Situation {situation.Id} has no revision {situation.CurrentRevision}.");
-        return await ViewAsync(situation, revision, cancellationToken);
+        return await ViewAsync(situation, revision, canWrite, cancellationToken);
     }
 
-    private async Task<SituationView> ViewAsync(Situation situation, SituationRevision revision, CancellationToken cancellationToken)
+    private async Task<SituationView> ViewAsync(Situation situation, SituationRevision revision, bool canWrite, CancellationToken cancellationToken)
     {
         var names = await NamesAsync([situation], cancellationToken);
-        return new SituationView(Summary(situation, names), revision.Document);
+        return new SituationView(Summary(situation, names, canWrite), revision.Document);
     }
 
     private Task<IReadOnlyDictionary<Guid, string>> NamesAsync(IReadOnlyCollection<Situation> found, CancellationToken cancellationToken) =>
@@ -325,7 +327,7 @@ internal sealed class SituationService(
             found.SelectMany(situation => new[] { situation.CreatedBy, situation.UpdatedBy }).Distinct().ToList(),
             cancellationToken);
 
-    private static SituationSummaryView Summary(Situation situation, IReadOnlyDictionary<Guid, string> names) =>
+    private static SituationSummaryView Summary(Situation situation, IReadOnlyDictionary<Guid, string> names, bool canWrite) =>
         new(
             situation.Id,
             situation.Title,
@@ -336,7 +338,9 @@ internal sealed class SituationService(
             situation.CreatedAt,
             User(situation.CreatedBy, names),
             situation.UpdatedAt,
-            User(situation.UpdatedBy, names));
+            User(situation.UpdatedBy, names),
+            situation.Area,
+            canWrite);
 
     private static UserReferenceView User(Guid id, IReadOnlyDictionary<Guid, string> names) =>
         new(id, names.TryGetValue(id, out var name) ? name : null);

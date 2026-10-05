@@ -565,6 +565,76 @@ public class SituationServiceTests
     }
 
     [Fact]
+    public async Task Never_moves_between_a_team_and_a_personal_area_in_either_direction()
+    {
+        var team = new AreaReference(AreaKind.Team, Guid.NewGuid());
+        _areas.Readable.Add(team);
+        _areas.Writable.Add(team);
+        var personal = await CreateAsync("Mine");
+        var teams = await Service.CreateAsync(team, Title("Ours"), SituationDocuments.Valid("Ours"), SituationOrigin.New, Cancellation);
+        var teamFolder = Folders.Add(team);
+        var personalFolder = Folders.Add(AlicesArea);
+
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => Service.MoveAsync(personal.Summary.Id, teamFolder.Id, Cancellation));
+        await Assert.ThrowsAsync<FolderNotFoundException>(() => Service.MoveAsync(teams.Summary.Id, personalFolder.Id, Cancellation));
+        Assert.Empty(_repository.FolderSaves);
+        Assert.Equal((AlicesArea, team), (_repository.Situations[0].Area, _repository.Situations[1].Area));
+    }
+
+    [Fact]
+    public async Task Views_carry_the_area_and_whether_the_user_may_change_it()
+    {
+        var team = new AreaReference(AreaKind.Team, Guid.NewGuid());
+        _areas.Readable.Add(team);
+        _areas.Writable.Add(team);
+        var created = await Service.CreateAsync(team, Title("Ours"), SituationDocuments.Valid("Ours"), SituationOrigin.New, Cancellation);
+        Assert.Equal((team, true), (created.Summary.Area, created.Summary.CanWrite));
+
+        _areas.Writable.Remove(team);
+
+        Assert.False((await Service.GetAsync(created.Summary.Id, Cancellation)).Summary.CanWrite);
+        Assert.False(Assert.Single(await Service.ListAsync(team, Cancellation)).CanWrite);
+        await Assert.ThrowsAsync<SituationAccessDeniedException>(() => Service.UpdateAsync(created.Summary.Id, 1, Title("Ours"), SituationDocuments.Valid("Ours"), Cancellation));
+        await Assert.ThrowsAsync<SituationAccessDeniedException>(() => Service.MoveAsync(created.Summary.Id, null, Cancellation));
+        await Assert.ThrowsAsync<SituationAccessDeniedException>(() => Service.DeleteAsync(created.Summary.Id, Cancellation));
+        await Assert.ThrowsAsync<SituationAccessDeniedException>(() => Service.CreateAsync(team, Title("New"), SituationDocuments.Valid("New"), SituationOrigin.New, Cancellation));
+    }
+
+    [Fact]
+    public async Task Titles_and_default_titles_are_counted_per_team_area_too()
+    {
+        var team = new AreaReference(AreaKind.Team, Guid.NewGuid());
+        _areas.Readable.Add(team);
+        _areas.Writable.Add(team);
+        await CreateAsync("Untitled Situation");
+
+        var first = await Service.CreateAsync(team, Title("Untitled Situation"), SituationDocuments.Valid("Untitled Situation"), SituationOrigin.New, Cancellation);
+        var second = await Service.CreateAsync(team, Title("Untitled Situation"), SituationDocuments.Valid("Untitled Situation"), SituationOrigin.New, Cancellation);
+
+        Assert.Equal(("Untitled Situation", "Untitled Situation (2)"), (first.Summary.Title, second.Summary.Title));
+        await Assert.ThrowsAsync<DuplicateSituationTitleException>(() => Service.CreateAsync(team, Title("untitled situation (2)"), SituationDocuments.Valid("x"), SituationOrigin.New, Cancellation));
+    }
+
+    [Fact]
+    public async Task Deleting_an_areas_content_soft_deletes_only_its_situations()
+    {
+        var team = new AreaReference(AreaKind.Team, Guid.NewGuid());
+        _areas.Readable.Add(team);
+        _areas.Writable.Add(team);
+        var mine = await CreateAsync("Mine");
+        await Service.CreateAsync(team, Title("A"), SituationDocuments.Valid("A"), SituationOrigin.New, Cancellation);
+        await Service.CreateAsync(team, Title("B"), SituationDocuments.Valid("B"), SituationOrigin.New, Cancellation);
+        var at = _clock.UtcNow.AddHours(1);
+
+        await new SituationAreaContentDeletion(_repository).DeleteContentAsync(team, at, Cancellation);
+
+        Assert.All(_repository.Situations.Where(situation => situation.Area == team), situation => Assert.Equal(at, situation.DeletedAt));
+        Assert.False(_repository.Situations.Single(situation => situation.Id == mine.Summary.Id).IsDeleted);
+        Assert.Empty(await Service.ListAsync(team, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => new SituationAreaContentDeletion(_repository).DeleteContentAsync(null!, at, Cancellation));
+    }
+
+    [Fact]
     public async Task Moving_needs_write_access_and_an_existing_situation()
     {
         var folder = Folders.Add(AlicesArea);

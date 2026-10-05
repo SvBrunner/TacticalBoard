@@ -2,10 +2,19 @@ import { inEnglishDeep } from "$lib/testing/i18n";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
 import { FolderApi, type FolderSummary } from "./FolderApi";
+import { PERSONAL_AREA, teamArea, type Area } from "./Area";
 import { FolderList } from "./FolderList";
 
 function folderOf(id: string, name: string, situationCount = 0): FolderSummary {
-	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z", situationCount };
+	return {
+		id,
+		name,
+		createdAt: "2026-10-04T08:00:00Z",
+		updatedAt: "2026-10-04T08:00:00Z",
+		area: { kind: "personal", id: "u1" },
+		canWrite: true,
+		situationCount,
+	};
 }
 
 describe("FolderList", () => {
@@ -15,8 +24,10 @@ describe("FolderList", () => {
 	let onSessionEnded: ReturnType<typeof vi.fn<() => void>>;
 	let log: { notify: ReturnType<typeof vi.fn<(message: string, level?: string) => void>> };
 	let list: FolderList;
+	let areas: Area[];
 
 	beforeEach(() => {
+		areas = [];
 		folders = [folderOf("f1", "Breakouts", 2)];
 		listError = null;
 		createError = null;
@@ -24,20 +35,51 @@ describe("FolderList", () => {
 		log = { notify: vi.fn() };
 		list = new FolderList({
 			api: {
-				listPersonal: async () => {
+				list: async (area) => {
+					areas.push(area);
 					if (listError) throw listError;
 					return folders;
 				},
-				createPersonal: async (name) => {
+				create: async (area, name) => {
+					areas.push(area);
 					if (createError) throw createError;
 					const created = folderOf(`f${folders.length + 1}`, name);
 					folders = [...folders, created];
 					return created;
 				},
 			},
+			area: () => PERSONAL_AREA,
 			onSessionEnded,
 			log,
 		});
+	});
+
+	it("lists and creates in its area, and waits while the area isn't known", async () => {
+		let area: Area | null = null;
+		const calls: string[] = [];
+		const teamList = new FolderList({
+			api: {
+				list: async (where) => {
+					calls.push(`list ${JSON.stringify(where)}`);
+					return [];
+				},
+				create: async (where, name) => {
+					calls.push(`create ${JSON.stringify(where)} ${name}`);
+					return folderOf("f9", name);
+				},
+			},
+			area: () => area,
+		});
+
+		await teamList.load();
+		expect(teamList.current().status).toBe("idle");
+		expect((await teamList.create("A")).ok).toBe(false);
+		expect(calls).toEqual([]);
+
+		area = teamArea("t1");
+		await teamList.load();
+		await teamList.create("A");
+		expect(calls).toEqual(['list {"kind":"team","teamId":"t1"}', 'create {"kind":"team","teamId":"t1"} A', 'list {"kind":"team","teamId":"t1"}']);
 	});
 
 	it("is idle until loaded, then holds the server's folders", async () => {
@@ -50,6 +92,7 @@ describe("FolderList", () => {
 
 		expect(inEnglishDeep(list.current())).toEqual({ status: "loaded", folders });
 		expect(list.folders()).toEqual(folders);
+		expect(areas).toEqual([PERSONAL_AREA]);
 	});
 
 	it.each<[string, Error, string]>([
@@ -108,7 +151,8 @@ describe("FolderList", () => {
 
 	it("works without the optional callbacks", async () => {
 		const quiet = new FolderList({
-			api: { listPersonal: async () => Promise.reject(new ApiError(401, {})), createPersonal: async () => Promise.reject(new ApiError(401, {})) },
+			area: () => PERSONAL_AREA,
+			api: { list: async () => Promise.reject(new ApiError(401, {})), create: async () => Promise.reject(new ApiError(401, {})) },
 		});
 
 		await quiet.load();

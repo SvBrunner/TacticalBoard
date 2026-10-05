@@ -118,6 +118,12 @@ internal sealed class EfSituationRepository(TacticalBoardDbContext context) : IS
         return updated == 1;
     }
 
+    public async Task DeleteAllInAreaAsync(AreaReference area, DateTimeOffset deletedAt, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        await InArea(Situations, area).ExecuteUpdateAsync(setters => setters.SetProperty(situation => situation.DeletedAt, deletedAt), cancellationToken);
+    }
+
     public async Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         try

@@ -1,5 +1,6 @@
 using TacticalBoard.Areas.Application;
 using TacticalBoard.Areas.Contracts;
+using TacticalBoard.Teams.Contracts;
 using TacticalBoard.UnitTests.TestSupport;
 
 namespace TacticalBoard.UnitTests.Areas;
@@ -74,6 +75,46 @@ public class AreaAccessTests
     {
         Assert.Equal(AreaReference.Personal(Alice), For(Alice).CurrentUsersPersonalArea());
         Assert.Throws<InvalidOperationException>(() => For(null).CurrentUsersPersonalArea());
+    }
+
+    [Theory]
+    [InlineData(TeamRole.Admin, true, true)]
+    [InlineData(TeamRole.Editor, true, true)]
+    [InlineData(TeamRole.Reader, true, false)]
+    public async Task A_team_area_follows_the_members_role(TeamRole role, bool read, bool write)
+    {
+        var teamId = Guid.NewGuid();
+        var teams = new FakeTeamAuthorization { Roles = { [teamId] = role } };
+        var access = new AreaAccess(new FakeCurrentUser(Alice), [new PersonalAreaAccessRule(new FakeCurrentUser(Alice)), new TeamAreaAccessRule(teams)]);
+        var area = new AreaReference(AreaKind.Team, teamId);
+
+        Assert.Equal((read, write), (await access.CanReadAsync(area, Cancellation), await access.CanWriteAsync(area, Cancellation)));
+        Assert.Equal([("read", teamId), ("write", teamId)], teams.Questions);
+    }
+
+    [Fact]
+    public async Task Non_members_and_system_administrators_without_membership_have_no_access_to_a_team_area()
+    {
+        var admin = new FakeCurrentUser(Bob) { IsSystemAdministrator = true };
+        var access = new AreaAccess(admin, [new TeamAreaAccessRule(new FakeTeamAuthorization())]);
+        var area = new AreaReference(AreaKind.Team, Guid.NewGuid());
+
+        Assert.False(await access.CanReadAsync(area, Cancellation));
+        Assert.False(await access.CanWriteAsync(area, Cancellation));
+    }
+
+    [Fact]
+    public async Task The_team_rule_never_grants_another_kind_and_asks_nothing_for_it()
+    {
+        var teams = new FakeTeamAuthorization { Roles = { [Alice] = TeamRole.Admin } };
+        var rule = new TeamAreaAccessRule(teams);
+
+        Assert.Equal(AreaKind.Team, rule.Kind);
+        Assert.False(await rule.CanReadAsync(AreaReference.Personal(Alice), Cancellation));
+        Assert.False(await rule.CanWriteAsync(AreaReference.Personal(Alice), Cancellation));
+        Assert.Empty(teams.Questions);
+        await Assert.ThrowsAsync<ArgumentNullException>(() => rule.CanReadAsync(null!, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => rule.CanWriteAsync(null!, Cancellation));
     }
 
     [Fact]

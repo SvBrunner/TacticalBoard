@@ -18,6 +18,26 @@ internal sealed class FakeAreaAccess(Guid currentUser) : IAreaAccess
     public Task<bool> CanWriteAsync(AreaReference area, CancellationToken cancellationToken) => Task.FromResult(Writable.Contains(area));
 }
 
+/// <summary>An <see cref="IAreaDirectory"/> on a dictionary of team keys (code or id) to team ids.</summary>
+internal sealed class FakeAreaDirectory : IAreaDirectory
+{
+    public Dictionary<string, Guid> Teams { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Adds a team known by <paramref name="code"/> and by its id; returns its area.</summary>
+    public AreaReference AddTeam(string code, Guid? id = null)
+    {
+        var teamId = id ?? Guid.NewGuid();
+        Teams[code] = teamId;
+        Teams[teamId.ToString()] = teamId;
+        return new AreaReference(AreaKind.Team, teamId);
+    }
+
+    public Task<AreaReference> TeamAreaAsync(string? teamKey, CancellationToken cancellationToken) =>
+        teamKey is not null && Teams.TryGetValue(teamKey, out var id)
+            ? Task.FromResult(new AreaReference(AreaKind.Team, id))
+            : throw new TeamAreaNotFoundException(teamKey);
+}
+
 /// <summary>An <see cref="IActorDirectory"/> on a dictionary.</summary>
 internal sealed class FakeActorDirectory(Guid currentUser) : IActorDirectory
 {
@@ -78,6 +98,16 @@ internal sealed class InMemorySituationRepository : ISituationRepository
             .GroupBy(situation => situation.FolderId!.Value)
             .ToDictionary(group => group.Key, group => group.Count());
         return Task.FromResult(counts);
+    }
+
+    public Task DeleteAllInAreaAsync(AreaReference area, DateTimeOffset deletedAt, CancellationToken cancellationToken)
+    {
+        foreach (var situation in Situations.Where(situation => situation.Area == area && !situation.IsDeleted))
+        {
+            situation.MarkDeleted(deletedAt);
+        }
+
+        return Task.CompletedTask;
     }
 
     public Task<bool> SaveFolderAsync(Situation situation, CancellationToken cancellationToken)

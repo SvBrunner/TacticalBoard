@@ -32,6 +32,8 @@ export const messages = {
 		startPage: "Start page",
 		/** The badge's name in the editor while the edited situation lies in a folder (it leads to the folder's page). */
 		backToFolder: "Back to the folder",
+		/** The badge's name in the editor while the edited situation lies at the top level of a team (it leads to the team's page). */
+		backToTeam: "Back to the team",
 	},
 	account: {
 		logIn: "Log in",
@@ -72,6 +74,8 @@ export const messages = {
 		exportGif: "Animated GIF",
 		toggleTheme: "Toggle theme",
 		field: "Field",
+		/** Shown in the editor for a team situation the user may only read (a team Reader, arc42 ch. 8.1). */
+		readOnly: "View only: you're a Reader in this team. You can play back and export this situation, but not change it.",
 	},
 	tools: {
 		panel: "Tools",
@@ -242,7 +246,7 @@ export const messages = {
 		moveTo: "Move to",
 		topLevel: "Top level (no folder)",
 		current: "(current)",
-		noFolders: "There are no folders yet. Create one on the start page first.",
+		noFolders: "There are no folders here yet. Create one first.",
 	},
 	folders: {
 		loading: "Loading folders…",
@@ -283,6 +287,21 @@ export const messages = {
 		startHere: "Start in this folder",
 		situations: "Situations",
 		empty: "This folder is empty. Start a new situation or import one here, or move situations into it.",
+		/** A team folder's page for a team Reader. */
+		emptyReadOnly: "This folder is empty.",
+		readOnly: "As a Reader you can open, play back and export the situations in this folder, but not change them.",
+		/** The breadcrumb's link to the team overview, for a team's folder. */
+		teams: "Teams",
+	},
+	teamContent: {
+		startHere: "Start in this team",
+		heading: "Situations of the team",
+		folders: "Folders",
+		newFolder: "New folder",
+		situations: "Situations",
+		empty: "This team has no situations yet.",
+		noTopLevelSituations: "No situations outside the folders.",
+		readOnly: "As a Reader you can open, play back and export the team's situations, but not change them.",
 	},
 	teams: {
 		heading: "Teams",
@@ -403,6 +422,11 @@ export const messages = {
 		lastAdmin: (team: string) => `“${team}” needs at least one Admin. Make another member Admin first.`,
 		lastAdminLeave: (team: string) => `You're the last Admin of “${team}”. Make another member Admin first, or delete the team.`,
 		memberGone: "This person is no longer a member of the team.",
+		/** Asked before Admins give themselves a lower role (confirmed product decision). */
+		demoteSelfQuestion: "Change your own role?",
+		demoteSelfMessage: (team: string, role: string) =>
+			`You'll be ${role} in “${team}” and lose the rights of your current role at once. Only an Admin can give them back.`,
+		demoteSelfConfirm: "Change role",
 	},
 	joinRequests: {
 		heading: "Join requests",
@@ -435,6 +459,8 @@ export const messages = {
 		folderGone: "The folder to save in no longer exists (it was deleted). Export the situation to keep it.",
 		failed: "The situation couldn't be saved.",
 		failedWith: (reason: string) => `The situation couldn't be saved: ${reason}`,
+		/** A 403: e.g. the user became a Reader (or was removed) in the team while editing. */
+		forbidden: "You may not change this situation (any more), e.g. because your role in the team changed. Export it to keep your changes.",
 	},
 	conflict: {
 		heading: "Saved by someone else",

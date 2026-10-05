@@ -1,19 +1,23 @@
 <!--
 @component
-The content of a folder's page (`/folders/<id>`, deep-linkable; arc42 ch. 8.8, 8.15): the
-shared navbar with the folder's name as title, a breadcrumb back to the start
-page, the folder's actions (Rename, Delete — refused with the reason while
+The content of a folder's page (`/folders/<id>`, deep-linkable; arc42 ch. 8.8, 8.15) — a
+folder of the personal area or of a team: the shared navbar with the folder's
+name as title, a breadcrumb back to the start page (for a team's folder via
+the team overview and the team's page), the folder's actions (Rename, Delete — refused with the reason while
 it contains situations), "New situation" and "Import" whose first save goes
 into this folder, and the folder's situations (open, move, delete). While
 the folder is empty, New situation and Import are offered in the empty
 state of the situations instead of their own section (confirmed product
-decision), so they appear once. Without
+decision), so they appear once. A team Reader (the folder's `canWrite` is
+false, arc42 ch. 8.1) only sees and opens the situations: no Rename, Delete,
+Start, Move or Delete. Without
 login or server it explains why it can't show the folder; a folder that
 doesn't exist (any more) says so.
 -->
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { authSession } from "$lib/auth/AuthSession";
+	import PromptDialog from "$lib/components/dialogs/PromptDialog.svelte";
 	import AppNavbar from "$lib/components/navigation/AppNavbar.svelte";
 	import FolderNameDialog from "$lib/components/storage/FolderNameDialog.svelte";
 	import MoveSituationDialog from "$lib/components/storage/MoveSituationDialog.svelte";
@@ -29,12 +33,15 @@ doesn't exist (any more) says so.
 	import { FolderRoute } from "$lib/storage/FolderRoute";
 	import { SavedSituationActions } from "$lib/storage/SavedSituationActions";
 	import { SavedSituationList } from "$lib/storage/SavedSituationList";
+	import { PERSONAL_AREA } from "$lib/storage/Area";
 	import { inFolder } from "$lib/storage/SaveTarget";
 	import type { SituationSummary } from "$lib/storage/SituationApi";
 	import { situationLink } from "$lib/storage/SituationLink";
 	import { folderApi, situationApi, situationOpener } from "$lib/storage/situationStorage";
 	import { t } from "$lib/i18n";
 	import type { Translatable } from "$lib/i18n/Messages";
+	import { TeamRoute } from "$lib/teams/TeamRoute";
+	import { teamApi } from "$lib/teams/teamStorage";
 
 	interface Props {
 		/** The folder; fixed for the component's life (the route re-creates it for another folder). */
@@ -45,7 +52,6 @@ doesn't exist (any more) says so.
 
 	// svelte-ignore state_referenced_locally
 	const folderId = props.folderId;
-	const target = inFolder(folderId);
 	const prompt = new ConfirmationPrompt();
 	const workflow = new SituationWorkflow({
 		editor: situationEditor,
@@ -58,17 +64,20 @@ doesn't exist (any more) says so.
 
 	const sessionState = authSession.state;
 	const refreshSession = () => void authSession.refresh();
-	const folder = new CurrentFolder({ api: folderApi, id: folderId, onSessionEnded: refreshSession, log: notifications });
+	const folder = new CurrentFolder({ api: folderApi, id: folderId, teams: teamApi, onSessionEnded: refreshSession, log: notifications });
 	const folderState = folder.state;
+	const folderTeam = folder.team;
 	const savedList = new SavedSituationList({
 		api: situationApi,
-		place: target,
+		// Listing a folder needs only its id; the area comes from the server.
+		place: inFolder(folderId),
 		link: situationLink,
 		onSessionEnded: refreshSession,
 		log: notifications,
 	});
 	const savedState = savedList.state;
-	const folders = new FolderList({ api: folderApi, onSessionEnded: refreshSession, log: notifications });
+	// The move targets: the folders of this folder's area, known once it is loaded.
+	const folders = new FolderList({ api: folderApi, area: () => folder.area(), onSessionEnded: refreshSession, log: notifications });
 	const folderListState = folders.state;
 	const actions = new SavedSituationActions({
 		list: savedList,
@@ -83,15 +92,18 @@ doesn't exist (any more) says so.
 	let folderError: Translatable | null = $state(null);
 	let moving: SituationSummary | null = $state(null);
 	const name = $derived($folderState.status === "loaded" ? $folderState.folder.name : null);
+	/** Whether the user may change the folder and its situations (false for a team Reader). */
+	const canWrite = $derived($folderState.status === "loaded" && $folderState.folder.canWrite);
+	/** Where New situation and Import in this folder save: this folder, in its area. */
+	const target = $derived(inFolder(folderId, ($folderState.status === "loaded" && folder.area()) || PERSONAL_AREA));
 	const otherPlaces = $derived($folderListState.status === "loaded" ? $folderListState.folders : []);
 	/** The folder has no situations (known only once they are loaded): New situation and Import move into the empty state. */
 	const empty = $derived($savedState.status === "loaded" && $savedState.situations.length === 0);
 
 	$effect(() => {
 		if ($sessionState.status === "authenticated") {
-			void folder.load();
+			void folder.load().then(() => folders.load());
 			void savedList.load();
-			void folders.load();
 		}
 	});
 
@@ -141,6 +153,10 @@ doesn't exist (any more) says so.
 	<nav aria-label={$t.folderPage.breadcrumb} class="breadcrumb">
 		<ol>
 			<li><a href="/">{$t.folderPage.startPage}</a></li>
+			{#if $folderTeam}
+				<li><a href={TeamRoute.OVERVIEW}>{$t.folderPage.teams}</a></li>
+				<li><a href={TeamRoute.of($folderTeam)}>{$folderTeam.name}</a></li>
+			{/if}
 			<li><span aria-current="page">{name ?? $t.folderPage.title}</span></li>
 		</ol>
 	</nav>
@@ -159,6 +175,25 @@ doesn't exist (any more) says so.
 				<p class="hint">{$folderState.message($t)}</p>
 				<button type="button" class="tool" onclick={() => void folder.load()}>{$t.common.tryAgain}</button>
 			</div>
+		{:else if !canWrite}
+			<section class="panel" aria-labelledby="situations-heading">
+				<h2 id="situations-heading" class="panel-title">{$t.folderPage.situations}</h2>
+				<p class="hint">{$t.folderPage.readOnly}</p>
+				{#if $actionState.error}
+					<p class="error" role="alert">{$actionState.error($t)}</p>
+				{/if}
+				<SavedSituations
+					session={$sessionState}
+					list={$savedState}
+					busy={$actionState.opening}
+					canChange={false}
+					emptyMessage={$t.folderPage.emptyReadOnly}
+					onOpen={(situation) => void actions.open(situation)}
+					onDelete={() => {}}
+					onMove={() => {}}
+					onRetry={() => void savedList.load()}
+				/>
+			</section>
 		{:else}
 			<section class="panel" aria-labelledby="folder-heading">
 				<h2 id="folder-heading" class="panel-title">{$t.folderPage.heading}</h2>
@@ -227,6 +262,11 @@ doesn't exist (any more) says so.
 />
 
 <MoveSituationDialog situation={moving} folders={otherPlaces} onMove={move} onCancel={() => (moving = null)} />
+
+{#if $folderState.status === "loaded" && !canWrite}
+	<!-- Without StartActions (which shows them otherwise): "Discard changes?" before opening a situation. -->
+	<PromptDialog {prompt} />
+{/if}
 
 <style>
 	.folder-page {

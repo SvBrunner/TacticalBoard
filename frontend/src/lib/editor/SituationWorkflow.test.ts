@@ -27,6 +27,8 @@ const savedSummary: SituationSummary = {
 	createdBy: { id: "u1", displayName: "Alice" },
 	updatedAt: "2026-10-04T08:00:00Z",
 	updatedBy: { id: "u1", displayName: "Alice" },
+	area: { kind: "personal", id: "u1" },
+	canWrite: true,
 };
 
 function importedSituation(): Situation {
@@ -148,7 +150,7 @@ describe("SituationWorkflow", () => {
 		it("remembers the folder it was started in, for its first save", () => {
 			workflow.createNew({ title: "Box play", fieldType: "half" }, inFolder("f1"));
 
-			expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: inFolder("f1") });
 		});
 	});
 
@@ -172,7 +174,7 @@ describe("SituationWorkflow", () => {
 		it("remembers the folder an import was started in, for its first save", async () => {
 			await workflow.importFile(file, inFolder("f1"));
 
-			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f1" } });
+			expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: inFolder("f1") });
 		});
 
 		it("keeps the link when the import is cancelled", async () => {

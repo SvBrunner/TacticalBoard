@@ -25,7 +25,10 @@ A new or imported situation that isn't saved on the server (always in local mode
 
 ## Saving on the server
 
-- **Personal area only.** Teams exist, but saving situations in a team comes with roadmap Phase 2 step 8.
+- **Team situations are listed only on their team's page** (and team folders' pages), not on the start page; there is no overview of all situations a user can reach and no search.
+- **Readers can't change a team situation, not even locally**: the editor opens it read-only (playback and export work). To try something out, a Reader exports it and imports it into their personal area (open question in the roadmap).
+- **Role changes aren't live in an open editor or page**: a member demoted to Reader while editing learns it when saving ("You may not change this situation (any more)…") and can export; a promoted Reader has to open the situation (or reload the team's page) again to edit. The server checks the role on every request.
+- **A first save racing a team's deletion** can leave a situation (or folder) behind in the deleted team's area: the creation checks the role before the team's deletion commits and isn't serialized with it (the team row isn't locked for content writes). Such content is unreachable (the team is gone) and is only kept in the database, like the team itself.
 - **The lists are not live.** The start page's folders (with their situation counts) and situations and a folder's page are loaded when the page is shown (and after a delete, move or new folder); changes made in another tab or by another session appear after navigating to the page again. A folder deleted or renamed elsewhere still shows its old state until then (an action on it then says that it no longer exists).
 - **Deleting is only possible from the lists** (the start page or a folder's page), not in the editor. Deleting the situation that is still open in the editor (e.g. after the browser's Back button) is not noticed there; its next save fails with "This situation no longer exists on the server" and it can only be exported.
 - **Every save is a full revision.** Even a save without changes writes a new revision; nothing is pruned (see arc42 ch. 11).
@@ -39,7 +42,7 @@ A new or imported situation that isn't saved on the server (always in local mode
 
 ## Folders
 
-- **Flat, personal area only.** No subfolders (by design, arc42 ch. 1); team folders come with teams.
+- **Flat.** No subfolders (by design, arc42 ch. 1), in the personal area and in teams alike.
 - **Moving works with the Move button and a picker**, not by drag and drop. It moves one situation at a time, only within the area (copying to another area works only through export and import).
 - **Renaming and deleting a folder happen on its page**, not in the start page's list. A folder's page lists only its situations; the start page lists only the top level, so there is no view of all situations at once and no search.
 - **The editor doesn't show the folder's name** of the edited situation; only the badge ("Back to the folder") tells that it lies in a folder. Its **New** and **Load** save into that folder (the folder of the last known state: a move made in another tab is noticed only after reopening the situation). If that folder was deleted meanwhile, the first save fails with "The folder to save in no longer exists" and the situation can only be exported. In local mode they always start at the top level, and the badge leads to the start page.
@@ -53,10 +56,10 @@ A new or imported situation that isn't saved on the server (always in local mode
 
 - **No notifications.** A join request, its acceptance or rejection, a role change or a removal is not announced anywhere else: the requester sees the outcome only on the team's page (a rejected request just isn't pending any more — "Ask to join" is offered again, without saying that it was rejected), and Admins see waiting requests only on the team's page and as a count on the start page. Nothing is sent by e-mail.
 - **No history in the UI.** Decided join requests are kept in the database but not shown anywhere; there is no list of past members and no "who changed which role".
-- **Changing a role takes effect at once**, without a confirmation — also when Admins demote themselves (they then lose the Admin sections right away; another Admin has to promote them again). Removing a member, leaving and deleting the team ask first.
-- **Deleting a team can't be undone in the app** (soft delete in the database, no restore UI). Its folders and situations will be deleted with it once teams have them (roadmap step 8).
+- **Changing someone else's role takes effect at once**, without a confirmation; only giving **oneself** a lower role asks first (by design). After demoting themselves, Admins lose the Admin sections right away; another Admin has to promote them again. Removing a member, leaving and deleting the team ask first.
+- **Deleting a team can't be undone in the app** (soft delete in the database, no restore UI). Its folders and situations are deleted with it (also folders that still contain situations).
 - **The member list is not live**: changes by other Admins appear after reloading the team's page; an action on a member who changed meanwhile reloads the list and says why it failed.
-- **Members are sorted by display name** with a culture-independent, case-insensitive comparison; display names are not unique, so two members can look the same.
+- **Members are sorted by role** (Admins, Editors, Readers), then by display name with a culture-independent, case-insensitive comparison; display names are not unique, so two members can look the same.
 - **A non-member doesn't get the team's code or link** (by design); they can only open the team through a link someone shares, by its id (from the overview), or after joining. A non-member who opened the team's link knows the code from the address bar anyway.
 - **Team names**: at most 64 characters, no line breaks or other control characters; a taken name is refused. Renaming has no conflict check; the last rename wins. A team's code never changes, and the code of a deleted team is never given to another team.
 - **The overview is searched by substring** of the name or the code, ignoring case (e.g. "ions" finds "Lions"); there is no fuzzy matching, no ranking, and no search for accents ("Zurich" doesn't find "Zürich"). It loads 50 teams at a time ("Show more"); the order is the database's order of the upper-cased names, which may differ slightly from a language's alphabetical order. The search scans all team names (no index for substrings); fine for thousands of teams.

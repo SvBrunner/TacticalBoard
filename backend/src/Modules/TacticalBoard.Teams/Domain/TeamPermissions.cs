@@ -22,16 +22,23 @@ internal enum TeamPermission
 
     /// <summary>Delete the team.</summary>
     DeleteTeam,
+
+    /// <summary>See the team's folders and situations (and open, export and play them back).</summary>
+    ReadContent,
+
+    /// <summary>Create, change and delete the team's situations, create, rename and delete its folders, move situations between them.</summary>
+    WriteContent,
 }
 
-/// <summary>The team permission matrix of arc42 ch. 8.1, by role (team content follows with roadmap Phase 2 step 8).</summary>
+/// <summary>The team permission matrix of arc42 ch. 8.1, by role.</summary>
 internal static class TeamPermissions
 {
     /// <summary>Whether a member with <paramref name="role"/> (<c>null</c>: no member) may do <paramref name="permission"/>.</summary>
     public static bool Allows(TeamRole? role, TeamPermission permission) => (role, permission) switch
     {
         (null, _) => false,
-        (_, TeamPermission.SeeMembers or TeamPermission.Leave) => true,
+        (_, TeamPermission.SeeMembers or TeamPermission.Leave or TeamPermission.ReadContent) => true,
+        (TeamRole.Admin or TeamRole.Editor, TeamPermission.WriteContent) => true,
         (TeamRole.Admin, TeamPermission.ChangeDetails or TeamPermission.ManageMembers or TeamPermission.DecideJoinRequests or TeamPermission.DeleteTeam) => true,
         _ => false,
     };

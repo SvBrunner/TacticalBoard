@@ -63,6 +63,12 @@ internal sealed class EfFolderRepository(TacticalBoardDbContext context) : IFold
         }
     }
 
+    public async Task DeleteAllInAreaAsync(AreaReference area, DateTimeOffset deletedAt, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        await InArea(Folders, area).ExecuteUpdateAsync(setters => setters.SetProperty(folder => folder.DeletedAt, deletedAt), cancellationToken);
+    }
+
     public async Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         try

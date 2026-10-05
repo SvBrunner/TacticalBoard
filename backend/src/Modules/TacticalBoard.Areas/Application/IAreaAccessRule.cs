@@ -3,8 +3,8 @@ using TacticalBoard.Areas.Contracts;
 namespace TacticalBoard.Areas.Application;
 
 /// <summary>
-/// The access rule for one <see cref="AreaKind"/>. The team rule (asking Teams'
-/// role matrix, ch. 8.1) plugs in later as another implementation.
+/// The access rule for one <see cref="AreaKind"/>: <see cref="PersonalAreaAccessRule"/> and
+/// <see cref="TeamAreaAccessRule"/> (asking Teams' role matrix, ch. 8.1).
 /// </summary>
 internal interface IAreaAccessRule
 {

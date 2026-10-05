@@ -1,9 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ApiClient, ApiError } from "$lib/api/ApiClient";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
+import { PERSONAL_AREA, teamArea } from "./Area";
 import { FolderApi } from "./FolderApi";
 
-const folder = { id: "f1", name: "Set pieces", createdAt: "2026-10-04T08:00:00+00:00", updatedAt: "2026-10-04T08:00:00+00:00" };
+const folder = {
+	id: "f1",
+	name: "Set pieces",
+	createdAt: "2026-10-04T08:00:00+00:00",
+	updatedAt: "2026-10-04T08:00:00+00:00",
+	area: { kind: "personal", id: "u1" },
+	canWrite: true,
+};
 
 describe("FolderApi", () => {
 	let server: FakeFetch;
@@ -17,7 +25,19 @@ describe("FolderApi", () => {
 	it("lists the personal area's folders", async () => {
 		server.on("GET", "/api/personal-area/folders", jsonResponse(200, [folder]));
 
-		await expect(api.listPersonal()).resolves.toEqual([folder]);
+		await expect(api.list(PERSONAL_AREA)).resolves.toEqual([folder]);
+	});
+
+	it("lists and creates a team's folders, with the team's id encoded", async () => {
+		const teamFolder = { ...folder, area: { kind: "team", id: "t1" } };
+		server.on("GET", "/api/teams/t1/folders", jsonResponse(200, [teamFolder]));
+		server.on("POST", "/api/teams/t1/folders", jsonResponse(201, teamFolder));
+
+		await expect(api.list(teamArea("t1"))).resolves.toEqual([teamFolder]);
+		await expect(api.create(teamArea("t1"), "Set pieces")).resolves.toEqual(teamFolder);
+		expect(JSON.parse(server.requestsTo("/api/teams/t1/folders").find((r) => r.method === "POST")!.body!)).toEqual({ name: "Set pieces" });
+		expect(FolderApi.areaPath(teamArea("a/b"))).toBe("/api/teams/a%2Fb/folders");
+		expect(FolderApi.areaPath(PERSONAL_AREA)).toBe("/api/personal-area/folders");
 	});
 
 	it("gets one folder, with the id encoded in the path", async () => {
@@ -30,7 +50,7 @@ describe("FolderApi", () => {
 	it("creates with the name, through the antiforgery header", async () => {
 		server.on("POST", "/api/personal-area/folders", jsonResponse(201, folder));
 
-		await expect(api.createPersonal("Set pieces")).resolves.toEqual(folder);
+		await expect(api.create(PERSONAL_AREA, "Set pieces")).resolves.toEqual(folder);
 
 		const [request] = server.requestsTo("/api/personal-area/folders").filter((r) => r.method === "POST");
 		expect(JSON.parse(request.body!)).toEqual({ name: "Set pieces" });

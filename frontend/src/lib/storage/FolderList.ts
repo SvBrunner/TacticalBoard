@@ -1,6 +1,7 @@
 import { get, writable, type Readable } from "svelte/store";
 import { inEnglish } from "$lib/i18n";
 import type { Translatable } from "$lib/i18n/Messages";
+import type { Area } from "./Area";
 import type { Folder, FolderSummary } from "./FolderApi";
 import { FolderMessages, type FolderChange } from "./FolderMessages";
 
@@ -13,18 +14,25 @@ export type FolderListState =
 
 export interface FolderListDependencies {
 	readonly api: {
-		listPersonal(): Promise<FolderSummary[]>;
-		createPersonal(name: string): Promise<Folder>;
+		list(area: Area): Promise<FolderSummary[]>;
+		create(area: Area, name: string): Promise<Folder>;
 	};
+	/**
+	 * Whose folders: the personal area (start page), a team's (team page), or
+	 * the area of the folder a folder's page shows — `null` while it isn't
+	 * known yet (then `load` does nothing).
+	 */
+	readonly area: () => Area | null;
 	/** Called when the server says the session has ended. */
 	readonly onSessionEnded?: () => void;
 	readonly log?: { notify(message: string, level?: "info" | "warn" | "error"): void };
 }
 
 /**
- * The folders of the personal area (arc42 ch. 8.15), in the server's order
- * (by name), each with the number of situations in it: listed on the start
- * page and offered as targets when moving a situation. Creating a folder reloads the list.
+ * The folders of one area (arc42 ch. 8.15) — the personal area or a team's —
+ * in the server's order (by name), each with the number of situations in it:
+ * listed on the start page and a team's page, and offered as targets when
+ * moving a situation. Creating a folder reloads the list.
  */
 export class FolderList {
 	private readonly store = writable<FolderListState>({ status: "idle" });
@@ -43,11 +51,15 @@ export class FolderList {
 		return state.status === "loaded" ? state.folders : [];
 	}
 
-	/** Loads the list. Never throws. */
+	/** Loads the list (nothing while the area isn't known). Never throws. */
 	async load(): Promise<void> {
+		const area = this.deps.area();
+		if (area === null) {
+			return;
+		}
 		this.store.set({ status: "loading" });
 		try {
-			this.store.set({ status: "loaded", folders: await this.deps.api.listPersonal() });
+			this.store.set({ status: "loaded", folders: await this.deps.api.list(area) });
 		} catch (error) {
 			this.store.set({ status: "failed", message: this.failure(error, (m) => m.folders.loadFailed) });
 		}
@@ -55,8 +67,12 @@ export class FolderList {
 
 	/** Creates a folder named `name` (trimmed by the caller) and reloads the list. Never throws. */
 	async create(name: string): Promise<FolderChange<Folder>> {
+		const area = this.deps.area();
+		if (area === null) {
+			return { ok: false, message: (m) => m.folders.createFailed };
+		}
 		try {
-			const folder = await this.deps.api.createPersonal(name);
+			const folder = await this.deps.api.create(area, name);
 			this.log(`Created folder "${folder.name}"`);
 			await this.load();
 			return { ok: true, folder };

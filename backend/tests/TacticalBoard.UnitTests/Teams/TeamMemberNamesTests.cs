@@ -36,4 +36,32 @@ public class TeamMemberNamesTests
         Assert.Equal(["Anna", "Bob", "bob", null, null], ordered.Select(member => member.DisplayName));
         Assert.Equal([first, second], ordered.Skip(3).Select(member => member.UserId));
     }
+
+    [Fact]
+    public void Orders_members_by_role_first_then_by_name_with_deleted_users_last_within_the_role()
+    {
+        var at = DateTimeOffset.UnixEpoch;
+        TeamMemberView Member(string? name, TeamRole role) => new(Guid.NewGuid(), name, role, at);
+
+        var ordered = TeamMemberNames.Ordered(
+        [
+            Member("Anna", TeamRole.Reader),
+            Member(null, TeamRole.Admin),
+            Member("Zoe", TeamRole.Admin),
+            Member("bob", TeamRole.Editor),
+            Member("Carl", TeamRole.Admin),
+            Member(null, TeamRole.Reader),
+            Member("Al", TeamRole.Editor),
+        ]);
+
+        Assert.Equal(
+            [("Carl", TeamRole.Admin), ("Zoe", TeamRole.Admin), (null, TeamRole.Admin), ("Al", TeamRole.Editor), ("bob", TeamRole.Editor), ("Anna", TeamRole.Reader), (null, TeamRole.Reader)],
+            ordered.Select(member => (member.DisplayName, member.Role)));
+    }
+
+    [Fact]
+    public void Refuses_an_unknown_role()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => TeamMemberNames.Ordered([new TeamMemberView(Guid.NewGuid(), "X", (TeamRole)42, DateTimeOffset.UnixEpoch), new TeamMemberView(Guid.NewGuid(), "Y", TeamRole.Admin, DateTimeOffset.UnixEpoch)]));
+    }
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import FrameDescriptionEditor from "./FrameDescriptionEditor.svelte";
 
-function renderEditor(props: Partial<{ frameNumber: number; description: string }> = {}) {
+function renderEditor(props: Partial<{ frameNumber: number; description: string; readonly: boolean }> = {}) {
 	const onChange = vi.fn<(text: string) => void>();
 	const onCommit = vi.fn<() => void>();
 	const result = render(FrameDescriptionEditor, {
@@ -51,5 +51,18 @@ describe("FrameDescriptionEditor", () => {
 
 		expect(field().value).toBe("Switch sides");
 		expect(screen.getByRole("textbox", { name: "Frame 3 description" })).toBe(field());
+	});
+
+	it("shows the description read-only when asked to", () => {
+		const { field } = renderEditor({ readonly: true });
+
+		expect(field()).toHaveAttribute("readonly");
+		expect(field().value).toBe("**Press** high");
+	});
+
+	it("is editable by default", () => {
+		const { field } = renderEditor();
+
+		expect(field()).not.toHaveAttribute("readonly");
 	});
 });

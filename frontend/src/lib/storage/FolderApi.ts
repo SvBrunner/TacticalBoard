@@ -1,4 +1,5 @@
 import type { ApiClient } from "$lib/api/ApiClient";
+import type { Area, AreaDto } from "./Area";
 
 /** A folder of an area, as the server returns it (arc42 ch. 8.15). */
 export interface Folder {
@@ -6,6 +7,10 @@ export interface Folder {
 	readonly name: string;
 	readonly createdAt: string;
 	readonly updatedAt: string;
+	/** The area it lives in (the personal area or a team's). */
+	readonly area: AreaDto;
+	/** Whether the current user may change it — rename, delete, put situations into it (false for a team Reader, arc42 ch. 8.1). */
+	readonly canWrite: boolean;
 }
 
 /** A folder in the list of an area's folders: with the number of (non-deleted) situations in it. */
@@ -29,9 +34,14 @@ export class FolderApi {
 		return `/api/folders/${encodeURIComponent(id)}`;
 	}
 
-	/** The current user's folders, by name, each with the number of situations in it. */
-	listPersonal(): Promise<FolderSummary[]> {
-		return this.api.get<FolderSummary[]>(FolderApi.PERSONAL_AREA_PATH);
+	/** The folders of `area`: the personal area's, or a team's (`/api/teams/<id>/folders`). */
+	static areaPath(area: Area): string {
+		return area.kind === "team" ? `/api/teams/${encodeURIComponent(area.teamId)}/folders` : FolderApi.PERSONAL_AREA_PATH;
+	}
+
+	/** The folders of `area`, by name, each with the number of situations in it. */
+	list(area: Area): Promise<FolderSummary[]> {
+		return this.api.get<FolderSummary[]>(FolderApi.areaPath(area));
 	}
 
 	/** One folder. */
@@ -39,9 +49,9 @@ export class FolderApi {
 		return this.api.get<Folder>(FolderApi.folderPath(id));
 	}
 
-	/** Creates a folder in the personal area; a `409` (duplicate-folder-name) when the name is taken. */
-	createPersonal(name: string): Promise<Folder> {
-		return this.api.send<Folder>("POST", FolderApi.PERSONAL_AREA_PATH, { name });
+	/** Creates a folder in `area`; a `409` (duplicate-folder-name) when the name is taken, a `403` without the right. */
+	create(area: Area, name: string): Promise<Folder> {
+		return this.api.send<Folder>("POST", FolderApi.areaPath(area), { name });
 	}
 
 	/** Renames a folder; a `409` (duplicate-folder-name) when the name is taken. */

@@ -3,9 +3,18 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiError, ApiUnavailableError } from "$lib/api/ApiClient";
 import type { ConfirmationRequest } from "$lib/dialogs/ConfirmationPrompt";
 import { FolderApi, type Folder } from "./FolderApi";
-import { CurrentFolder } from "./CurrentFolder";
+import { get } from "svelte/store";
+import { PERSONAL_AREA, teamArea } from "./Area";
+import { CurrentFolder, type FolderTeam } from "./CurrentFolder";
 
-const setPieces: Folder = { id: "f1", name: "Set pieces", createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z" };
+const setPieces: Folder = {
+	id: "f1",
+	name: "Set pieces",
+	createdAt: "2026-10-04T08:00:00Z",
+	updatedAt: "2026-10-04T08:00:00Z",
+	area: { kind: "personal", id: "u1" },
+	canWrite: true,
+};
 
 describe("CurrentFolder", () => {
 	let getResult: Folder | Error;
@@ -216,5 +225,60 @@ describe("CurrentFolder", () => {
 		await quiet.load();
 		await expect(quiet.rename("x")).resolves.toMatchObject({ ok: false });
 		await expect(quiet.delete()).resolves.toMatchObject({ ok: false });
+	});
+
+	describe("a team's folder", () => {
+		const teamFolder: Folder = { ...setPieces, area: { kind: "team", id: "t1" }, canWrite: false };
+		let teamResult: FolderTeam | Error;
+
+		beforeEach(() => {
+			getResult = teamFolder;
+			teamResult = { id: "t1", name: "Lions", code: "ABC123" };
+			folder = new CurrentFolder({
+				id: "f1",
+				api: { get: async () => getResult as Folder, rename: async () => teamFolder, delete: async () => undefined },
+				teams: {
+					get: async (key) => {
+						calls.push(`team ${key}`);
+						if (teamResult instanceof Error) throw teamResult;
+						return teamResult;
+					},
+				},
+				log,
+			});
+		});
+
+		it("knows its area, that a Reader may not change it, and loads its team", async () => {
+			expect(folder.area()).toBeNull();
+			expect(folder.canWrite()).toBe(false);
+
+			await folder.load();
+
+			expect(folder.area()).toEqual(teamArea("t1"));
+			expect(folder.canWrite()).toBe(false);
+			expect(get(folder.team)).toEqual({ id: "t1", name: "Lions", code: "ABC123" });
+			expect(calls).toEqual(["team t1"]);
+		});
+
+		it("still shows the folder when its team can't be loaded", async () => {
+			teamResult = new ApiUnavailableError();
+
+			await folder.load();
+
+			expect(folder.current().status).toBe("loaded");
+			expect(get(folder.team)).toBeNull();
+			expect(log.notify).toHaveBeenCalledWith(expect.stringContaining("Loading the team of folder f1 failed"), "error");
+		});
+
+		it("loads no team for a personal folder", async () => {
+			getResult = setPieces;
+
+			await folder.load();
+
+			expect(folder.area()).toEqual(PERSONAL_AREA);
+			expect(folder.canWrite()).toBe(true);
+			expect(get(folder.team)).toBeNull();
+			expect(calls).toEqual([]);
+		});
 	});
 });

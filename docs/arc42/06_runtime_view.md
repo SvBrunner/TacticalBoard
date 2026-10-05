@@ -58,7 +58,7 @@ sequenceDiagram
 
 "Overwrite" repeats the save with the newest revision as `If-Match`; "Save as copy" creates a new situation with the title suffix " (2)" (or the next free number), see ch. 8.15.
 
-The personal area (implemented, roadmap Phase 2 step 3) works the same way without the role check: Areas answers "only the owner". The first save is `POST /api/personal-area/situations` (`201`, `ETag "1"`).
+Implemented for teams in roadmap Phase 2 step 8: Areas asks Teams (`TeamAreaAccessRule` → `ITeamAuthorization.CanWriteContentAsync`), reading the role fresh for every request. The first save of a situation started on a team's page is `POST /api/teams/{team}/situations` (`201`, `ETag "1"`), in a team folder `POST /api/folders/{id}/situations`. A Reader — also an Editor demoted meanwhile — gets `403 forbidden`; the editor says "You may not change this situation (any more)…" and the situation can still be exported. The personal area (roadmap Phase 2 step 3) works the same way: Areas answers "only the owner"; the first save is `POST /api/personal-area/situations`.
 
 ## 6.3 Open a saved situation, and reload the editor
 
@@ -211,7 +211,7 @@ The frontend words `last-team-admin` with the team's name: for leaving "You're t
 
 ## 6.8 Delete a team
 
-Implemented in roadmap Phase 2 step 7 (ch. 8.16, 8.17); the content part follows with step 8.
+Implemented in roadmap Phase 2 step 7 (ch. 8.16, 8.17); the content part in step 8.
 
 ```mermaid
 sequenceDiagram
@@ -219,7 +219,7 @@ sequenceDiagram
     participant F as Frontend
     participant B as Backend: Teams
     participant A as Areas
-    participant C as Folders, Situations (step 8)
+    participant C as Folders, Situations
     participant DB as PostgreSQL
 
     T->>F: Delete team → "Delete team?" → Delete
@@ -227,11 +227,32 @@ sequenceDiagram
     B->>DB: BEGIN; team FOR UPDATE; still Admin?
     B->>A: ITeamDeletionParticipant: team deleting
     A->>C: IAreaContentDeletion: delete content of area (Team, id)
-    C->>DB: soft-delete folders, situations (step 8)
+    C->>DB: UPDATE folders / situations SET deleted_at WHERE area = (Team, id)
     B->>DB: soft-delete pending join requests, memberships, team; COMMIT
     B-->>F: 204
     F-->>T: Start page (the team is gone from "Your teams")
 ```
 
 A participant that fails rolls the whole deletion back (`500`). Members' next request no longer finds the team (`404 team-not-found`).
+
+## 6.9 A Reader opens a team situation
+
+Roadmap Phase 2 step 8 (ch. 8.1, 8.15).
+
+```mermaid
+sequenceDiagram
+    participant R as Player (Reader)
+    participant F as Frontend
+    participant S as Backend: Situations
+    participant A as Areas → Teams
+
+    R->>F: Team page → situation "Powerplay"
+    F->>S: GET /api/situations/{id}
+    S->>A: may read the team's area? (member) / may write? (Admin, Editor)
+    A-->>S: read yes, write no
+    S-->>F: 200 { …, area: { kind: "team", id }, canWrite: false, document }
+    F-->>R: Editor read-only: no Save, tools and frame actions disabled, note "View only…"; playback and export work
+```
+
+The badge leads back to the team's folder (or the team's page). New and Load in this editor start in the personal area (the user can't save in the team). A promotion to Editor takes effect when the situation is opened again; the server checks every request anyway.
 

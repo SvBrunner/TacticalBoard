@@ -20,6 +20,7 @@ public class SituationEndpointsTests
     private readonly InMemorySituationRepository _repository = new();
     private readonly FakeAreaAccess _areas = new(Alice);
     private readonly FakeFolderDirectory _folders = new();
+    private readonly FakeAreaDirectory _directory = new();
     private readonly SituationService _service;
     private readonly DefaultHttpContext _http = new();
 
@@ -253,6 +254,8 @@ public class SituationEndpointsTests
             [
                 "GET /api/personal-area/situations/",
                 "POST /api/personal-area/situations/",
+                "GET /api/teams/{team}/situations/",
+                "POST /api/teams/{team}/situations/",
                 "GET /api/folders/{folderId:guid}/situations/",
                 "POST /api/folders/{folderId:guid}/situations/",
                 "GET /api/situations/{id:guid}",
@@ -268,16 +271,68 @@ public class SituationEndpointsTests
     public void Responses_map_a_deleted_user_without_a_name()
     {
         var view = new SituationView(
-            new SituationSummaryView(Guid.NewGuid(), "A", "floorball", "half", null, 3, DateTimeOffset.UnixEpoch, new UserReferenceView(Alice, null), DateTimeOffset.UnixEpoch, new UserReferenceView(Alice, "Alice")),
+            new SituationSummaryView(Guid.NewGuid(), "A", "floorball", "half", null, 3, DateTimeOffset.UnixEpoch, new UserReferenceView(Alice, null), DateTimeOffset.UnixEpoch, new UserReferenceView(Alice, "Alice"), new AreaReference(AreaKind.Team, Alice), false),
             new JsonObject { ["x"] = 1 }.ToJsonString());
 
         var response = SituationResponse.From(view);
 
         Assert.Null(response.CreatedBy.DisplayName);
         Assert.Equal(("half", 3, 1), (response.FieldType, response.Revision, response.Document.GetProperty("x").GetInt32()));
+        Assert.Equal((new AreaResponse("team", Alice), false), (response.Area, response.CanWrite));
         Assert.Throws<ArgumentNullException>(() => SituationResponse.From(null!));
         Assert.Throws<ArgumentNullException>(() => SituationSummaryResponse.From(null!));
         Assert.Throws<ArgumentNullException>(() => UserReferenceResponse.From(null!));
+    }
+
+    [Fact]
+    public async Task Team_endpoints_create_and_list_at_the_top_level_of_the_teams_area()
+    {
+        var team = _directory.AddTeam("ABC123");
+        _areas.Readable.Add(team);
+        _areas.Writable.Add(team);
+
+        var result = await SituationEndpoints.CreateTeamAsync("abc123", new CreateSituationRequest(Document(), null), _service, _directory, _http.Response, Cancellation);
+        var created = Assert.IsType<CreatedAtRoute<SituationResponse>>(result.Result).Value!;
+        var list = await SituationEndpoints.ListTeamAsync(team.OwnerId.ToString(), _service, _directory, Cancellation);
+        var personal = await SituationEndpoints.ListPersonalAsync(_service, _areas, Cancellation);
+
+        Assert.Equal((new AreaResponse("team", team.OwnerId), true, (Guid?)null), (created.Area, created.CanWrite, created.FolderId));
+        Assert.Equal("\"1\"", _http.Response.Headers.ETag.ToString());
+        Assert.Equal([created.Id], list.Value!.Select(situation => situation.Id));
+        Assert.Empty(personal.Value!);
+    }
+
+    [Fact]
+    public async Task Team_endpoints_give_readers_canWrite_false_and_refuse_their_saves()
+    {
+        var team = _directory.AddTeam("ABC123");
+        _areas.Readable.Add(team);
+        _areas.Writable.Add(team);
+        var created = Assert.IsType<CreatedAtRoute<SituationResponse>>((await SituationEndpoints.CreateTeamAsync("ABC123", new CreateSituationRequest(Document(), null), _service, _directory, _http.Response, Cancellation)).Result).Value!;
+        _areas.Writable.Remove(team);
+
+        var list = await SituationEndpoints.ListTeamAsync("ABC123", _service, _directory, Cancellation);
+        var get = await SituationEndpoints.GetAsync(created.Id, _service, _http.Response, Cancellation);
+
+        Assert.False(Assert.Single(list.Value!).CanWrite);
+        Assert.False(get.Value!.CanWrite);
+        await Assert.ThrowsAsync<SituationAccessDeniedException>(() => SituationEndpoints.CreateTeamAsync("ABC123", new CreateSituationRequest(Document("Other"), null), _service, _directory, _http.Response, Cancellation));
+    }
+
+    [Fact]
+    public async Task Team_endpoints_report_an_unknown_team_and_reject_missing_arguments()
+    {
+        _directory.AddTeam("ABC123");
+        var request = new CreateSituationRequest(Document(), null);
+
+        await Assert.ThrowsAsync<TeamAreaNotFoundException>(() => SituationEndpoints.ListTeamAsync("nope", _service, _directory, Cancellation));
+        await Assert.ThrowsAsync<TeamAreaNotFoundException>(() => SituationEndpoints.CreateTeamAsync("ZZZ999", request, _service, _directory, _http.Response, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.ListTeamAsync("ABC123", null!, _directory, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.ListTeamAsync("ABC123", _service, null!, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.CreateTeamAsync("ABC123", null!, _service, _directory, _http.Response, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.CreateTeamAsync("ABC123", request, null!, _directory, _http.Response, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.CreateTeamAsync("ABC123", request, _service, null!, _http.Response, Cancellation));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => SituationEndpoints.CreateTeamAsync("ABC123", request, _service, _directory, null!, Cancellation));
     }
 
     [Fact]

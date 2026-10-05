@@ -3,7 +3,9 @@
 The content of a team's page (`/teams/<CODE>` or `/teams/<id>`,
 deep-linkable; arc42 ch. 8.8, 8.17): the shared navbar with the team's name
 as title, a breadcrumb (Start page › Teams › team), the team's logo and
-name. Members also see its code, the link to share, their role, the member
+name. Members also see its code, the link to share, their role, the team's
+situations and folders (`TeamContent`: Admins and Editors also start, move
+and delete situations and create folders; Readers only open them), the member
 list, and "Leave team" (after a confirmation; the last Admin is refused with
 the reason). Non-members see only name and logo, and "Ask to join" — or that
 their request is pending. Admins rename the team, upload, replace or remove
@@ -28,11 +30,12 @@ says so.
 	import { t } from "$lib/i18n";
 	import type { Translatable } from "$lib/i18n/Messages";
 	import { CurrentTeam } from "$lib/teams/CurrentTeam";
-	import type { JoinRequest, TeamMember, TeamRole } from "$lib/teams/TeamApi";
+	import { canWriteContent, type JoinRequest, type TeamMember, type TeamRole } from "$lib/teams/TeamApi";
 	import { TeamJoinRequestList } from "$lib/teams/TeamJoinRequestList";
 	import { TeamMemberList } from "$lib/teams/TeamMemberList";
 	import { TeamRoute } from "$lib/teams/TeamRoute";
 	import { teamApi } from "$lib/teams/teamStorage";
+	import TeamContent from "./TeamContent.svelte";
 
 	interface Props {
 		/** The team's code (or id) from the URL; fixed for the component's life (the route re-creates it for another team). */
@@ -49,7 +52,21 @@ says so.
 	const team = new CurrentTeam({ api: teamApi, key, onSessionEnded: refreshSession, log: notifications });
 	const teamState = team.state;
 	const reloadTeam = () => void team.load(true);
-	const members = new TeamMemberList({ api: teamApi, key, onAccessLost: reloadTeam, onSessionEnded: refreshSession, log: notifications });
+	const prompt = new ConfirmationPrompt();
+	const question = prompt.pending;
+	const members = new TeamMemberList({
+		api: teamApi,
+		key,
+		onAccessLost: reloadTeam,
+		onSessionEnded: refreshSession,
+		currentUserId: () => {
+			const session = authSession.current();
+			return session.status === "authenticated" ? session.user.id : "";
+		},
+		// Giving oneself a lower role asks first (confirmed product decision).
+		confirm: (request) => prompt.request(request),
+		log: notifications,
+	});
 	const memberState = members.state;
 	const joinRequests = new TeamJoinRequestList({
 		api: teamApi,
@@ -63,8 +80,6 @@ says so.
 		log: notifications,
 	});
 	const joinRequestState = joinRequests.state;
-	const prompt = new ConfirmationPrompt();
-	const question = prompt.pending;
 
 	let renaming = $state(false);
 	let busy = $state(false);
@@ -112,7 +127,7 @@ says so.
 
 	async function changeRole(member: TeamMember, newRole: TeamRole) {
 		const outcome = await members.changeRole(member, newRole, name ?? key);
-		if (outcome.ok && member.userId === currentUserId) {
+		if (outcome?.ok && member.userId === currentUserId) {
 			// The own role changed: the page shows what the user may do now.
 			reloadTeam();
 		}
@@ -288,6 +303,13 @@ says so.
 					</ul>
 				{/if}
 			</section>
+
+			{#if current.role}
+				<!-- Re-created when the role changes, so the offered actions follow it. -->
+				{#key current.role}
+					<TeamContent teamId={current.id} canWrite={canWriteContent(current.role)} />
+				{/key}
+			{/if}
 
 			{#if isAdmin}
 				<section class="panel" aria-labelledby="{uid}-logo">

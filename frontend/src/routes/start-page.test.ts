@@ -18,7 +18,7 @@ import { accountLanguage, i18n } from "$lib/i18n";
 vi.mock("$app/navigation", () => ({ goto: vi.fn(async () => undefined) }));
 
 function folderOf(id: string, name: string, situationCount = 0): FolderSummary {
-	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z", situationCount };
+	return { id, name, createdAt: "2026-10-04T08:00:00Z", updatedAt: "2026-10-04T08:00:00Z", area: { kind: "personal", id: "u1" }, canWrite: true, situationCount };
 }
 
 function situationFile(name = "play.situation.json"): File {
@@ -469,7 +469,7 @@ describe("start page", () => {
 			await settle();
 			await fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-			expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: null } });
+			expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { area: { kind: "personal" }, folderId: null } });
 		});
 
 		it("opens a saved situation in the editor", async () => {

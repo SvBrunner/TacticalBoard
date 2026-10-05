@@ -1,12 +1,14 @@
 <!--
 @component
-The saved situations of one place of the personal area (arc42 ch. 8.15): the
-top level on the start page, or a folder on its page. Each with title, field
+The saved situations of one place of an area (arc42 ch. 8.15): the top
+level of the personal area on the start page, of a team on its page, or a
+folder on its page. Each with title, field
 type, last changed by/at and created by; a situation opens with its title
 button, Move offers the other folders of the area (`onMove` opens the
 picker), and Delete deletes it (the owner asks for confirmation). An empty
 place shows `emptyMessage` and, if given, `emptyActions` (e.g. a folder's page
-offers New situation and Import there). Without login a hint to log in;
+offers New situation and Import there). With `canChange` false (a team
+Reader, ch. 8.1) only opening is offered, no Move or Delete. Without login a hint to log in;
 without a server a hint that local mode works as usual.
 -->
 <script lang="ts">
@@ -31,6 +33,8 @@ without a server a hint that local mode works as usual.
 		emptyActions?: Snippet;
 		/** Disables the buttons (e.g. while a situation is being opened). */
 		busy?: boolean;
+		/** Whether Move and Delete are offered (false for a team Reader). */
+		canChange?: boolean;
 	}
 
 	let {
@@ -43,6 +47,7 @@ without a server a hint that local mode works as usual.
 		emptyMessage,
 		emptyActions,
 		busy = false,
+		canChange = true,
 	}: Props = $props();
 
 	const uid = $props.id();
@@ -84,33 +89,35 @@ without a server a hint that local mode works as usual.
 						</span>
 						<span>{$t.saved.createdBy(SavedSituationFormat.userName(situation.createdBy, $t))}</span>
 					</p>
-					<button
-						type="button"
-						class="action move"
-						aria-label={$t.saved.moveLabel(situation.title)}
-						title={$t.saved.moveTitle}
-						disabled={busy}
-						onclick={() => onMove(situation)}
-					>
-						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-							<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-							<path d="M10 13h6M13.5 10.5 16 13l-2.5 2.5" />
-						</svg>
-						<span class="action-label">{$t.common.move}</span>
-					</button>
-					<button
-						type="button"
-						class="action delete"
-						aria-label={$t.saved.deleteLabel(situation.title)}
-						title={$t.common.delete}
-						disabled={busy}
-						onclick={() => onDelete(situation)}
-					>
-						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-							<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
-						</svg>
-						<span class="action-label">{$t.common.delete}</span>
-					</button>
+					{#if canChange}
+						<button
+							type="button"
+							class="action move"
+							aria-label={$t.saved.moveLabel(situation.title)}
+							title={$t.saved.moveTitle}
+							disabled={busy}
+							onclick={() => onMove(situation)}
+						>
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+								<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+								<path d="M10 13h6M13.5 10.5 16 13l-2.5 2.5" />
+							</svg>
+							<span class="action-label">{$t.common.move}</span>
+						</button>
+						<button
+							type="button"
+							class="action delete"
+							aria-label={$t.saved.deleteLabel(situation.title)}
+							title={$t.common.delete}
+							disabled={busy}
+							onclick={() => onDelete(situation)}
+						>
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+								<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+							</svg>
+							<span class="action-label">{$t.common.delete}</span>
+						</button>
+					{/if}
 				</li>
 			{/each}
 		</ul>

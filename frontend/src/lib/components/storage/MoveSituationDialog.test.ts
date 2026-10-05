@@ -6,8 +6,8 @@ import { summaryOf } from "$lib/testing/storageFakes";
 import MoveSituationDialog from "./MoveSituationDialog.svelte";
 
 const folders: Folder[] = [
-	{ id: "f1", name: "Breakouts", createdAt: "", updatedAt: "" },
-	{ id: "f2", name: "Set pieces", createdAt: "", updatedAt: "" },
+	{ id: "f1", name: "Breakouts", createdAt: "", updatedAt: "", area: { kind: "personal", id: "u1" }, canWrite: true },
+	{ id: "f2", name: "Set pieces", createdAt: "", updatedAt: "", area: { kind: "personal", id: "u1" }, canWrite: true },
 ];
 
 describe("MoveSituationDialog", () => {
@@ -87,7 +87,7 @@ describe("MoveSituationDialog", () => {
 	it("says when there are no folders yet", () => {
 		renderFor(undefined, []);
 
-		expect(within(dialog()).getByText("There are no folders yet. Create one on the start page first.")).toBeInTheDocument();
+		expect(within(dialog()).getByText("There are no folders here yet. Create one first.")).toBeInTheDocument();
 		expect(screen.getAllByRole("radio")).toHaveLength(1);
 	});
 

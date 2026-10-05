@@ -9,7 +9,7 @@ import { storedFrom, summaryOf } from "$lib/testing/storageFakes";
 import { SituationApi, type CreateOptions, type SituationOrigin, type StoredSituation } from "./SituationApi";
 import { SituationLink } from "./SituationLink";
 import { FolderApi } from "./FolderApi";
-import { inFolder, TOP_LEVEL, type SaveTarget } from "./SaveTarget";
+import { inFolder, teamTopLevel, TOP_LEVEL, type SaveTarget } from "./SaveTarget";
 import { SituationSaver, type ConflictChoice, type SaveApi } from "./SituationSaver";
 
 class FakeApi implements SaveApi {
@@ -107,7 +107,7 @@ describe("SituationSaver", () => {
 
 			await saver.save();
 
-			expect(api.creates[0]).toMatchObject({ origin: "new", target: { folderId: "f1" } });
+			expect(api.creates[0]).toMatchObject({ origin: "new", target: inFolder("f1") });
 			expect(link.saved()?.folderId).toBe("f1");
 		});
 
@@ -116,7 +116,7 @@ describe("SituationSaver", () => {
 
 			await saver.save();
 
-			expect(api.creates[0]).toMatchObject({ origin: "imported", target: { folderId: "f2" } });
+			expect(api.creates[0]).toMatchObject({ origin: "imported", target: inFolder("f2") });
 		});
 	});
 
@@ -188,6 +188,15 @@ describe("SituationSaver", () => {
 			expect(SituationSaver.hasChanges({ kind: "saved", summary: summaryOf() }, false)).toBe(false);
 			expect(SituationSaver.hasChanges({ kind: "saved", summary: summaryOf() }, true)).toBe(true);
 		});
+
+		it("never has anything to save for a situation the user may only read", async () => {
+			link.attach(summaryOf({ canWrite: false }));
+
+			expect(SituationSaver.hasChanges({ kind: "saved", summary: summaryOf({ canWrite: false }) }, true)).toBe(false);
+			expect(saver.hasChanges()).toBe(false);
+			await expect(saver.save()).resolves.toBe(false);
+			expect(api.updates).toEqual([]);
+		});
 	});
 
 	describe("later saves", () => {
@@ -255,7 +264,17 @@ describe("SituationSaver", () => {
 
 			await saver.save();
 
-			expect(api.creates[1]).toMatchObject({ origin: "copy", target: { folderId: "f1" } });
+			expect(api.creates[1]).toMatchObject({ origin: "copy", target: inFolder("f1") });
+		});
+
+		it("on a conflict, Save as copy creates the copy in the original's team area", async () => {
+			link.attach({ ...link.saved()!, area: { kind: "team", id: "t1" } });
+			api.script.push(conflict());
+			choice.mockResolvedValue("copy");
+
+			await saver.save();
+
+			expect(api.creates[1]).toMatchObject({ origin: "copy", target: teamTopLevel("t1") });
 		});
 
 		it("on a conflict, Cancel keeps everything as it is", async () => {
@@ -275,6 +294,11 @@ describe("SituationSaver", () => {
 			["a deleted situation", new ApiError(404, { type: SituationApi.NOT_FOUND }), /no longer exists on the server/],
 			["a deleted folder", new ApiError(404, { type: FolderApi.NOT_FOUND }), /^The folder to save in no longer exists \(it was deleted\)\. Export the situation to keep it\.$/],
 			["no server", new ApiUnavailableError(), /not reachable/],
+			[
+				"a refusal (e.g. demoted to Reader meanwhile)",
+				new ApiError(403, { type: "https://tacticalboard/errors/forbidden" }),
+				/^You may not change this situation \(any more\)/,
+			],
 			[
 				"a validation problem (worded from its code)",
 				new ApiError(400, {

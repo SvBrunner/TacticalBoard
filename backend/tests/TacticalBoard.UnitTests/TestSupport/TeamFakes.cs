@@ -310,3 +310,47 @@ internal sealed class RecordingTeamDeletionParticipant(FakeUnitOfWork? transacti
         return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
     }
 }
+
+/// <summary>An <see cref="ITeamAuthorization"/> with a fixed role per team; records the content questions asked.</summary>
+internal sealed class FakeTeamAuthorization : ITeamAuthorization
+{
+    public Dictionary<Guid, TeamRole> Roles { get; } = [];
+
+    public List<(string Question, Guid TeamId)> Questions { get; } = [];
+
+    public Task<TeamRole?> RoleOfCurrentUserAsync(Guid teamId, CancellationToken cancellationToken) =>
+        Task.FromResult<TeamRole?>(Roles.TryGetValue(teamId, out var role) ? role : null);
+
+    public Task<bool> CanChangeDetailsAsync(Guid teamId, CancellationToken cancellationToken) => Task.FromResult(Is(teamId, TeamRole.Admin));
+
+    public Task<bool> CanSeeMembersAsync(Guid teamId, CancellationToken cancellationToken) => Task.FromResult(Roles.ContainsKey(teamId));
+
+    public Task<bool> CanManageMembersAsync(Guid teamId, CancellationToken cancellationToken) => Task.FromResult(Is(teamId, TeamRole.Admin));
+
+    public Task<bool> CanDecideJoinRequestsAsync(Guid teamId, CancellationToken cancellationToken) => Task.FromResult(Is(teamId, TeamRole.Admin));
+
+    public Task<bool> CanDeleteTeamAsync(Guid teamId, CancellationToken cancellationToken) => Task.FromResult(Is(teamId, TeamRole.Admin));
+
+    public Task<bool> CanReadContentAsync(Guid teamId, CancellationToken cancellationToken)
+    {
+        Questions.Add(("read", teamId));
+        return Task.FromResult(Roles.ContainsKey(teamId));
+    }
+
+    public Task<bool> CanWriteContentAsync(Guid teamId, CancellationToken cancellationToken)
+    {
+        Questions.Add(("write", teamId));
+        return Task.FromResult(Is(teamId, TeamRole.Admin) || Is(teamId, TeamRole.Editor));
+    }
+
+    private bool Is(Guid teamId, TeamRole role) => Roles.TryGetValue(teamId, out var found) && found == role;
+}
+
+/// <summary>An <see cref="ITeamDirectory"/> on a dictionary of keys to team ids.</summary>
+internal sealed class FakeTeamDirectory : ITeamDirectory
+{
+    public Dictionary<string, Guid> Teams { get; } = [];
+
+    public Task<Guid?> FindIdAsync(string? key, CancellationToken cancellationToken) =>
+        Task.FromResult<Guid?>(key is not null && Teams.TryGetValue(key, out var id) ? id : null);
+}

@@ -5,7 +5,7 @@ import { goto } from "$app/navigation";
 import { authSession } from "$lib/auth/AuthSession";
 import { situationEditor } from "$lib/editor/SituationEditor";
 import { SituationSerializer } from "$lib/model/serialization/SituationSerializer";
-import { inFolder, TOP_LEVEL } from "$lib/storage/SaveTarget";
+import { inFolder, teamTopLevel, TOP_LEVEL } from "$lib/storage/SaveTarget";
 import { SituationApi, type SituationSummary } from "$lib/storage/SituationApi";
 import { situationLink } from "$lib/storage/SituationLink";
 import { SavedSituationFormat } from "$lib/storage/SavedSituationFormat";
@@ -411,7 +411,7 @@ describe("editor page: saving on the server", () => {
 				render(EditorPage);
 
 				await newSituation();
-				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { area: { kind: "personal" }, folderId: "f1" } });
 				await fireEvent.click(saveButton());
 				await settle();
 
@@ -425,7 +425,7 @@ describe("editor page: saving on the server", () => {
 
 				await loadFile();
 
-				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f1" } });
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { area: { kind: "personal" }, folderId: "f1" } });
 			});
 
 			it("New and Load stay in the folder an unsaved situation was started in", async () => {
@@ -433,9 +433,9 @@ describe("editor page: saving on the server", () => {
 				render(EditorPage);
 
 				await newSituation();
-				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f2" } });
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { area: { kind: "personal" }, folderId: "f2" } });
 				await loadFile();
-				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f2" } });
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "imported", target: { area: { kind: "personal" }, folderId: "f2" } });
 			});
 
 			it("New and Load save at the top level for a situation in no folder", async () => {
@@ -519,6 +519,95 @@ describe("editor page: saving on the server", () => {
 				expect(badge("Start page")).toHaveAttribute("href", "/");
 				await newSituation();
 				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: TOP_LEVEL });
+			});
+		});
+	});
+
+	describe("a team situation", () => {
+		const team = { kind: "team" as const, id: "t1" };
+		const badge = (name: string) => within(screen.getByRole("banner")).getByRole("link", { name });
+
+		beforeEach(logIn);
+
+		it("saves a situation started at a team's top level there, and the badge leads back to the team", async () => {
+			server.on("POST", "/api/teams/t1/situations", (request) => echo(request, 201, { id: "s1", area: team }));
+			situationLink.startNew(teamTopLevel("t1"));
+			render(EditorPage);
+
+			expect(badge("Back to the team")).toHaveAttribute("href", "/teams/t1");
+			await fireEvent.click(saveButton());
+			await settle();
+
+			expect(server.requestsTo("/api/teams/t1/situations").map((request) => request.method)).toEqual(["POST"]);
+			expect(posts()).toHaveLength(0);
+			expect(situationLink.saved()?.area).toEqual(team);
+		});
+
+		it("New in the editor of a team situation saves into the team too", async () => {
+			situationLink.attach(summaryOf({ id: "s1", area: team }));
+			render(EditorPage);
+
+			await fireEvent.click(screen.getByRole("button", { name: "New" }));
+			await settle();
+			await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+			await settle();
+
+			expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: teamTopLevel("t1") });
+		});
+
+		it("a demoted editor's save fails with a worded 403", async () => {
+			server.on("PUT", "/api/situations/s1", problemResponse(403, { type: "https://tacticalboard/errors/forbidden" }));
+			situationLink.attach(summaryOf({ id: "s1", area: team }));
+			render(EditorPage);
+			situationEditor.changeTitle("Changed");
+			await settle();
+
+			await fireEvent.click(saveButton());
+			await settle();
+
+			expect(screen.getByRole("alert")).toHaveTextContent("You may not change this situation (any more), e.g. because your role in the team changed.");
+			expect(situationEditor.isDirty()).toBe(true);
+		});
+
+		describe("opened by a Reader", () => {
+			beforeEach(() => {
+				situationLink.attach(summaryOf({ id: "s1", folderId: "f1", area: team, canWrite: false }));
+				render(EditorPage);
+			});
+
+			it("is read-only: no Save, no tools, no undo, no frame changes, read-only texts, with a note why", () => {
+				expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+				expect(screen.getByRole("note")).toHaveTextContent("View only: you're a Reader in this team.");
+				expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+				expect(screen.getByRole("button", { name: "Add frame" })).toBeDisabled();
+				expect(screen.getByRole("textbox", { name: "Title" })).toBeDisabled();
+				expect(screen.getByRole("textbox", { name: "Frame 1 description" })).toHaveAttribute("readonly");
+				for (const tool of within(screen.getByRole("complementary", { name: "Tools" })).getAllByRole("button")) {
+					expect(tool).toBeDisabled();
+				}
+			});
+
+			it("keeps playback and the export available, and Ctrl+S does nothing", async () => {
+				expect(screen.getByRole("button", { name: "Export" })).toBeEnabled();
+				expect(screen.getByRole("region", { name: "Playback" })).toBeInTheDocument();
+
+				await fireEvent.keyDown(document.body, { key: "s", ctrlKey: true });
+				await settle();
+
+				expect(server.requestsTo("/api/situations/s1")).toHaveLength(0);
+			});
+
+			it("leads the badge back to the team's folder, and New starts in the personal area", async () => {
+				expect(badge("Back to the folder")).toHaveAttribute("href", "/folders/f1");
+
+				await fireEvent.click(screen.getByRole("button", { name: "New" }));
+				await settle();
+				await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+				await settle();
+
+				expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: TOP_LEVEL });
+				expect(screen.queryByRole("note")).toBeNull();
+				expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
 			});
 		});
 	});

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TacticalBoard.Areas.Contracts;
 using TacticalBoard.Situations.Application;
 
 namespace TacticalBoard.Situations.Endpoints;
@@ -13,7 +14,7 @@ internal sealed record UserReferenceResponse(Guid Id, string? DisplayName)
     }
 }
 
-/// <summary>A situation's metadata, as listed by <c>GET /api/personal-area/situations</c>.</summary>
+/// <summary>A situation's metadata, as listed (arc42 ch. 8.15): with its area and whether the current user may change it (<c>canWrite</c>).</summary>
 internal sealed record SituationSummaryResponse(
     Guid Id,
     string Title,
@@ -24,7 +25,9 @@ internal sealed record SituationSummaryResponse(
     DateTimeOffset CreatedAt,
     UserReferenceResponse CreatedBy,
     DateTimeOffset UpdatedAt,
-    UserReferenceResponse UpdatedBy)
+    UserReferenceResponse UpdatedBy,
+    AreaResponse Area,
+    bool CanWrite)
 {
     public static SituationSummaryResponse From(SituationSummaryView summary)
     {
@@ -39,7 +42,9 @@ internal sealed record SituationSummaryResponse(
             summary.CreatedAt,
             UserReferenceResponse.From(summary.CreatedBy),
             summary.UpdatedAt,
-            UserReferenceResponse.From(summary.UpdatedBy));
+            UserReferenceResponse.From(summary.UpdatedBy),
+            AreaResponse.From(summary.Area),
+            summary.CanWrite);
     }
 }
 
@@ -55,6 +60,8 @@ internal sealed record SituationResponse(
     UserReferenceResponse CreatedBy,
     DateTimeOffset UpdatedAt,
     UserReferenceResponse UpdatedBy,
+    AreaResponse Area,
+    bool CanWrite,
     JsonElement Document)
 {
     public static SituationResponse From(SituationView view)
@@ -73,6 +80,8 @@ internal sealed record SituationResponse(
             summary.CreatedBy,
             summary.UpdatedAt,
             summary.UpdatedBy,
+            summary.Area,
+            summary.CanWrite,
             document.RootElement.Clone());
     }
 }

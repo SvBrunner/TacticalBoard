@@ -16,11 +16,13 @@
 | Team | A group of users who share access to situations and folders, with per-member roles. Has a unique name, an optional logo and a team code. Its creator becomes its Admin. |
 | Team logo | A team's optional image: uploaded as PNG, JPEG or WebP, stored scaled down to fit 256 × 256 px as PNG without metadata. |
 | Team overview | The page `/teams` listing all teams (logo, name; the code only of the user's own teams), searchable by name or code; for logged-in users. |
-| Team page | A team's own page `/teams/<CODE>`, the link to share (also reachable as `/teams/<id>`): name and logo for everyone logged in; for members also code, link, their role, the member list and "Leave team"; for Admins also the join requests and team management; for non-members "Ask to join". |
+| Team page | A team's own page `/teams/<CODE>`, the link to share (also reachable as `/teams/<id>`): name and logo for everyone logged in; for members also code, link, their role, the team's situations and folders, the member list and "Leave team"; for Admins also the join requests and team management; for non-members "Ask to join". |
 | Join request | A non-member's request to join a team, sent from the team's page. At most one is pending per user and team; it can't be withdrawn; a team Admin accepts it (the user becomes a Reader) or rejects it (the user may ask again). |
 | Last Admin | The only member of a team with the role Admin. A team always keeps at least one Admin: the last Admin can't leave, lose the role or be removed; they make another member Admin first or delete the team. |
 | Membership | A user's belonging to a team, with one role (Admin, Editor, Reader). It starts when the team is created (Admin) or a join request is accepted (Reader) and ends when the member leaves or is removed, or the team is deleted. |
-| Area | Where saved situations live: a user's personal area or a team. Situation titles are unique within an area. |
+| Area | Where saved situations live: a user's personal area or a team. Situation titles and folder names are unique within an area; situations never move between areas (only export/import). |
+| Team area | A team's situations and folders: every member sees them, its Admins and Editors change them, Readers only open them (read-only in the editor). |
+| Read-only editor | The editor showing a situation the user may only view (a team Reader): playback, frame switching and export work; nothing can be changed or saved. |
 | Personal area | A user's own area for situations and folders; only the user can access it. |
 | Revision | One saved state of a situation on the server. Every save creates a new revision; the newest is the current one. Its number is the situation's ETag. |
 | Saved situation (server situation) | A situation saved on the server, in an area. For it, "saved" means saved on the server, not exported. Shown in the editor at `/editor?situation=<id>`. |
@@ -28,7 +30,7 @@
 | Default title | The title of a situation created with a blank title, in the UI language of that moment: "Untitled Situation", "Unbenannte Situation". Saved on the server, it is numbered within the area ("Untitled Situation (2)", …). |
 | UI language | The language of the system texts (German or English, English the fallback); chosen in the navbar's language switcher, remembered in the browser and in the account. User content is never translated. |
 | System text | A text the app itself shows (labels, buttons, messages, element type names, …), as opposed to user content (titles, descriptions, folder names, labels, display names). Only system texts are translated. |
-| Navbar | The app's navigation bar at the top of the start page and the editor: badge (link to the start page; in the editor of a situation in a folder, to that folder's page), page title, the page's tools, and the account corner (Log in / the user's menu). |
+| Navbar | The app's navigation bar at the top of the start page and the editor: badge (link to the start page; in the editor of a situation in a folder, to that folder's page; of a team situation at its team's top level, to the team's page), page title, the page's tools, and the account corner (Log in / the user's menu). |
 | Soft delete | Deleting by marking an item as deleted instead of removing it from the database. |
 | Local mode | Using the app without login: editing plus JSON/GIF export and import, nothing stored on the server. |
 | Folder | Groups situations in a team or in a user's personal area. One level only, no subfolders. Its name is unique in the area and at most 64 characters long; it can be deleted only while empty. Has its own page (`/folders/<id>`); the start page lists it with the number of situations it contains. |

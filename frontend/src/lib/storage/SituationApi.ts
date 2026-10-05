@@ -1,4 +1,5 @@
 import type { ApiClient } from "$lib/api/ApiClient";
+import type { AreaDto } from "./Area";
 import { FolderApi } from "./FolderApi";
 import type { SaveTarget } from "./SaveTarget";
 
@@ -22,6 +23,13 @@ export interface SituationSummary {
 	readonly createdBy: UserReference;
 	readonly updatedAt: string;
 	readonly updatedBy: UserReference;
+	/** The area it lives in (the personal area or a team's). */
+	readonly area: AreaDto;
+	/**
+	 * Whether the current user may change it — save, move, delete (arc42 ch.
+	 * 8.1: false for a team Reader). As of this answer; the server checks again.
+	 */
+	readonly canWrite: boolean;
 }
 
 /** A saved situation with its current document (the situation file format, ch. 8.3). */
@@ -67,12 +75,20 @@ export class SituationApi {
 		return `${FolderApi.folderPath(folderId)}/situations`;
 	}
 
-	/** Where a first save into `target` goes. */
-	static collectionPath(target: SaveTarget): string {
-		return target.folderId === null ? SituationApi.PERSONAL_AREA_PATH : SituationApi.folderSituationsPath(target.folderId);
+	/** The situations at the top level of a team's area. */
+	static teamSituationsPath(teamId: string): string {
+		return `/api/teams/${encodeURIComponent(teamId)}/situations`;
 	}
 
-	/** The saved situations at `target` (metadata only): the top level of the personal area, or a folder. */
+	/** Where a first save into `target` goes: a folder (of any area), or the top level of the personal area or of a team. */
+	static collectionPath(target: SaveTarget): string {
+		if (target.folderId !== null) {
+			return SituationApi.folderSituationsPath(target.folderId);
+		}
+		return target.area.kind === "team" ? SituationApi.teamSituationsPath(target.area.teamId) : SituationApi.PERSONAL_AREA_PATH;
+	}
+
+	/** The saved situations at `target` (metadata only): the top level of an area, or a folder. */
 	list(target: SaveTarget): Promise<SituationSummary[]> {
 		return this.api.get<SituationSummary[]>(SituationApi.collectionPath(target));
 	}
@@ -82,7 +98,7 @@ export class SituationApi {
 		return this.api.get<StoredSituation>(SituationApi.situationPath(id));
 	}
 
-	/** The first save: creates the situation at `target` (the top level of the personal area, or a folder). */
+	/** The first save: creates the situation at `target` (the top level of an area, or a folder). */
 	create(document: unknown, origin: SituationOrigin, target: SaveTarget, options: CreateOptions = {}): Promise<StoredSituation> {
 		const body = options.titleIsDefault ? { document, origin, titleIsDefault: true } : { document, origin };
 		return this.api.send<StoredSituation>("POST", SituationApi.collectionPath(target), body);

@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { ApiClient, ApiError } from "$lib/api/ApiClient";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
 import { SituationApi } from "./SituationApi";
-import { inFolder, TOP_LEVEL } from "./SaveTarget";
+import { teamArea } from "./Area";
+import { inFolder, teamTopLevel, TOP_LEVEL } from "./SaveTarget";
 
 const summary = {
 	id: "s1",
@@ -15,6 +16,8 @@ const summary = {
 	createdBy: { id: "u1", displayName: "Alice" },
 	updatedAt: "2026-10-04T09:00:00+00:00",
 	updatedBy: { id: "u2", displayName: null },
+	area: { kind: "personal", id: "u1" },
+	canWrite: true,
 };
 
 describe("SituationApi", () => {
@@ -24,6 +27,17 @@ describe("SituationApi", () => {
 	beforeEach(() => {
 		server = new FakeFetch().on("GET", "/api/antiforgery", jsonResponse(200, ANTIFORGERY));
 		api = new SituationApi(new ApiClient(server.fetch));
+	});
+
+	it("lists and creates at the top level of a team's area", async () => {
+		const team = { ...summary, area: { kind: "team", id: "t1" }, canWrite: false };
+		server.on("GET", "/api/teams/t1/situations", jsonResponse(200, [team]));
+		server.on("POST", "/api/teams/t1/situations", jsonResponse(201, { ...team, canWrite: true, document: {} }));
+
+		await expect(api.list(teamTopLevel("t1"))).resolves.toEqual([team]);
+		await expect(api.create({ format: "doc" }, "new", teamTopLevel("t1"))).resolves.toMatchObject({ canWrite: true });
+		const [request] = server.requestsTo("/api/teams/t1/situations").filter((r) => r.method === "POST");
+		expect(JSON.parse(request.body!)).toEqual({ document: { format: "doc" }, origin: "new" });
 	});
 
 	it("lists the top level of the personal area", async () => {
@@ -41,6 +55,8 @@ describe("SituationApi", () => {
 	it("has a collection path per place, with the folder id encoded", () => {
 		expect(SituationApi.collectionPath(TOP_LEVEL)).toBe("/api/personal-area/situations");
 		expect(SituationApi.collectionPath(inFolder("a/b"))).toBe("/api/folders/a%2Fb/situations");
+		expect(SituationApi.collectionPath(inFolder("f1", teamArea("t1")))).toBe("/api/folders/f1/situations");
+		expect(SituationApi.collectionPath(teamTopLevel("t/1"))).toBe("/api/teams/t%2F1/situations");
 	});
 
 	it("gets one situation with its document", async () => {

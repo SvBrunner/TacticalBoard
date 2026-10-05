@@ -176,4 +176,13 @@ describe("SavedSituations", () => {
 			expect(svg).toHaveAttribute("aria-hidden", "true");
 		}
 	});
+
+	it("offers only opening without the right to change (a team Reader)", async () => {
+		const handlers = { onOpen: vi.fn(), onDelete: vi.fn(), onMove: vi.fn(), onRetry: vi.fn() };
+		render(SavedSituations, { props: { session: loggedIn, list: { status: "loaded", situations: [powerplay] }, canChange: false, ...handlers } });
+
+		expect(screen.getAllByRole("button").map((button) => button.textContent?.trim())).toEqual(["Powerplay"]);
+		await fireEvent.click(screen.getByRole("button", { name: "Powerplay" }));
+		expect(handlers.onOpen).toHaveBeenCalledWith(powerplay);
+	});
 });

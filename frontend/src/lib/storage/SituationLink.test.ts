@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { get } from "svelte/store";
 import { SituationLink } from "./SituationLink";
-import { inFolder, TOP_LEVEL } from "./SaveTarget";
+import { teamArea } from "./Area";
+import { inFolder, teamTopLevel, TOP_LEVEL } from "./SaveTarget";
 import type { SituationSummary } from "./SituationApi";
 
 const summary: SituationSummary = {
@@ -15,6 +16,8 @@ const summary: SituationSummary = {
 	createdBy: { id: "u1", displayName: "Alice" },
 	updatedAt: "2026-10-04T08:00:00Z",
 	updatedBy: { id: "u1", displayName: "Alice" },
+	area: { kind: "personal", id: "u1" },
+	canWrite: true,
 };
 
 describe("SituationLink", () => {
@@ -37,10 +40,10 @@ describe("SituationLink", () => {
 		const link = new SituationLink();
 
 		link.startNew(inFolder("f1"));
-		expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: { folderId: "f1" } });
+		expect(link.current()).toEqual({ kind: "unsaved", origin: "new", target: { area: { kind: "personal" }, folderId: "f1" } });
 
 		link.startImported(inFolder("f2"));
-		expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: { folderId: "f2" } });
+		expect(link.current()).toEqual({ kind: "unsaved", origin: "imported", target: { area: { kind: "personal" }, folderId: "f2" } });
 	});
 
 	it("follows a move of its server situation, keeping the revision", () => {
@@ -89,10 +92,10 @@ describe("SituationLink", () => {
 			expect(link.place()).toEqual(TOP_LEVEL);
 
 			link.startNew(inFolder("f1"));
-			expect(link.place()).toEqual({ folderId: "f1" });
+			expect(link.place()).toEqual(inFolder("f1"));
 
 			link.startImported(inFolder("f2"));
-			expect(link.place()).toEqual({ folderId: "f2" });
+			expect(link.place()).toEqual(inFolder("f2"));
 		});
 
 		it("is the folder (or top level) of a server situation, also after a move", () => {
@@ -102,12 +105,18 @@ describe("SituationLink", () => {
 			expect(link.place()).toEqual(TOP_LEVEL);
 
 			link.relocate("s1", "f3");
-			expect(link.place()).toEqual({ folderId: "f3" });
+			expect(link.place()).toEqual(inFolder("f3"));
 		});
 
 		it("is also known for a state alone", () => {
-			expect(SituationLink.placeOf({ kind: "saved", summary: { ...summary, folderId: "f4" } })).toEqual({ folderId: "f4" });
-			expect(SituationLink.placeOf({ kind: "unsaved", origin: "imported", target: inFolder("f5") })).toEqual({ folderId: "f5" });
+			expect(SituationLink.placeOf({ kind: "saved", summary: { ...summary, folderId: "f4" } })).toEqual(inFolder("f4"));
+			expect(SituationLink.placeOf({ kind: "unsaved", origin: "imported", target: inFolder("f5") })).toEqual(inFolder("f5"));
+		});
+
+		it("is in a team's area for a team situation", () => {
+			const team = { ...summary, area: { kind: "team" as const, id: "t1" } };
+			expect(SituationLink.placeOf({ kind: "saved", summary: team })).toEqual(teamTopLevel("t1"));
+			expect(SituationLink.placeOf({ kind: "saved", summary: { ...team, folderId: "f6" } })).toEqual(inFolder("f6", teamArea("t1")));
 		});
 
 		it("is the top level again after the situation was closed", () => {
@@ -117,6 +126,26 @@ describe("SituationLink", () => {
 			link.reset();
 
 			expect(link.place()).toEqual(TOP_LEVEL);
+		});
+	});
+
+	describe("writable", () => {
+		it("is true for an unsaved situation and for a server situation the user may change", () => {
+			const link = new SituationLink();
+			expect(link.writable()).toBe(true);
+
+			link.attach(summary);
+			expect(link.writable()).toBe(true);
+		});
+
+		it("is false for a server situation the user may only read (a team Reader)", () => {
+			const link = new SituationLink();
+			link.attach({ ...summary, canWrite: false });
+
+			expect(link.writable()).toBe(false);
+			expect(SituationLink.isWritable({ kind: "saved", summary: { ...summary, canWrite: false } })).toBe(false);
+			link.reset();
+			expect(link.writable()).toBe(true);
 		});
 	});
 });

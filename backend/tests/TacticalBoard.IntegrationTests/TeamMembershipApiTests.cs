@@ -133,6 +133,23 @@ public sealed class TeamMembershipApiTests(PostgresFixture postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task The_member_list_shows_Admins_then_Editors_then_Readers_each_by_name()
+    {
+        using var zed = await LoggedInAsync("zed", "Zed");
+        var code = await CreateTeamAsync(zed, "Lions");
+        using var anna = await LoggedInAsync("anna", "Anna");
+        using var bert = await LoggedInAsync("bert", "Bert");
+        using var carl = await LoggedInAsync("carl", "carl");
+        await JoinAsync(zed, anna, code);
+        await JoinAsync(zed, bert, code);
+        await JoinAsync(zed, carl, code);
+        using var editor = await ChangeRoleAsync(zed, code, await UserIdAsync(bert), "editor");
+        using var admin = await ChangeRoleAsync(zed, code, await UserIdAsync(carl), "admin");
+
+        Assert.Equal([("carl", "admin"), ("Zed", "admin"), ("Bert", "editor"), ("Anna", "reader")], await MembersAsync(anna, code));
+    }
+
+    [Fact]
     public async Task One_pending_request_per_user_also_under_parallel_requests_and_none_from_members()
     {
         using var alice = await LoggedInAsync("alice", "Alice");

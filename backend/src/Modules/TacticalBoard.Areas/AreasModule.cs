@@ -10,7 +10,7 @@ using TacticalBoard.Teams.Contracts;
 namespace TacticalBoard.Areas;
 
 /// <summary>
-/// The Areas module: the common abstraction for where situations live (a personal area or a team); answers whether the current user may read or write in an area by asking Users or Teams; passes a team's deletion on to the content of its area (<see cref="IAreaContentDeletion"/>).
+/// The Areas module: the common abstraction for where situations live (a personal area or a team); answers whether the current user may read or write in an area by asking Users or Teams (personal area: its owner; team area: the role matrix); finds a team's area by its code or id (<see cref="IAreaDirectory"/>); passes a team's deletion on to the content of its area (<see cref="IAreaContentDeletion"/>).
 /// </summary>
 public sealed class AreasModule : IModule
 {
@@ -22,7 +22,9 @@ public sealed class AreasModule : IModule
     {
         services.AddModelConfigurationFrom(typeof(AreasModule).Assembly);
         services.AddScoped<IAreaAccessRule, PersonalAreaAccessRule>();
+        services.AddScoped<IAreaAccessRule, TeamAreaAccessRule>();
         services.AddScoped<IAreaAccess, AreaAccess>();
+        services.AddScoped<IAreaDirectory, AreaDirectory>();
         services.AddScoped<IActorDirectory, ActorDirectory>();
         services.AddScoped<ITeamDeletionParticipant, TeamAreaDeletion>();
     }

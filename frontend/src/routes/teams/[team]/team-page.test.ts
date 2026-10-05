@@ -5,6 +5,8 @@ import { authSession } from "$lib/auth/AuthSession";
 import { installDialogPolyfill } from "$lib/testing/dialogPolyfill";
 import { ANTIFORGERY, FakeFetch, jsonResponse, problemResponse } from "$lib/testing/fakeFetch";
 import type { JoinRequest, Team, TeamMember } from "$lib/teams/TeamApi";
+import { situationLink } from "$lib/storage/SituationLink";
+import { summaryOf } from "$lib/testing/storageFakes";
 import { goto } from "$app/navigation";
 import TeamRoutePage from "./+page.svelte";
 import { load } from "./+page";
@@ -71,6 +73,8 @@ describe("team page", () => {
 			.on("GET", "/api/antiforgery", jsonResponse(200, ANTIFORGERY))
 			.on("GET", "/api/teams/ABC123/members", jsonResponse(200, members))
 			.on("GET", "/api/teams/ABC123/join-requests", jsonResponse(200, requests))
+			.on("GET", "/api/teams/t1/folders", jsonResponse(200, []))
+			.on("GET", "/api/teams/t1/situations", jsonResponse(200, []))
 			.on(
 				"GET",
 				"/api/teams/ABC123",
@@ -191,6 +195,7 @@ describe("team page", () => {
 	it("lets an Admin change a member's role", async () => {
 		await renderTeam();
 		server.on("PUT", "/api/teams/ABC123/members/u2/role", jsonResponse(200, { ...bobMember, role: "editor" }));
+		server.on("GET", "/api/teams/ABC123/members", jsonResponse(200, [aliceMember, { ...bobMember, role: "editor" }]));
 		const members = screen.getByRole("region", { name: "Members" });
 
 		const picker = within(members).getByRole("combobox", { name: "Role of Bob" });
@@ -209,6 +214,8 @@ describe("team page", () => {
 
 		await fireEvent.change(within(members).getByRole("combobox", { name: "Role of Alice (you)" }), { target: { value: "reader" } });
 		await settle();
+		await fireEvent.click(within(screen.getByRole("alertdialog", { name: "Change your own role?" })).getByRole("button", { name: "Change role" }));
+		await settle();
 
 		expect(within(members).getByRole("alert")).toHaveTextContent("“Lions” needs at least one Admin. Make another member Admin first.");
 		expect(within(members).getByRole("combobox", { name: "Role of Alice (you)" })).toHaveValue("admin");
@@ -220,6 +227,10 @@ describe("team page", () => {
 		server.on("GET", "/api/teams/ABC123", jsonResponse(200, { ...lions, role: "reader", pendingJoinRequests: null }));
 
 		await fireEvent.change(screen.getByRole("combobox", { name: "Role of Alice (you)" }), { target: { value: "reader" } });
+		await settle();
+		const question = screen.getByRole("alertdialog", { name: "Change your own role?" });
+		expect(question).toHaveTextContent("You'll be Reader in “Lions” and lose the rights of your current role at once.");
+		await fireEvent.click(within(question).getByRole("button", { name: "Change role" }));
 		await settle();
 
 		expect(within(screen.getByRole("main")).queryByRole("combobox")).toBeNull();
@@ -383,11 +394,27 @@ describe("team page", () => {
 
 		expect(screen.getAllByRole("region").map((region) => region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)?.firstChild?.textContent?.trim())).toEqual([
 			"Team",
+			"Start in this team",
+			"Situations of the team",
+			"Folders",
+			"Situations",
 			"Logo",
 			"Join requests",
 			"Members",
 			"Delete team",
 		]);
+	});
+
+	it("doesn't change the own role when the Admin cancels the question", async () => {
+		await renderTeam(lions, jsonResponse(200, alice), [aliceMember, { ...bobMember, role: "admin" }]);
+
+		await fireEvent.change(screen.getByRole("combobox", { name: "Role of Alice (you)" }), { target: { value: "editor" } });
+		await settle();
+		await fireEvent.click(within(screen.getByRole("alertdialog", { name: "Change your own role?" })).getByRole("button", { name: "Cancel" }));
+		await settle();
+
+		expect(server.requestsTo("/api/teams/ABC123/members/u1/role")).toHaveLength(0);
+		expect(screen.getByRole("combobox", { name: "Role of Alice (you)" })).toHaveValue("admin");
 	});
 
 	it("lets an Admin rename the team", async () => {
@@ -410,7 +437,7 @@ describe("team page", () => {
 		const logoSection = screen.getByRole("region", { name: "Logo" });
 		expect(logoSection).toHaveTextContent("No logo.");
 
-		const input = container.querySelector<HTMLInputElement>("input[type=file]")!;
+		const input = logoSection.querySelector<HTMLInputElement>("input[type=file]")!;
 		Object.defineProperty(input, "files", {
 			value: [new File([new Uint8Array(1)], "logo.png", { type: "image/png" })],
 			configurable: true,
@@ -463,5 +490,113 @@ describe("team page", () => {
 
 		expect(screen.getByRole("main")).toHaveTextContent("Log in to see this team.");
 		expect(within(screen.getByRole("banner")).getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/auth/login?returnUrl=%2Fteams%2FABC123");
+	});
+
+	describe("the team's situations and folders", () => {
+		const teamSituation = summaryOf({ id: "s1", title: "Powerplay", area: { kind: "team", id: "t1" }, canWrite: true });
+		const teamFolder = {
+			id: "f1",
+			name: "Set pieces",
+			createdAt: "",
+			updatedAt: "",
+			area: { kind: "team" as const, id: "t1" },
+			canWrite: true,
+			situationCount: 2,
+		};
+
+		async function renderAs(role: "admin" | "editor" | "reader") {
+			await renderTeam({ ...lions, role, pendingJoinRequests: role === "admin" ? 0 : null });
+			server
+				.on("GET", "/api/teams/t1/folders", jsonResponse(200, [{ ...teamFolder, canWrite: role !== "reader" }]))
+				.on("GET", "/api/teams/t1/situations", jsonResponse(200, [{ ...teamSituation, canWrite: role !== "reader" }]));
+			cleanup();
+			render(TeamRoutePage, { props: { data: { team: "ABC123" } } });
+			await settle();
+		}
+
+		const content = () => screen.getByRole("region", { name: "Situations of the team" });
+
+		beforeEach(() => {
+			situationLink.reset();
+		});
+
+		it("lists the team's folders (with counts) and top-level situations for every member", async () => {
+			await renderAs("reader");
+
+			const folders = within(content()).getByRole("region", { name: "Folders" });
+			expect(within(folders).getByRole("link", { name: /Set pieces/ })).toHaveAttribute("href", "/folders/f1");
+			expect(folders).toHaveTextContent("2 situations");
+			const situations = within(content()).getByRole("region", { name: "Situations" });
+			expect(within(situations).getByRole("button", { name: "Powerplay" })).toBeInTheDocument();
+		});
+
+		it("offers a Reader only to open, with a hint why", async () => {
+			await renderAs("reader");
+
+			expect(screen.queryByRole("region", { name: "Start in this team" })).toBeNull();
+			expect(content()).toHaveTextContent("As a Reader you can open, play back and export the team's situations, but not change them.");
+			expect(within(content()).queryByRole("button", { name: "New folder" })).toBeNull();
+			expect(within(content()).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual(["Powerplay"]);
+		});
+
+		it.each(["admin", "editor"] as const)("offers an %s to start, create folders, move and delete", async (role) => {
+			await renderAs(role);
+
+			expect(within(screen.getByRole("region", { name: "Start in this team" })).getAllByRole("button").map((b) => b.textContent?.trim())).toEqual([
+				"New situation",
+				"Import",
+			]);
+			expect(within(content()).getByRole("button", { name: "New folder" })).toBeInTheDocument();
+			expect(within(content()).getByRole("button", { name: "Move “Powerplay”" })).toBeInTheDocument();
+			expect(within(content()).getByRole("button", { name: "Delete “Powerplay”" })).toBeInTheDocument();
+		});
+
+		it("starts a new situation at the team's top level", async () => {
+			await renderAs("editor");
+
+			await fireEvent.click(within(screen.getByRole("region", { name: "Start in this team" })).getByRole("button", { name: "New situation" }));
+			await settle();
+			await fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+			expect(situationLink.current()).toEqual({ kind: "unsaved", origin: "new", target: { area: { kind: "team", teamId: "t1" }, folderId: null } });
+			expect(goto).toHaveBeenCalledWith("/editor");
+		});
+
+		it("creates a folder in the team", async () => {
+			await renderAs("editor");
+			server.on("POST", "/api/teams/t1/folders", jsonResponse(201, { ...teamFolder, id: "f2", name: "Breakouts" }));
+
+			await fireEvent.click(within(content()).getByRole("button", { name: "New folder" }));
+			const dialog = screen.getByRole("dialog", { name: "New folder" });
+			await fireEvent.input(within(dialog).getByRole("textbox", { name: "Folder name" }), { target: { value: "Breakouts" } });
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+			await settle();
+
+			expect(JSON.parse(server.requestsTo("/api/teams/t1/folders").find((request) => request.method === "POST")!.body!)).toEqual({ name: "Breakouts" });
+		});
+
+		it("moves a situation only among the team's folders", async () => {
+			await renderAs("editor");
+			server.on("PUT", "/api/situations/s1/folder", jsonResponse(200, { ...teamSituation, folderId: "f1" }));
+
+			await fireEvent.click(within(content()).getByRole("button", { name: "Move “Powerplay”" }));
+			const dialog = screen.getByRole("dialog", { name: "Move “Powerplay”" });
+			expect(within(dialog).getAllByRole("radio").map((radio) => radio.closest("label")?.textContent?.trim())).toEqual([
+				expect.stringContaining("Top level"),
+				"Set pieces",
+			]);
+			await fireEvent.click(within(dialog).getByRole("radio", { name: "Set pieces" }));
+			await fireEvent.click(within(dialog).getByRole("button", { name: "Move" }));
+			await settle();
+
+			expect(JSON.parse(server.requestsTo("/api/situations/s1/folder")[0].body!)).toEqual({ folderId: "f1" });
+		});
+
+		it("shows nothing of it to non-members", async () => {
+			await renderTeam(stranger(lions));
+
+			expect(screen.queryByRole("region", { name: "Situations of the team" })).toBeNull();
+			expect(server.requestsTo("/api/teams/t1/situations")).toHaveLength(0);
+		});
 	});
 });

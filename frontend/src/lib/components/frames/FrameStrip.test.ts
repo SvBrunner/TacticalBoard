@@ -20,7 +20,7 @@ const FRAMES = [
 const ITEM_WIDTH = 60;
 const ITEM_STEP = 68;
 
-function renderStrip(overrides: Partial<{ frames: readonly Frame[]; activeFrameId: string; playing: boolean }> = {}) {
+function renderStrip(overrides: Partial<{ frames: readonly Frame[]; activeFrameId: string; playing: boolean; readonly: boolean }> = {}) {
 	const handlers = {
 		onSelect: vi.fn<(id: string) => void>(),
 		onAdd: vi.fn<() => void>(),
@@ -431,6 +431,24 @@ describe("FrameStrip", () => {
 			expect(onMove).not.toHaveBeenCalled();
 			expect(items()[0].style.transform).toBe("");
 			expect(onSelect).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("read-only (a situation the user may only view)", () => {
+		it("disables and ignores every frame action but still reports a tap on a frame", async () => {
+			const { nav, onAdd, onDelete, onMove, onSelect } = renderStrip({ activeFrameId: "f2", readonly: true });
+
+			for (const name of ["Move frame left", "Move frame right", "Add frame", "Delete frame"]) {
+				const button = within(nav).getByRole("button", { name });
+				expect(button).toBeDisabled();
+				button.click();
+			}
+			await fireEvent.click(frameButton(3));
+
+			expect(onAdd).not.toHaveBeenCalled();
+			expect(onDelete).not.toHaveBeenCalled();
+			expect(onMove).not.toHaveBeenCalled();
+			expect(onSelect).toHaveBeenCalledWith("f3");
 		});
 	});
 });

@@ -46,7 +46,7 @@ Next, in this order:
    *Before teams, so every later screen is built translatable from the start.*
 6. [x] **Teams**: create (unique name, optional logo, generated code), overview page with search (logged in), team page via link; the start page lists the user's teams. Also: the creator becomes Admin; Admins rename the team and set/replace/remove its logo; logos are scaled to fit 256 × 256 px and stored without metadata (ADR-014).
 7. [x] **Membership**: join requests (accept/reject, re-request after rejection), roles and member management, member list, leaving, deleting a team (with confirmation). Also the step-6 follow-ups (product-owner decisions): non-members see only a team's name and logo (no code or link, also not in the overview), removing a logo no longer asks, and the deletion of a team's content is prepared as a contract chain that step 8 implements.
-8. [ ] **Team situations and folders** with the permission matrix (ch. 8.1).
+8. [x] **Team situations and folders** with the permission matrix (ch. 8.1): every member sees the team's folders and situations on the team's page and the team folders' pages; Admins and Editors create, edit, move and delete them and create, rename and delete folders, exactly as in the personal area; Readers only open (read-only in the editor), play back and export; system administrators have no access as such. Deleting a team deletes its folders and situations. No moving or copying between areas (only export/import). Also the step-7 follow-ups (product-owner decisions): giving oneself a lower role asks first, and the member list shows Admins, then Editors, then Readers, each by name.
 9. [ ] **System administration**: user list, block/unblock, delete users, grant/revoke system administrator, team management (incl. renaming a team and changing its logo — confirmed: system administrators may do that too, through `ITeamAuthorization.CanChangeDetailsAsync`).
 10. [ ] **Account deletion** (by the user and by a system administrator), incl. the last-Admin rule.
 
@@ -61,18 +61,26 @@ Alongside (product-owner request):
 - [ ] Version history of situations (the data model already keeps revisions)
 - [ ] Restoring soft-deleted items; purging old data
 - [ ] Helm chart for Kubernetes
+- [ ] Notifications (e.g. e-mail or push) for join requests — not built yet (product-owner decision, step 7); the join requests are stored with their timestamps, so a later notifier can be added without changing them
 
 ## Open questions
 
-- **Membership (step 7):** A rejected requester is not told about the rejection; their request is just no longer pending and the team's page offers "Ask to join" again. Should they see "Your request was rejected" (once, or until they ask again), or get any other notice?
-- **Membership (step 7):** Admins may remove other Admins directly (as long as one Admin remains), like every other member. Is that wanted, or should an Admin have to be demoted first?
-- **Membership (step 7):** Changing a role (also demoting oneself from Admin) takes effect at once, without a confirmation; only removing, leaving and deleting the team ask. Should demoting oneself (or any role change) ask first?
-- **Membership (step 7):** The member list is sorted by display name. Should Admins (or roles in general) come first?
-- **Membership (step 7):** Admins see the number of waiting join requests on the team's page and as a badge on the start page's team list. Is any other notice wanted (e.g. in the navbar)?
-- **Membership (step 7):** The member list shows display names and roles only (no "member since", no e-mail). Is anything else wanted?
-- **Membership (step 7):** A pending join request stays pending without a time limit. Should requests expire?
+- **Team situations (step 8):** May a Reader edit a team situation locally, without saving (e.g. to try something out, then export it)? Implemented conservatively: the editor opens team situations **read-only** for Readers (like during playback); playback, frame switching and the JSON/GIF export stay available. Should Readers be able to change it locally (never saving it to the team)?
+- **Team situations (step 8):** In the editor of a team situation a Reader may only view, **New** and **Load** start at the top level of the **personal area** (not in the team, where they can't save); the badge still leads back to the team's folder or page. Is that the wanted target?
+- **Team situations (step 8):** A role change takes effect for content with the next request, but an open editor isn't told: a member demoted to Reader while editing gets "You may not change this situation (any more)…" when saving (and can export); a Reader promoted meanwhile has to open the situation again to edit it. Is a live update wanted?
+- **Team situations (step 8):** A team's situations and folders are shown on the team's page below the team's details (before the member list), for every member. Is another place or order wanted (e.g. a tab, or the situations first)?
+- **Team situations (step 8):** A system administrator who is also a member of a team has that member's access to the team's content (by their role); only a system administrator *without* a membership has none. Confirm?
+- **Team situations (step 8):** Team situations aren't listed on the start page (only on their team's page). Should the start page also show, e.g., recently changed team situations?
 
 ## Resolved questions (product-owner answers)
+
+- **Membership (step 7):** A rejected requester is **not** notified; the team's page simply offers "Ask to join" again — kept.
+- **Membership (step 7):** An Admin may remove another Admin directly (as long as one Admin remains) — kept.
+- **Membership (step 7):** Giving **oneself a lower role** (self-demotion) asks for confirmation first; every other role change happens at once — implemented in step 8.
+- **Membership (step 7):** The member list shows **Admins first, then Editors, then Readers**, each by display name (deleted users last within their role) — implemented in step 8 (ordered by the backend).
+- **Membership (step 7):** No further notice of pending join requests for now (the count on the team's page and the start page stays); a later integration (e.g. e-mail or push) must remain possible — added to "Later".
+- **Membership (step 7):** The member list shows only display name and role — kept.
+- **Membership (step 7):** Pending join requests don't expire — kept.
 
 - **Teams (step 6):** Renaming a team and changing its logo: the team's **Admins and system administrators** — the system-administrator part is built with system administration (step 9).
 - **Teams (step 6):** After "Create team" the new team's page opens — confirmed.

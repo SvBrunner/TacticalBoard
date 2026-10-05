@@ -31,6 +31,12 @@ internal interface IFolderRepository
     /// <exception cref="FolderNameUniquenessViolationException">Another folder of the area got the same name in the meantime.</exception>
     Task AddAsync(Folder folder, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Soft-deletes every non-deleted folder of <paramref name="area"/> at once (a bulk update with
+    /// <paramref name="deletedAt"/>), whether empty or not: the area itself goes away.
+    /// </summary>
+    Task DeleteAllInAreaAsync(AreaReference area, DateTimeOffset deletedAt, CancellationToken cancellationToken);
+
     /// <summary>Saves the changes of tracked folders (a rename, a soft delete).</summary>
     /// <exception cref="FolderNameUniquenessViolationException">Another folder of the area got the same name in the meantime.</exception>
     Task SaveChangesAsync(CancellationToken cancellationToken);

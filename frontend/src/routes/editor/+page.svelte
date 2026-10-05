@@ -49,7 +49,7 @@
 	import { EditorPlace } from "$lib/editor/EditorPlace";
 	import { EditorRoute } from "$lib/editor/EditorRoute";
 	import { SaveShortcut } from "$lib/storage/SaveShortcut";
-	import { situationLink } from "$lib/storage/SituationLink";
+	import { SituationLink, situationLink } from "$lib/storage/SituationLink";
 	import { SituationSaver, type ConflictChoice } from "$lib/storage/SituationSaver";
 	import { situationApi, situationSerializer } from "$lib/storage/situationStorage";
 	import { defaultTitles, englishMessages, t } from "$lib/i18n";
@@ -110,6 +110,13 @@
 	const sessionState = authSession.state;
 	const canSave = $derived($sessionState.status === "authenticated");
 	const linkState = situationLink.state;
+	/**
+	 * A server situation the user may only view (a team Reader, arc42 ch. 8.1;
+	 * the conservative choice for the open question whether Readers may edit
+	 * locally): the editor is read-only like during playback, and can't save.
+	 * Playback, frame switching and the JSON/GIF export stay available.
+	 */
+	const readOnly = $derived(!SituationLink.isWritable($linkState));
 	/** Something to save: never saved on the server, or changed since (arc42 ch. 8.7). */
 	const hasChanges = $derived(SituationSaver.hasChanges($linkState, $unsavedChanges));
 	/** Where the editor works: New and Load save into the edited situation's folder, the badge leads back to it (arc42 ch. 8.8). */
@@ -132,7 +139,7 @@
 	const saveState = saver.state;
 	const saveShortcut = new SaveShortcut({
 		save: handleSave,
-		canSave: () => authSession.current().status === "authenticated",
+		canSave: () => authSession.current().status === "authenticated" && situationLink.writable(),
 	});
 	const frames = new FrameWorkflow({
 		editor: situationEditor,
@@ -173,6 +180,8 @@
 	const playbackKeys = new PlaybackShortcuts(playback);
 	/** Playing or paused: the board shows the slideshow and editing is blocked. */
 	const playing = $derived($playbackState.status !== "stopped");
+	/** Editing is blocked: during playback, and for a situation the user may only view. */
+	const locked = $derived(playing || readOnly);
 	/** The frame on the board: the slideshow's during playback, otherwise the active frame. */
 	const shownFrame = $derived(
 		$playbackState.status === "stopped" ? $activeFrame : ($situation.findFrame($playbackState.frameId) ?? $activeFrame),
@@ -215,8 +224,8 @@
 		if (isInsideModalDialog(event.target) || Konva.isDragging()) {
 			return;
 		}
-		if (playbackKeys.handle(event) || player.isActive()) {
-			// During playback the board is read-only: no undo/redo, Delete or Escape for it.
+		if (playbackKeys.handle(event) || player.isActive() || !situationLink.writable()) {
+			// During playback, and for a situation the user may only view, the board is read-only: no undo/redo, Delete or Escape for it.
 			return;
 		}
 		if (!shortcuts.handle(event)) {
@@ -233,8 +242,13 @@
 		}
 	}
 
+	/** Editing is blocked right now (playback, or a situation the user may only view). */
+	function isLocked(): boolean {
+		return player.isActive() || !situationLink.writable();
+	}
+
 	function handleSelectTool(tool: Tool) {
-		if (player.isActive()) {
+		if (isLocked()) {
 			return;
 		}
 		tools.selectTool(tool);
@@ -243,7 +257,7 @@
 	}
 
 	function handleSelectPlayerColor(color: string) {
-		if (player.isActive()) {
+		if (isLocked()) {
 			return;
 		}
 		tools.selectPlayerColor(color);
@@ -251,7 +265,7 @@
 	}
 
 	function handleUndo() {
-		if (player.isActive()) {
+		if (isLocked()) {
 			return;
 		}
 		// The popover may target an element the undo removes or changes.
@@ -260,7 +274,7 @@
 	}
 
 	function handleRedo() {
-		if (player.isActive()) {
+		if (isLocked()) {
 			return;
 		}
 		popover.close();
@@ -312,16 +326,16 @@
 		title={shownTitle}
 		onHome={handleHome}
 		homeHref={home.href}
-		homeLabel={home.inFolder ? $t.navbar.backToFolder : undefined}
+		homeLabel={home.kind === "folder" ? $t.navbar.backToFolder : home.kind === "team" ? $t.navbar.backToTeam : undefined}
 		onNew={() => dialogs.startNew()}
 		onExportJson={() => workflow.exportCurrent()}
 		onExportAnimation={handleExportAnimation}
 		onLoadFile={(file) => dialogs.importFile(file)}
-		canUndo={$history.canUndo && !playing}
-		canRedo={$history.canRedo && !playing}
+		canUndo={$history.canUndo && !locked}
+		canRedo={$history.canRedo && !locked}
 		onUndo={handleUndo}
 		onRedo={handleRedo}
-		onSave={canSave ? handleSave : undefined}
+		onSave={canSave && !readOnly ? handleSave : undefined}
 		loginReturnTo={$linkState.kind === "saved" ? EditorRoute.forSaved($linkState.summary.id) : "/"}
 		saving={$saveState.status === "saving"}
 		{hasChanges}
@@ -337,19 +351,19 @@
 			playerColor={$playerColor}
 			onSelectTool={handleSelectTool}
 			onSelectPlayerColor={handleSelectPlayerColor}
-			disabled={playing}
+			disabled={locked}
 		/>
 
 		<main class="workspace">
 			<div class="canvas-area">
 				<BoardCanvas
 					elements={shownFrame.elements}
-					selectedId={playing ? null : $selectedId}
-					selectedBend={playing ? null : $selectedBend}
+					selectedId={locked ? null : $selectedId}
+					selectedBend={locked ? null : $selectedBend}
 					{controller}
 					{viewport}
-					arrowTool={playing ? null : arrowTool}
-					readonly={playing}
+					arrowTool={locked ? null : arrowTool}
+					readonly={locked}
 				/>
 			</div>
 			<PlaybackControls
@@ -371,10 +385,11 @@
 				activeFrameId={shownFrame.id}
 				{viewport}
 				{playing}
+				readonly={readOnly}
 				onSelect={handleSelectFrame}
-				onAdd={() => !player.isActive() && frames.add()}
-				onDelete={(id) => !player.isActive() && frames.delete(id)}
-				onMove={(id, toIndex) => !player.isActive() && frames.move(id, toIndex)}
+				onAdd={() => !isLocked() && frames.add()}
+				onDelete={(id) => !isLocked() && frames.delete(id)}
+				onMove={(id, toIndex) => !isLocked() && frames.move(id, toIndex)}
 			/>
 		</main>
 
@@ -382,10 +397,13 @@
 			title={$situation.title}
 			description={$situation.description}
 			titlePlaceholder={$t.situation.defaultTitle}
-			onTitleChange={(title) => !player.isActive() && situationEditor.changeTitle(title)}
-			onDescriptionChange={(description) => !player.isActive() && situationEditor.changeDescription(description)}
-			disabled={playing}
+			onTitleChange={(title) => !isLocked() && situationEditor.changeTitle(title)}
+			onDescriptionChange={(description) => !isLocked() && situationEditor.changeDescription(description)}
+			disabled={locked}
 		>
+			{#if readOnly}
+				<p class="read-only" role="note">{$t.editor.readOnly}</p>
+			{/if}
 			{#if $linkState.kind === "saved"}
 				<SavedSituationInfo summary={$linkState.summary} />
 			{/if}
@@ -394,7 +412,8 @@
 				<FrameDescriptionEditor
 					frameNumber={activeFrameNumber}
 					description={$activeFrame.description}
-					onChange={(description) => situationEditor.changeFrameDescription(description)}
+					readonly={readOnly}
+					onChange={(description) => !isLocked() && situationEditor.changeFrameDescription(description)}
 					onCommit={() => situationEditor.endGesture()}
 				/>
 			{/if}
@@ -402,7 +421,7 @@
 	</div>
 
 	<ElementEditPopover
-		element={$popoverAnchor && !playing ? $selected : null}
+		element={$popoverAnchor && !locked ? $selected : null}
 		anchor={$popoverAnchor}
 		bendIndex={$selectedBend}
 		actions={situationEditor}
@@ -445,6 +464,17 @@
 
 	.body > :global(.details-panel) {
 		grid-area: details;
+	}
+
+	.read-only {
+		margin: 0;
+		padding: 8px 12px;
+		border-radius: var(--radius-md);
+		background: var(--bg-app);
+		box-shadow: inset 0 0 0 1px var(--border);
+		font-size: 14px;
+		line-height: 1.4;
+		color: var(--text);
 	}
 
 	.workspace {
