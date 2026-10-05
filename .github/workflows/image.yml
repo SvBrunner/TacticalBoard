@@ -20,8 +20,9 @@ on:
         required: true
         type: boolean
 
-permissions:
-  contents: read
+# No `permissions` here on purpose: a reusable workflow's own block would cap the token
+# below what the caller grants, so the publish run would lose `packages: write`.
+# The caller (ci.yml) decides: `contents: read` for builds, plus `packages: write` for publish.
 
 jobs:
   image:
