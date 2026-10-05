@@ -107,3 +107,12 @@ GIF stores frame delays in hundredths of a second and at most 256 colors per fra
 - **Dates follow the UI language**, not the browser's region: German shows "04.10.2026, 10:30" also on a Swiss or Austrian browser; English uses the US-style "Oct 4, 2026, 10:30 AM".
 - **Position codes stay as they are** (G, V, C, F, LV, …, derived from German terms); only their full names are translated.
 
+## Deployment
+
+- **One backend instance only.** Migrations run at startup and the data-protection keys are a file-system directory, so several backend replicas would race on migrations and need a shared key directory. Scaling out is not supported yet.
+- **No Helm chart yet** — only the Docker Compose example (`deploy/production/`, [deployment.md](deployment.md)); a chart is planned (roadmap "Later").
+- **No sub-path hosting.** The app must own the whole origin (`https://tacticalboard.example.org/`), not a path below another site.
+- **Data-protection keys are not encrypted at rest** — they lie unencrypted on the key volume (protect it like the database). ASP.NET Core's key-encryption options are not wired in.
+- **The backend trusts forwarded headers from any sender** (`ASPNETCORE_FORWARDEDHEADERS_ENABLED`, no list of known proxies), so its port must be reachable only through the gateway/reverse proxy.
+- **`latest` is the newest `master` build**, not the newest release. Production should pin a version tag.
+- **Images for `linux/amd64` and `linux/arm64` only.**

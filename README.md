@@ -12,10 +12,11 @@ In progress (Phase 2): a backend with users and teams (per-team roles Admin, Edi
 TacticalBoard/
 ├── frontend/       SvelteKit app, built as a static SPA (adapter-static)
 ├── backend/        .NET 10 modular monolith (ASP.NET Core, EF Core + PostgreSQL)
-├── deploy/         Configuration for the local Compose stack (reverse proxy, dev IdP realm)
+├── .github/        GitHub Actions: CI and publishing the container images
+├── deploy/         Local Compose stack config (reverse proxy, dev IdP realm); production example (deploy/production/)
 ├── compose.yaml    Local development stack: proxy, frontend, backend, PostgreSQL, Keycloak
-├── docs/           Roadmap, architecture (arc42), known limitations
-├── flake.nix       Nix dev shell (pnpm, nodejs, .NET SDK)
+├── docs/           Deployment guide, roadmap, architecture (arc42), known limitations
+├── flake.nix       Nix dev shell (pnpm, nodejs, .NET SDK, actionlint)
 └── .envrc          direnv hook for the flake
 ```
 
@@ -69,7 +70,7 @@ dotnet run --project src/TacticalBoard.Api      # http://localhost:5080, e.g. /a
 
 `appsettings.Development.json` points at the Compose database on `localhost:5432` and the Compose Keycloak on `localhost:8180` (start it too for the login: `docker compose up -d db idp`). Its public URL is the Vite dev server (`http://localhost:5173`), so the login returns there; to log in against the backend directly on `:5080`, set `App__PublicBaseUrl=http://localhost:5080`.
 
-**Configuration** is done through environment variables (`ConnectionStrings__TacticalBoard`, `App__PublicBaseUrl`, `Oidc__Authority`, `Oidc__ClientId`, `Oidc__ClientSecret`, `Session__SecureCookies`, `DataProtection__KeysDirectory`, `Bootstrap__SystemAdministrators`, …); the full list is in [arc42 ch. 7](docs/arc42/07_deployment_view.md). The backend works with any standard OpenID Connect provider; how login, session and CSRF protection work is described in [arc42 ch. 8.13](docs/arc42/08_crosscutting_concepts.md). Migrations are applied when the backend starts (unless `Database__MigrateOnStartup=false`).
+**Configuration** is done through environment variables (`ConnectionStrings__TacticalBoard`, `App__PublicBaseUrl`, `Oidc__Authority`, `Oidc__ClientId`, `Oidc__ClientSecret`, `Session__SecureCookies`, `DataProtection__KeysDirectory`, `Bootstrap__SystemAdministrators`, …); the full list is in [docs/deployment.md](docs/deployment.md#backend-configuration-reference). The backend works with any standard OpenID Connect provider; how login, session and CSRF protection work is described in [arc42 ch. 8.13](docs/arc42/08_crosscutting_concepts.md). Migrations are applied when the backend starts (unless `Database__MigrateOnStartup=false`).
 
 **Adding a migration** after changing the model (a unit test fails while the model and the migrations differ):
 
@@ -104,6 +105,14 @@ Open http://localhost:8080 and click **Log in** in the navbar. Logged in, the ed
 
 Stop with `docker compose down`; `docker compose down -v` also deletes the volumes (database, session keys).
 
+## Deployment
+
+Ready-made images for `linux/amd64` and `linux/arm64` are published to the GitHub Container Registry: `ghcr.io/svbrunner/tacticalboard-backend` and `ghcr.io/svbrunner/tacticalboard-frontend` (tags `X.Y.Z` / `X.Y` for releases, `latest` for the newest `master` build). [`deploy/production/`](deploy/production/) has a Docker Compose example (gateway, frontend, backend, PostgreSQL; bring your own TLS reverse proxy and OpenID Connect provider) with an `.env.example`.
+
+**[docs/deployment.md](docs/deployment.md)** lists everything a deployment must set: every backend variable, the OIDC client (redirect URI `<public URL>/auth/callback`), reverse-proxy requirements, the first system administrator, database, backups and upgrades.
+
+**CI and releases** (GitHub Actions, `.github/workflows/`): every push and pull request runs the frontend checks/tests/build, the backend build and tests, and a test build of both images. After CI passes, pushes to `master` publish `latest` + `sha-<commit>`; a release is made by pushing a tag `vX.Y.Z` (→ images `X.Y.Z` and `X.Y`). Check workflow changes locally with `actionlint` (in the Nix dev shell). Details: [arc42 ch. 7](docs/arc42/07_deployment_view.md), ADR-016.
+
 ## Frontend scripts (run from `frontend/`)
 
 | Command | Purpose |
@@ -122,7 +131,7 @@ System texts live in typed message catalogs, one file per language: `frontend/sr
 
 - Frontend: SvelteKit 2 + Svelte 5 (static build), Konva / svelte-konva for the drawing canvas, own typed i18n (German/English), Vitest + Testing Library for tests
 - Backend: .NET 10, ASP.NET Core (minimal APIs), EF Core with Npgsql (PostgreSQL), SkiaSharp for team logos (ADR-014), xUnit v3 + Testcontainers, NetArchTest for architecture rules
-- Deployment: OCI containers, Docker Compose, Caddy as reverse proxy and static file server
+- Deployment: OCI containers (multi-platform, on ghcr.io), Docker Compose, Caddy as reverse proxy and static file server, GitHub Actions for CI and publishing
 
 pnpm is the only supported package manager — the lockfile and `pnpm-workspace.yaml` in `frontend/` are the source of truth.
 

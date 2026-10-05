@@ -1,0 +1,92 @@
+# Builds one container image (backend or frontend), called by ci.yml (arc42 ch. 7, ADR-016).
+#
+#  push: false  test build for linux/amd64 only, nothing is pushed (pull requests, branches).
+#  push: true   linux/amd64 + linux/arm64, pushed to ghcr.io/<owner>/tacticalboard-<component>
+#               with the tags from docker/metadata-action:
+#                 push to master   -> latest, sha-<short sha>
+#                 tag vX.Y.Z       -> X.Y.Z, X.Y   (pre-releases vX.Y.Z-rc.1 -> X.Y.Z-rc.1 only)
+#               The caller grants `packages: write`; GITHUB_TOKEN is the only credential.
+name: Container image
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: "backend or frontend (the directory with the Dockerfile)"
+        required: true
+        type: string
+      push:
+        description: "Build for every platform and push to ghcr.io"
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: ${{ inputs.push && 'Build and push' || 'Build' }} ${{ inputs.component }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Image names must be lower case; the owner (e.g. SvBrunner) is not.
+      - name: Image name
+        id: image
+        env:
+          OWNER: ${{ github.repository_owner }}
+          COMPONENT: ${{ inputs.component }}
+        run: echo "name=ghcr.io/${OWNER,,}/tacticalboard-${COMPONENT}" >> "$GITHUB_OUTPUT"
+
+      - name: Image metadata (tags, OCI labels and annotations)
+        id: meta
+        uses: docker/metadata-action@v6
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ${{ steps.image.outputs.name }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=TacticalBoard ${{ inputs.component }}
+            org.opencontainers.image.licenses=MIT
+          annotations: |
+            org.opencontainers.image.title=TacticalBoard ${{ inputs.component }}
+            org.opencontainers.image.licenses=MIT
+
+      # Only the backend's runtime stage has RUN steps that execute for the target platform.
+      - name: Set up QEMU (arm64 emulation)
+        if: ${{ inputs.push && inputs.component == 'backend' }}
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build${{ inputs.push && ' and push' || '' }}
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.component }}
+          platforms: ${{ inputs.push && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: ${{ inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha,scope=${{ inputs.component }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.component }}

@@ -50,6 +50,10 @@ Next, in this order:
 9. [ ] **System administration**: user list, block/unblock, delete users, grant/revoke system administrator, team management (incl. renaming a team and changing its logo — confirmed: system administrators may do that too, through `ITeamAuthorization.CanChangeDetailsAsync`).
 10. [ ] **Account deletion** (by the user and by a system administrator), incl. the last-Admin rule.
 
+Alongside (product-owner request):
+
+- [x] **CI and deployable images**: GitHub Actions CI on every push and pull request (frontend check/test/build, backend build and unit + integration tests, image test builds); after CI passes on `master` and on `vX.Y.Z` tags, backend and frontend images for amd64 and arm64 are pushed to `ghcr.io/svbrunner/tacticalboard-{backend,frontend}` (ADR-016). A production Compose example (`deploy/production/`) and the operator guide [deployment.md](deployment.md).
+
 ## Later
 
 - [ ] Additional sports

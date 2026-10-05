@@ -40,3 +40,5 @@
 | Spieler | A player-type user of the system. Descriptive only — not a role and not mapped to team roles. |
 | IdP (Identity Provider) | External OpenID Connect service handling authentication (any provider, e.g. PocketID, Keycloak). The backend does not store passwords itself. |
 | BFF (backend for frontend) | The backend performs the OIDC login for the browser and keeps the tokens; the browser only holds a session cookie. |
+| Gateway | The Caddy container in the production example (`deploy/production/`) that gives the app one origin: `/api` and `/auth` to the backend, everything else to the frontend. Sits behind the operator's TLS-terminating reverse proxy (ch. 7). |
+| GHCR | GitHub Container Registry (`ghcr.io`), where the backend and frontend images are published (ADR-016). |

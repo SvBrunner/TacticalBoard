@@ -15,6 +15,9 @@
           pkgs.nodejs
           # backend
           pkgs.dotnet-sdk_10
+          # CI workflows (.github/workflows): actionlint uses shellcheck for run: scripts
+          pkgs.actionlint
+          pkgs.shellcheck
         ];
 
         DOTNET_CLI_TELEMETRY_OPTOUT = "1";
